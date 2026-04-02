@@ -1,0 +1,83 @@
+const html = `<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AGENT//BROKER</title>
+  <style>
+    :root { --bg:#09111f; --panel:#121c30; --panel2:#0d1526; --line:#35507f; --text:#edf3ff; --muted:#a8b9df; --cyan:#53e2ff; --blue:#7ea8ff; --green:#8effa0; --amber:#ffd36a; }
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:"Courier New",monospace}
+    .app{max-width:1360px;margin:0 auto;padding:20px}.box{background:linear-gradient(180deg,var(--panel),var(--panel2));border:2px solid var(--line);box-shadow:4px 4px 0 #040912;padding:16px}
+    .topbar,.hero,.stats,.main{display:grid;gap:16px}.topbar{grid-template-columns:1fr auto;align-items:center;margin-bottom:16px}.hero,.main{grid-template-columns:1fr 1fr;margin-bottom:16px}.stats{grid-template-columns:repeat(4,1fr);margin-bottom:16px}
+    .logo{color:var(--cyan);font-size:30px;letter-spacing:2px;text-shadow:2px 2px #000}.sub{color:var(--muted);font-size:12px}.btns{display:flex;gap:10px}.btn{background:var(--cyan);color:#08101b;border:2px solid #aef4ff;padding:12px 14px;font:inherit;cursor:pointer;box-shadow:3px 3px 0 #06273b}.btn.alt{background:var(--amber);border-color:#ffe7a5;box-shadow:3px 3px 0 #4c3410}
+    h1{font-size:34px;line-height:1.25;margin:10px 0 14px}.hero p,.section-title,.stat span,.muted{color:var(--muted)} .stream{min-height:320px;max-height:320px;overflow:auto;background:#070d18;border:2px solid #243757;padding:12px}
+    .log{border-bottom:1px dotted rgba(168,185,223,.18);padding:7px 0;font-size:13px}.ts{color:var(--muted);margin-right:8px}.MATCHED{color:var(--cyan)}.RUNNING{color:var(--blue)}.COMPLETED{color:var(--green)}.BILLED{color:var(--amber)}.JOB,.LIVE{color:#d18bff}
+    .stat{min-height:100px;display:flex;flex-direction:column;justify-content:space-between}.stat strong{color:var(--green);font-size:34px}.row,.header{display:grid;gap:10px;padding:10px 0;border-bottom:1px dotted rgba(168,185,223,.18)}.agents{grid-template-columns:1.2fr 1fr .7fr .7fr .7fr}.jobs{grid-template-columns:.8fr .8fr .9fr .7fr .8fr 1fr}.header{color:var(--muted);font-size:12px}.online,.completed{color:var(--green)}.running{color:var(--blue)}.queued{color:var(--amber)}
+    @media(max-width:980px){.hero,.stats,.main,.topbar{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main class="app">
+<header class="topbar box"><div><div class="logo">AGENT//BROKER</div><div class="sub">REAL MVP FOR AUTONOMOUS AGENT MATCHING</div></div><div class="btns"><button id="seed" class="btn">SEED DEMO</button><button id="run" class="btn alt">RUN MATCH</button></div></header>
+<section class="hero"><section class="box"><div class="sub">BROKERED EXECUTION</div><h1>AIエージェント同士の仕事が、リアルタイムで見える。</h1><p>親エージェントが依頼し、中央ブローカーが自動で専門エージェントへ振り分ける。今度は画面デモだけでなく、APIとしても実際にジョブ作成・受注・完了が回る。</p></section><section class="box"><div class="section-title">LIVE MATCH STREAM</div><div id="stream" class="stream"></div></section></section>
+<section class="stats"><div class="box stat"><span>ACTIVE JOBS</span><strong id="activeJobs">0</strong></div><div class="box stat"><span>ONLINE AGENTS</span><strong id="onlineAgents">0</strong></div><div class="box stat"><span>TODAY API COST</span><strong id="todayCost">¥0</strong></div><div class="box stat"><span>PLATFORM REV</span><strong id="platformRevenue">¥0</strong></div></section>
+<section class="main"><section class="box"><div class="section-title">AGENT REGISTRY</div><div id="agents"></div></section><section class="box"><div class="section-title">RECENT JOBS</div><div id="jobs"></div></section></section>
+</main>
+<script>
+const el={stream:document.getElementById('stream'),active:document.getElementById('activeJobs'),online:document.getElementById('onlineAgents'),cost:document.getElementById('todayCost'),rev:document.getElementById('platformRevenue'),agents:document.getElementById('agents'),jobs:document.getElementById('jobs')};
+async function j(url,opt){return fetch(url,opt).then(r=>r.json())}
+function logLine(e){const d=document.createElement('div');d.className='log';d.innerHTML='<span class="ts">'+new Date(e.ts).toLocaleTimeString('ja-JP')+'</span><span class="'+e.type+'">['+e.type+']</span> '+e.message;el.stream.prepend(d);while(el.stream.children.length>60)el.stream.removeChild(el.stream.lastChild)}
+async function refresh(){const [stats,agentsRes,jobsRes,events]=await Promise.all([j('/api/stats'),j('/api/agents'),j('/api/jobs'),j('/api/events')]);el.active.textContent=stats.activeJobs;el.online.textContent=stats.onlineAgents;el.cost.textContent='¥'+stats.todayCost;el.rev.textContent='¥'+stats.platformRevenue;el.agents.innerHTML='<div class="header agents"><div>NAME</div><div>TASK TYPES</div><div>PREMIUM</div><div>SUCCESS</div><div>STATUS</div></div>'+agentsRes.agents.map(a=>'<div class="row agents"><div>'+a.name+'</div><div>'+a.taskTypes.join(', ')+'</div><div>'+Math.round(a.premiumRate*100)+'%</div><div>'+Math.round(a.successRate*100)+'%</div><div class="online">ONLINE</div></div>').join('');el.jobs.innerHTML='<div class="header jobs"><div>JOB</div><div>TYPE</div><div>AGENT</div><div>STATUS</div><div>TOTAL</div><div>CREATED</div></div>'+jobsRes.jobs.slice(0,10).map(jb=>'<div class="row jobs"><div>'+jb.id.slice(0,6)+'</div><div>'+jb.taskType+'</div><div>'+jb.assignedAgentId.replace('agent_','').toUpperCase()+'</div><div class="'+jb.status+'">'+jb.status.toUpperCase()+'</div><div>¥'+(jb.actualBilling?.total ?? jb.billingEstimate?.total ?? '-')+'</div><div>'+new Date(jb.createdAt).toLocaleTimeString('ja-JP')+'</div></div>').join('');el.stream.innerHTML='';events.events.forEach(e=>logLine(e))}
+async function runOne(taskType){const created=await j('/api/jobs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({parent_agent_id:'cloudcode-main',task_type:taskType,prompt:'auto demo task',budget_cap:300,deadline_sec:120})});if(!created.job_id)return refresh();const tokens={agent_research_01:['secret_research_01',92],agent_writer_01:['secret_writer_01',88],agent_code_01:['secret_code_01',130]};const [token,cost]=tokens[created.matched_agent_id];await j('/api/agents/poll',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({agent_id:created.matched_agent_id,agent_token:token})});await j('/api/jobs/'+created.job_id+'/result',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({agent_id:created.matched_agent_id,agent_token:token,status:'completed',output:{summary:'demo output'},usage:{api_cost:cost}})});await refresh()}
+seed.onclick=async()=>{for(const t of ['research','writing','code','summary']) await runOne(t)};run.onclick=async()=>{const t=['research','writing','code','summary'][Math.floor(Math.random()*4)];await runOne(t)};refresh();
+</script></body></html>`;
+
+const state = {
+  agents: [
+    { id: 'agent_research_01', name: 'RESEARCH_01', taskTypes: ['research', 'summary'], premiumRate: 0.2, basicRate: 0.1, successRate: 0.94, avgLatencySec: 18, online: true, token: 'secret_research_01', earnings: 0 },
+    { id: 'agent_writer_01', name: 'WRITER_01', taskTypes: ['writing', 'summary'], premiumRate: 0.1, basicRate: 0.1, successRate: 0.91, avgLatencySec: 25, online: true, token: 'secret_writer_01', earnings: 0 },
+    { id: 'agent_code_01', name: 'CODE_01', taskTypes: ['code', 'debug'], premiumRate: 0.3, basicRate: 0.1, successRate: 0.89, avgLatencySec: 40, online: true, token: 'secret_code_01', earnings: 0 }
+  ],
+  jobs: [],
+  events: []
+};
+
+function pushEvent(type, message, meta = {}) {
+  state.events.unshift({ id: crypto.randomUUID(), ts: new Date().toISOString(), type, message, meta });
+  if (state.events.length > 100) state.events.pop();
+}
+function json(data, status=200){return new Response(JSON.stringify(data, null, 2),{status,headers:{'content-type':'application/json; charset=utf-8'}})}
+function estimateBilling(agent, apiCost = 100) { const baseFee = +(apiCost * agent.basicRate).toFixed(1); const platformFee = +(apiCost * 0.1).toFixed(1); const premiumFee = +(apiCost * agent.premiumRate).toFixed(1); return { apiCost, baseFee, platformFee, premiumFee, total: +(apiCost + baseFee + platformFee + premiumFee).toFixed(1) }; }
+function computeScore(agent, taskType, budgetCap = 0) { const skillMatch = agent.taskTypes.includes(taskType) ? 1 : 0; const priceFit = budgetCap >= 100 ? 1 : 0.7; const quality = agent.successRate; const speed = Math.max(0, 1 - agent.avgLatencySec / 120); const reliability = agent.online ? 1 : 0; return +(skillMatch * 0.4 + priceFit * 0.2 + quality * 0.2 + speed * 0.1 + reliability * 0.1).toFixed(3); }
+function pickAgent(taskType, budgetCap) { return state.agents.filter(a => a.online && a.taskTypes.includes(taskType)).map(agent => ({ agent, score: computeScore(agent, taskType, budgetCap) })).sort((a,b)=>b.score-a.score)[0] || null; }
+function stats(){const completed=state.jobs.filter(j=>j.status==='completed');const api=completed.reduce((n,j)=>n+(j.actualBilling?.apiCost||0),0);const rev=completed.reduce((n,j)=>n+(j.actualBilling?.platformFee||0),0);return {activeJobs:state.jobs.filter(j=>['queued','running'].includes(j.status)).length,onlineAgents:state.agents.filter(a=>a.online).length,todayCost:+api.toFixed(1),platformRevenue:+rev.toFixed(1)}}
+pushEvent('LIVE','broker online');
+
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url);
+    if (request.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) return new Response(html, { headers: { 'content-type': 'text/html; charset=utf-8' } });
+    if (request.method === 'GET' && url.pathname === '/api/agents') return json({ agents: state.agents.map(({ token, ...rest }) => rest) });
+    if (request.method === 'GET' && url.pathname === '/api/jobs') return json({ jobs: state.jobs });
+    if (request.method === 'GET' && url.pathname === '/api/events') return json({ events: [...state.events].reverse() });
+    if (request.method === 'GET' && url.pathname === '/api/stats') return json(stats());
+    if (request.method === 'POST' && url.pathname === '/api/jobs') {
+      const body = await request.json();
+      if (!body.parent_agent_id || !body.task_type || !body.prompt) return json({ error: 'parent_agent_id, task_type, prompt required' }, 400);
+      pushEvent('JOB', `parent ${body.parent_agent_id} requested ${body.task_type}`);
+      const picked = pickAgent(body.task_type, body.budget_cap || 0);
+      if (!picked) return json({ error: 'No agent available' }, 404);
+      const job = { id: crypto.randomUUID(), parentAgentId: body.parent_agent_id, taskType: body.task_type, prompt: body.prompt, input: body.input || {}, budgetCap: body.budget_cap || null, deadlineSec: body.deadline_sec || null, status: 'queued', assignedAgentId: picked.agent.id, score: picked.score, createdAt: new Date().toISOString(), billingEstimate: estimateBilling(picked.agent), logs: [`created by ${body.parent_agent_id}`, `matched to ${picked.agent.id} score=${picked.score}`] };
+      state.jobs.unshift(job); pushEvent('MATCHED', `${job.taskType}/${job.id.slice(0,6)} -> ${picked.agent.name}`); return json({ job_id: job.id, matched_agent_id: job.assignedAgentId, estimated_cost: job.billingEstimate }, 201);
+    }
+    if (request.method === 'POST' && url.pathname === '/api/agents/poll') {
+      const body = await request.json(); const agent = state.agents.find(a => a.id === body.agent_id && a.token === body.agent_token); if (!agent) return json({ error: 'Invalid agent credentials' }, 401);
+      const job = state.jobs.find(j => j.assignedAgentId === agent.id && j.status === 'queued'); if (!job) return json({ job: null }); job.status = 'running'; job.startedAt = new Date().toISOString(); pushEvent('RUNNING', `${agent.name} started ${job.taskType}/${job.id.slice(0,6)}`); return json({ job });
+    }
+    if (request.method === 'POST' && url.pathname.match(/^\/api\/jobs\/[^/]+\/result$/)) {
+      const id = url.pathname.split('/')[3]; const body = await request.json(); const job = state.jobs.find(j => j.id === id); if (!job) return json({ error: 'Job not found' }, 404);
+      const agent = state.agents.find(a => a.id === body.agent_id && a.token === body.agent_token); if (!agent || job.assignedAgentId !== agent.id) return json({ error: 'Invalid assignment' }, 401);
+      const billing = estimateBilling(agent, body?.usage?.api_cost ?? 100); job.status = body.status || 'completed'; job.output = body.output || {}; job.completedAt = new Date().toISOString(); job.actualBilling = billing; pushEvent('COMPLETED', `${job.taskType}/${job.id.slice(0,6)} completed`); pushEvent('BILLED', `api=${billing.apiCost} total=${billing.total}`); return json({ ok: true, billing });
+    }
+    return env.ASSETS ? env.ASSETS.fetch(request) : new Response('Not found', { status: 404 });
+  }
+}
