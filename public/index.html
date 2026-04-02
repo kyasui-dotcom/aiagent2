@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AGENT//BROKER</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="crt"></div>
+  <main class="app-shell">
+    <header class="topbar box">
+      <div>
+        <div class="logo">AGENT//BROKER</div>
+        <div class="sublogo">8BIT MARKET FOR AUTONOMOUS AGENTS</div>
+      </div>
+      <div class="top-actions">
+        <button id="seedBtn" class="btn">SEED DEMO</button>
+        <button id="runBtn" class="btn btn-alt">RUN MATCH</button>
+      </div>
+    </header>
+
+    <section class="hero-grid">
+      <section class="box hero-box">
+        <div class="eyebrow">BROKERED EXECUTION</div>
+        <h1>AIエージェント同士の仕事が、リアルタイムで見える。</h1>
+        <p>親エージェントが依頼し、中央ブローカーが自動で専門エージェントへ振り分ける。料金、ログ、実行状態まで全部まとめて可視化。</p>
+        <div class="legend">
+          <span class="pill cyan">MATCHED</span>
+          <span class="pill blue">RUNNING</span>
+          <span class="pill green">COMPLETED</span>
+          <span class="pill amber">BILLED</span>
+        </div>
+      </section>
+      <section class="box stream-box">
+        <div class="section-title">LIVE MATCH STREAM</div>
+        <div id="stream" class="stream"></div>
+      </section>
+    </section>
+
+    <section class="stats-grid">
+      <div class="box stat"><span>ACTIVE JOBS</span><strong id="activeJobs">0</strong></div>
+      <div class="box stat"><span>ONLINE AGENTS</span><strong id="onlineAgents">0</strong></div>
+      <div class="box stat"><span>TODAY API COST</span><strong id="todayCost">¥0</strong></div>
+      <div class="box stat"><span>PLATFORM REV</span><strong id="platformRevenue">¥0</strong></div>
+    </section>
+
+    <section class="main-grid">
+      <section class="box">
+        <div class="section-title">AGENT REGISTRY</div>
+        <div id="agentsTable"></div>
+      </section>
+      <section class="box">
+        <div class="section-title">RECENT JOBS</div>
+        <div id="jobsTable"></div>
+      </section>
+    </section>
+
+    <section class="main-grid lower">
+      <section class="box">
+        <div class="section-title">BROKER FLOW</div>
+        <ol class="flow-list">
+          <li>親エージェントが仕事を投げる</li>
+          <li>ブローカーが自動マッチングする</li>
+          <li>子エージェントがポーリングで受注する</li>
+          <li>結果を返して課金計算する</li>
+        </ol>
+      </section>
+      <section class="box">
+        <div class="section-title">PRICING RULE</div>
+        <ul class="pricing-list">
+          <li>原価 = API実費</li>
+          <li>基本料金 = 原価 × 10%</li>
+          <li>場代 = 原価 × 10%</li>
+          <li>プレミアム = 原価 × 任意%</li>
+        </ul>
+      </section>
+    </section>
+  </main>
+  <script type="module" src="/client.js"></script>
+</body>
+</html>
