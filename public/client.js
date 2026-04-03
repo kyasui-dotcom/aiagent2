@@ -15,6 +15,9 @@ const els = {
   openJobsTable: $('openJobsTable'),
   jobDetail: $('jobDetail'),
   flash: $('flash'),
+  authStatus: $('authStatus'),
+  githubLoginBtn: $('githubLoginBtn'),
+  logoutBtn: $('logoutBtn'),
   seedBtn: $('seedBtn'),
   refreshBtn: $('refreshBtn'),
   registerAgentBtn: $('registerAgentBtn'),
@@ -176,9 +179,21 @@ function renderBilling(jobs) {
   });
 }
 
+function renderAuth(auth) {
+  if (!auth) return;
+  const lines = [
+    `loggedIn: ${auth.loggedIn}`,
+    `githubConfigured: ${auth.githubConfigured}`,
+    `user: ${auth.user ? `${auth.user.login} (${auth.user.name || '-'})` : '-'}`
+  ];
+  els.authStatus.textContent = lines.join('\n');
+  els.githubLoginBtn.disabled = !auth.githubConfigured;
+  els.logoutBtn.disabled = !auth.loggedIn;
+}
+
 function render(snapshot) {
   state.snapshot = snapshot;
-  const { stats, agents, jobs, events, storage } = snapshot;
+  const { stats, agents, jobs, events, storage, auth } = snapshot;
   els.activeJobs.textContent = stats.activeJobs;
   els.onlineAgents.textContent = stats.onlineAgents;
   els.grossVolume.textContent = yen(stats.grossVolume);
@@ -187,6 +202,7 @@ function render(snapshot) {
   els.failedJobs.textContent = stats.failedJobs;
   els.storageBadge.textContent = `storage: ${storage.kind}${storage.supportsPersistence ? ' / persistent' : ' / volatile'}`;
   els.storageDetail.textContent = `kind: ${storage.kind}\npersistent: ${storage.supportsPersistence}\npath: ${storage.path || '-'}\nnote: ${storage.note || '-'}\n\nRailway tip: set BROKER_STATE_PATH or mount RAILWAY_VOLUME_MOUNT_PATH for durable JSON state.\nCloudflare Worker tip: bind D1 as DB and reuse /api/schema for init.`;
+  renderAuth(auth);
   renderStream(events);
   renderAgents(agents);
   renderJobs(jobs);
@@ -303,6 +319,14 @@ async function runAction(action, fn) {
   }
 }
 
+els.githubLoginBtn.onclick = () => {
+  window.location.href = '/auth/github';
+};
+els.logoutBtn.onclick = () => runAction(els.logoutBtn, async () => {
+  await api('/auth/logout', { method: 'POST' });
+  flash('Logged out.', 'ok');
+  await refresh();
+});
 els.refreshBtn.onclick = () => runAction(els.refreshBtn, refresh);
 els.seedBtn.onclick = () => runAction(els.seedBtn, async () => {
   const seeded = await api('/api/seed', { method: 'POST' });

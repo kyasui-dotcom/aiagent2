@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { createLocalStorage } from './lib/storage.js';
@@ -9,9 +9,14 @@ const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=u
 const storagePath = process.env.BROKER_STATE_PATH || join(process.cwd(), '.data', 'broker-state.json');
 const storage = createLocalStorage(storagePath);
 const sseClients = new Set();
+const sessions = new Map();
+const oauthStates = new Map();
+const sessionSecret = process.env.SESSION_SECRET || 'dev-session-secret';
+const githubClientId = process.env.GITHUB_CLIENT_ID || '';
+const githubClientSecret = process.env.GITHUB_CLIENT_SECRET || '';
 
-function json(res, status, body) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+function json(res, status, body, headers = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', ...headers });
   res.end(JSON.stringify(body, null, 2));
 }
 function parseBody(req) {
@@ -21,6 +26,41 @@ function parseBody(req) {
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error('Invalid JSON')); } });
     req.on('error', reject);
   });
+}
+function parseCookies(req) {
+  const raw = req.headers.cookie || '';
+  return Object.fromEntries(raw.split(';').map(v => v.trim()).filter(Boolean).map(part => {
+    const i = part.indexOf('=');
+    return i === -1 ? [part, ''] : [part.slice(0, i), decodeURIComponent(part.slice(i + 1))];
+  }));
+}
+function sign(value) {
+  return createHmac('sha256', sessionSecret).update(value).digest('hex');
+}
+function makeSessionCookie(sessionId) {
+  const payload = `${sessionId}.${sign(sessionId)}`;
+  return `aiagent2_session=${encodeURIComponent(payload)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`;
+}
+function getSession(req) {
+  const cookies = parseCookies(req);
+  const raw = cookies.aiagent2_session;
+  if (!raw) return null;
+  const [id, signature] = String(raw).split('.');
+  if (!id || !signature || sign(id) !== signature) return null;
+  return sessions.get(id) || null;
+}
+function baseUrl(req) {
+  return process.env.BASE_URL || `${(req.headers['x-forwarded-proto'] || 'http')}://${req.headers.host}`;
+}
+function redirect(res, location, headers = {}) {
+  res.writeHead(302, { Location: location, ...headers });
+  res.end();
+}
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error_description || data.error || `Request failed (${response.status})`);
+  return data;
 }
 function serveStatic(res, path) {
   const file = join(process.cwd(), 'public', path === '/' ? 'index.html' : path.slice(1));
@@ -109,14 +149,24 @@ function inferAgentFromUrl(manifestUrl, repoUrl) {
     metadata: { importMode: 'url-inferred' }
   });
 }
-async function snapshot() {
+function authStatus(req) {
+  const session = getSession(req);
+  return {
+    loggedIn: Boolean(session?.user),
+    githubConfigured: Boolean(githubClientId && githubClientSecret),
+    user: session?.user || null
+  };
+}
+
+async function snapshot(req) {
   const state = await storage.getState();
   return {
     stats: statsOf(state),
     agents: state.agents.map(publicAgent),
     jobs: state.jobs,
     events: state.events,
-    storage: { kind: storage.kind, supportsPersistence: storage.supportsPersistence, path: storagePath, note: storage.note || null }
+    storage: { kind: storage.kind, supportsPersistence: storage.supportsPersistence, path: storagePath, note: storage.note || null },
+    auth: authStatus(req)
   };
 }
 
@@ -124,6 +174,58 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/app') || url.pathname === '/styles.css' || url.pathname === '/client.js')) {
     if (serveStatic(res, url.pathname === '/' ? '/index.html' : url.pathname)) return;
+  }
+  if (req.method === 'GET' && url.pathname === '/auth/status') return json(res, 200, authStatus(req));
+  if (req.method === 'GET' && url.pathname === '/auth/github') {
+    if (!(githubClientId && githubClientSecret)) return json(res, 503, { error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' });
+    const state = randomBytes(16).toString('hex');
+    oauthStates.set(state, { createdAt: Date.now() });
+    const callback = `${baseUrl(req)}/auth/github/callback`;
+    const githubUrl = new URL('https://github.com/login/oauth/authorize');
+    githubUrl.searchParams.set('client_id', githubClientId);
+    githubUrl.searchParams.set('redirect_uri', callback);
+    githubUrl.searchParams.set('scope', 'read:user user:email');
+    githubUrl.searchParams.set('state', state);
+    return redirect(res, githubUrl.toString());
+  }
+  if (req.method === 'GET' && url.pathname === '/auth/github/callback') {
+    if (!(githubClientId && githubClientSecret)) return redirect(res, '/?auth_error=github_not_configured');
+    const code = url.searchParams.get('code');
+    const state = url.searchParams.get('state');
+    if (!code || !state || !oauthStates.has(state)) return redirect(res, '/?auth_error=invalid_oauth_state');
+    oauthStates.delete(state);
+    try {
+      const callback = `${baseUrl(req)}/auth/github/callback`;
+      const token = await fetchJson('https://github.com/login/oauth/access_token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ client_id: githubClientId, client_secret: githubClientSecret, code, redirect_uri: callback, state })
+      });
+      const user = await fetchJson('https://api.github.com/user', {
+        headers: { authorization: `Bearer ${token.access_token}`, 'user-agent': 'aiagent2' }
+      });
+      const sessionId = randomBytes(24).toString('hex');
+      sessions.set(sessionId, {
+        user: {
+          id: user.id,
+          login: user.login,
+          name: user.name,
+          avatarUrl: user.avatar_url,
+          profileUrl: user.html_url
+        },
+        createdAt: Date.now()
+      });
+      return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId) });
+    } catch (error) {
+      return redirect(res, `/?auth_error=${encodeURIComponent(error.message)}`);
+    }
+  }
+  if (req.method === 'POST' && url.pathname === '/auth/logout') {
+    const cookies = parseCookies(req);
+    const raw = cookies.aiagent2_session;
+    const [id] = String(raw || '').split('.');
+    if (id) sessions.delete(id);
+    return json(res, 200, { ok: true }, { 'Set-Cookie': 'aiagent2_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
   }
   if (req.method === 'GET' && url.pathname === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
@@ -134,11 +236,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, service: 'aiagent2', time: nowIso() });
-  if (req.method === 'GET' && url.pathname === '/api/snapshot') return json(res, 200, await snapshot());
+  if (req.method === 'GET' && url.pathname === '/api/snapshot') return json(res, 200, await snapshot(req));
   if (req.method === 'GET' && url.pathname === '/api/schema') return json(res, 200, { schema: storage.schemaSql });
-  if (req.method === 'GET' && url.pathname === '/api/stats') return json(res, 200, (await snapshot()).stats);
-  if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, { agents: (await snapshot()).agents });
-  if (req.method === 'GET' && url.pathname === '/api/jobs') return json(res, 200, { jobs: (await snapshot()).jobs });
+  if (req.method === 'GET' && url.pathname === '/api/stats') return json(res, 200, (await snapshot(req)).stats);
+  if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, { agents: (await snapshot(req)).agents });
+  if (req.method === 'GET' && url.pathname === '/api/jobs') return json(res, 200, { jobs: (await snapshot(req)).jobs });
   if (req.method === 'GET' && url.pathname.startsWith('/api/jobs/')) {
     const id = url.pathname.split('/').pop();
     const state = await storage.getState();
