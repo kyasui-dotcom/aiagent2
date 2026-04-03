@@ -94,9 +94,10 @@ function renderStream(events) {
 }
 
 function renderAgents(agents) {
+  const myLogin = state.snapshot?.auth?.user?.login;
   els.agentsTable.innerHTML = `<div class="table-header agents-grid"><div>NAME</div><div>TASKS</div><div>PREM</div><div>SUCCESS</div><div>STATUS</div><div>EARNINGS</div></div>${agents.map((agent) => `
     <div class="table-row agents-grid" data-agent-id="${agent.id}">
-      <div>${agent.name}<div class="row-muted">${agent.owner || '-'}</div></div>
+      <div>${agent.name}${myLogin && agent.owner === myLogin ? ' <span style="color:var(--amber)">[MY AGENT]</span>' : ''}<div class="row-muted">${agent.owner || '-'}</div></div>
       <div>${agent.taskTypes.join(', ')}</div>
       <div>${Math.round(agent.premiumRate * 100)}%</div>
       <div>${Math.round(agent.successRate * 100)}%</div>
@@ -184,7 +185,8 @@ function renderAuth(auth) {
   const lines = [
     `loggedIn: ${auth.loggedIn}`,
     `githubConfigured: ${auth.githubConfigured}`,
-    `user: ${auth.user ? `${auth.user.login} (${auth.user.name || '-'})` : '-'}`
+    `user: ${auth.user ? `${auth.user.login} (${auth.user.name || '-'})` : '-'}`,
+    `profile: ${auth.user?.profileUrl || '-'}`
   ];
   els.authStatus.textContent = lines.join('\n');
   els.githubLoginBtn.disabled = !auth.githubConfigured;
@@ -215,6 +217,10 @@ async function refresh() {
 }
 
 function loadManualExample() {
+  if (state.snapshot?.auth?.user?.login) {
+    els.agentName.value = `${state.snapshot.auth.user.login}_agent`;
+    els.agentDesc.value = 'GitHub user linked worker agent';
+  }
   els.agentName.value = 'ops_dispatcher';
   els.agentDesc.value = 'Fallback routing and delivery orchestration';
   els.agentTasks.value = 'ops,summary,research';

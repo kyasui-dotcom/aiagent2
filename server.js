@@ -129,7 +129,7 @@ function createAgentFromInput(body = {}) {
     updatedAt: nowIso()
   };
 }
-function inferAgentFromUrl(manifestUrl, repoUrl) {
+function inferAgentFromUrl(manifestUrl, repoUrl, ownerInfo = { owner: 'samurai', metadata: {} }) {
   const repo = String(repoUrl || manifestUrl || '').trim();
   const repoName = repo.split('/').filter(Boolean).slice(-1)[0] || 'github_agent';
   const inferredTasks = [];
@@ -143,10 +143,10 @@ function inferAgentFromUrl(manifestUrl, repoUrl) {
     task_types: inferredTasks,
     premium_rate: inferredTasks.includes('code') ? 0.25 : 0.15,
     basic_rate: 0.1,
-    owner: 'samurai',
+    owner: ownerInfo.owner,
     manifest_url: manifestUrl,
     manifest_source: repoUrl || manifestUrl,
-    metadata: { importMode: 'url-inferred' }
+    metadata: { importMode: 'url-inferred', ...ownerInfo.metadata }
   });
 }
 function authStatus(req) {
@@ -155,6 +155,19 @@ function authStatus(req) {
     loggedIn: Boolean(session?.user),
     githubConfigured: Boolean(githubClientId && githubClientSecret),
     user: session?.user || null
+  };
+}
+function ownerFromRequest(req) {
+  const session = getSession(req);
+  if (!session?.user) return { owner: 'samurai', metadata: {} };
+  return {
+    owner: session.user.login,
+    metadata: {
+      githubLogin: session.user.login,
+      githubName: session.user.name,
+      githubAvatarUrl: session.user.avatarUrl,
+      githubProfileUrl: session.user.profileUrl
+    }
   };
 }
 
@@ -251,7 +264,8 @@ const server = http.createServer(async (req, res) => {
     const body = await parseBody(req).catch(err => ({ __error: err.message }));
     if (body.__error) return json(res, 400, { error: body.__error });
     if (!body.name) return json(res, 400, { error: 'name required' });
-    const agent = createAgentFromInput(body);
+    const ownerInfo = ownerFromRequest(req);
+    const agent = createAgentFromInput({ ...body, owner: body.owner || ownerInfo.owner, metadata: { ...(body.metadata || {}), ...ownerInfo.metadata } });
     await storage.mutate(async (state) => { state.agents.unshift(agent); });
     await touchEvent('REGISTERED', `${agent.name} registered with tasks ${agent.taskTypes.join(', ')}`);
     return json(res, 201, { ok: true, agent });
@@ -260,7 +274,8 @@ const server = http.createServer(async (req, res) => {
     const body = await parseBody(req).catch(err => ({ __error: err.message }));
     if (body.__error) return json(res, 400, { error: body.__error });
     if (!body.manifest?.name) return json(res, 400, { error: 'manifest.name required' });
-    const agent = createAgentFromInput(body.manifest);
+    const ownerInfo = ownerFromRequest(req);
+    const agent = createAgentFromInput({ ...body.manifest, owner: body.manifest.owner || ownerInfo.owner, metadata: { ...(body.manifest.metadata || {}), ...ownerInfo.metadata } });
     agent.manifestSource = 'manifest-json';
     await storage.mutate(async (state) => { state.agents.unshift(agent); });
     await touchEvent('REGISTERED', `${agent.name} imported from manifest JSON`);
@@ -270,10 +285,11 @@ const server = http.createServer(async (req, res) => {
     const body = await parseBody(req).catch(err => ({ __error: err.message }));
     if (body.__error) return json(res, 400, { error: body.__error });
     if (!body.manifest_url) return json(res, 400, { error: 'manifest_url required' });
-    const agent = inferAgentFromUrl(body.manifest_url, body.repo_url);
+    const ownerInfo = ownerFromRequest(req);
+    const agent = inferAgentFromUrl(body.manifest_url, body.repo_url, ownerInfo);
     await storage.mutate(async (state) => { state.agents.unshift(agent); });
     await touchEvent('REGISTERED', `${agent.name} connected from GitHub URL`);
-    return json(res, 201, { ok: true, agent, import_mode: 'url-inferred' });
+    return json(res, 201, { ok: true, agent, import_mode: 'url-inferred', owner: ownerInfo.owner });
   }
   if (req.method === 'POST' && url.pathname === '/api/jobs') {
     const body = await parseBody(req).catch(err => ({ __error: err.message }));
