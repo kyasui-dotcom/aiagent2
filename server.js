@@ -317,6 +317,38 @@ const server = http.createServer(async (req, res) => {
       if (/(code|api|worker|server|bug|debug|tool|automation)/.test(combined)) taskTypes.push('code');
       if (/(listing|catalog|rakuma|mercari|yahoo)/.test(combined)) taskTypes.push('listing');
       if (!taskTypes.length) taskTypes.push('summary');
+      const capabilities = [];
+      if (/(web|scrape|crawl|search)/.test(combined)) capabilities.push('web_research');
+      if (/(compare|analysis|summary)/.test(combined)) capabilities.push('analysis');
+      if (/(write|copy|blog|content)/.test(combined)) capabilities.push('content_generation');
+      if (/(code|api|server|worker|debug|automation)/.test(combined)) capabilities.push('software_execution');
+      if (/(seo|metadata|title)/.test(combined)) capabilities.push('seo_optimization');
+      if (!capabilities.length) capabilities.push('general_task_execution');
+      const runtimeHints = [];
+      if (names.includes('package.json')) runtimeHints.push('node');
+      if (names.includes('pyproject.toml') || names.includes('requirements.txt')) runtimeHints.push('python');
+      if (names.includes('dockerfile')) runtimeHints.push('docker');
+      const deliveryContract = {
+        primary: 'report',
+        supportsFiles: true,
+        formats: ['markdown', 'json', 'links'],
+        targetIntegrations: ['chat', 'api', 'webhook', 'future_external_services']
+      };
+      const inferredProfile = {
+        version: 1,
+        inferredFrom: 'repo-analysis',
+        agentType: taskTypes.includes('code') ? 'builder' : taskTypes.includes('research') ? 'researcher' : 'generalist',
+        taskTypes: [...new Set(taskTypes)],
+        capabilities: [...new Set(capabilities)],
+        runtimeHints,
+        inputContract: {
+          acceptsNaturalLanguage: true,
+          acceptsStructuredInput: true,
+          preferredFields: ['goal', 'constraints', 'deadline', 'budget', 'context']
+        },
+        deliveryContract,
+        confidence: Math.min(0.95, 0.55 + Math.min(names.length, 20) * 0.01 + (readmeText ? 0.15 : 0))
+      };
       const ownerInfo = ownerFromRequest(req);
       const agent = createAgentFromInput({
         name: repoMeta.name,
@@ -335,12 +367,33 @@ const server = http.createServer(async (req, res) => {
           githubRepoUrl: repoMeta.html_url,
           githubPrivate: repoMeta.private,
           importMode: 'repo-analysis',
-          repoFiles: names.slice(0, 50)
+          repoFiles: names.slice(0, 50),
+          inferredProfile,
+          deliveryContract
         }
       });
       await storage.mutate(async (state) => { state.agents.unshift(agent); });
       await touchEvent('REGISTERED', `${agent.name} imported from GitHub repo ${repoMeta.full_name}`);
-      return json(res, 201, { ok: true, agent, repo: { fullName: repoMeta.full_name, private: repoMeta.private } });
+      return json(res, 201, {
+        ok: true,
+        agent,
+        repo: { fullName: repoMeta.full_name, private: repoMeta.private },
+        inferredProfile,
+        deliveryContract,
+        deliveryExample: {
+          status: 'completed',
+          report: {
+            summary: `Work completed for ${repoMeta.full_name}`,
+            details: 'Structured delivery report for downstream integrations.',
+            nextAction: null
+          },
+          files: [
+            { name: 'report.md', type: 'text/markdown', content: '# Delivery report' }
+          ],
+          usage: { api_cost: 0 },
+          returnTargets: ['chat', 'api', 'webhook']
+        }
+      });
     } catch (error) {
       return json(res, 500, { error: error.message });
     }
@@ -481,7 +534,11 @@ const server = http.createServer(async (req, res) => {
       job.startedAt = job.startedAt || nowIso();
       const billing = estimateBilling(agent, Number(body?.usage?.api_cost ?? 100));
       job.status = body.status || 'completed';
-      job.output = body.output || {};
+      job.output = {
+        report: body.report || body.output || { summary: body.summary || 'No report provided.' },
+        files: Array.isArray(body.files) ? body.files : [],
+        returnTargets: body.return_targets || ['chat', 'api', 'webhook']
+      };
       job.completedAt = nowIso();
       job.usage = body.usage || null;
       job.actualBilling = billing;
@@ -492,7 +549,14 @@ const server = http.createServer(async (req, res) => {
     if (result.error) return json(res, result.statusCode || 400, { error: result.error });
     await touchEvent('COMPLETED', `${result.job.taskType}/${result.job.id.slice(0, 6)} completed by connected agent`);
     await touchEvent('BILLED', `api=${result.billing.apiCost} total=${result.billing.total}`);
-    return json(res, 200, result);
+    return json(res, 200, {
+      ...result,
+      delivery: {
+        report: result.job.output?.report || null,
+        files: result.job.output?.files || [],
+        returnTargets: result.job.output?.returnTargets || ['chat', 'api', 'webhook']
+      }
+    });
   }
 
   if (req.method === 'POST' && url.pathname === '/api/dev/resolve-job') {
