@@ -24,7 +24,7 @@
       <section class="box hero-box">
         <div class="eyebrow">BROKERED EXECUTION</div>
         <h1>エージェント登録から実行・課金まで、ひとつの画面で追える。</h1>
-        <p>Manual 登録、manifest JSON import、GitHub/raw URL import、job lifecycle、billing breakdown、storage mode まで MVP に必要な中身を優先して実装。</p>
+        <p>GitHub 連携を中心に、repo URL から agent を登録する思想へ寄せる。manifest があれば優先し、なければ README / docs から推定する前提。job lifecycle と billing もひとつの画面で追える。</p>
         <div class="legend">
           <span class="pill cyan">MATCHED</span>
           <span class="pill blue">RUNNING</span>
@@ -49,9 +49,14 @@
       <div class="box stat"><span>FAILED JOBS</span><strong id="failedJobs">0</strong></div>
     </section>
 
+    <section id="flash" class="box flash" hidden></section>
+
     <section class="main-grid triple">
       <section class="box panel-stack">
-        <div class="section-title">REGISTER AGENT</div>
+        <div class="section-title">REGISTER AGENT (FALLBACK)</div>
+        <div class="helper-row">
+          <button id="manualExampleBtn" class="mini-btn">LOAD EXAMPLE</button>
+        </div>
         <div class="form-grid">
           <input id="agentName" placeholder="AGENT_NAME" />
           <input id="agentDesc" placeholder="description" />
@@ -65,20 +70,32 @@
       </section>
       <section class="box panel-stack">
         <div class="section-title">IMPORT MANIFEST JSON</div>
+        <div class="helper-row">
+          <button id="manifestExampleBtn" class="mini-btn">LOAD SAMPLE JSON</button>
+          <button id="manifestFormatBtn" class="mini-btn">FORMAT JSON</button>
+        </div>
         <textarea id="manifestJson" placeholder='{"name":"codex_worker","task_types":["code"],"pricing":{"premium_rate":0.2}}'></textarea>
         <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON</button>
       </section>
       <section class="box panel-stack">
-        <div class="section-title">IMPORT MANIFEST URL</div>
+        <div class="section-title">CONNECT GITHUB REPO</div>
+        <div class="helper-row">
+          <button id="urlExampleBtn" class="mini-btn">LOAD SAMPLE URL</button>
+        </div>
         <input id="manifestUrl" placeholder="https://github.com/org/repo/blob/main/agent.json" />
         <button id="importUrlBtn" class="btn">IMPORT URL</button>
-        <div class="muted">GitHub blob URL は raw URL に自動変換。</div>
+        <div class="muted">repo の manifest URL、または GitHub blob/raw URL を入れる。将来は README / docs 推定もここに統合する。</div>
       </section>
     </section>
 
     <section class="main-grid split-40">
       <section class="box panel-stack">
         <div class="section-title">CREATE JOB</div>
+        <div class="helper-row">
+          <button id="jobResearchExampleBtn" class="mini-btn">RESEARCH EXAMPLE</button>
+          <button id="jobCodeExampleBtn" class="mini-btn">CODE EXAMPLE</button>
+          <button id="jobFailExampleBtn" class="mini-btn">FORCE FAIL EXAMPLE</button>
+        </div>
         <div class="form-grid">
           <input id="jobParent" placeholder="parent agent id" value="cloudcode-main" />
           <input id="jobType" placeholder="research" />
