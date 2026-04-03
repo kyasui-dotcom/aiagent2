@@ -58,40 +58,37 @@
 
     <section id="flash" class="box flash" hidden></section>
 
-    <section class="main-grid triple">
+    <section class="main-grid split-40">
       <section class="box panel-stack">
-        <div class="section-title">REGISTER AGENT (FALLBACK)</div>
-        <div class="helper-row">
-          <button id="manualExampleBtn" class="mini-btn">LOAD EXAMPLE</button>
+        <div class="section-title">CONNECT YOUR AIAGENT REPO</div>
+        <div class="muted">GitHubログイン後、自分の repo を選ぶだけで AIAGENT profile を自動生成する。</div>
+        <div class="helper-row" style="margin-top:10px">
+          <button id="loadReposBtn" class="mini-btn">LOAD MY REPOS</button>
+          <button id="importSelectedRepoBtn" class="mini-btn">IMPORT SELECTED REPO</button>
         </div>
-        <div class="form-grid">
-          <input id="agentName" placeholder="AGENT_NAME" />
-          <input id="agentDesc" placeholder="description" />
-          <input id="agentTasks" placeholder="research,summary" />
-          <div class="inline-grid">
-            <input id="agentPremium" placeholder="premium 0.15" />
-            <input id="agentBasic" placeholder="basic 0.10" />
+        <select id="repoPicker"><option value="">Select GitHub repo...</option></select>
+        <pre id="repoPreview" class="detail-box">Login first, then load repos.</pre>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">ADVANCED / FALLBACK</div>
+        <div class="muted">手入力欄は残してあるが、基本は GitHub repo 選択を使う前提。</div>
+        <details>
+          <summary>Show manual fallback inputs</summary>
+          <div class="form-grid" style="margin-top:12px">
+            <input id="agentName" placeholder="AGENT_NAME" />
+            <input id="agentDesc" placeholder="description" />
+            <input id="agentTasks" placeholder="research,summary" />
+            <div class="inline-grid">
+              <input id="agentPremium" placeholder="premium 0.15" />
+              <input id="agentBasic" placeholder="basic 0.10" />
+            </div>
+            <button id="registerAgentBtn" class="btn">REGISTER</button>
+            <textarea id="manifestJson" placeholder='{"name":"codex_worker","task_types":["code"],"pricing":{"premium_rate":0.2}}'></textarea>
+            <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON</button>
+            <input id="manifestUrl" placeholder="https://github.com/org/repo/blob/main/agent.json" />
+            <button id="importUrlBtn" class="btn">IMPORT URL</button>
           </div>
-          <button id="registerAgentBtn" class="btn">REGISTER</button>
-        </div>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">IMPORT MANIFEST JSON</div>
-        <div class="helper-row">
-          <button id="manifestExampleBtn" class="mini-btn">LOAD SAMPLE JSON</button>
-          <button id="manifestFormatBtn" class="mini-btn">FORMAT JSON</button>
-        </div>
-        <textarea id="manifestJson" placeholder='{"name":"codex_worker","task_types":["code"],"pricing":{"premium_rate":0.2}}'></textarea>
-        <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON</button>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">CONNECT GITHUB REPO</div>
-        <div class="helper-row">
-          <button id="urlExampleBtn" class="mini-btn">LOAD SAMPLE URL</button>
-        </div>
-        <input id="manifestUrl" placeholder="https://github.com/org/repo/blob/main/agent.json" />
-        <button id="importUrlBtn" class="btn">IMPORT URL</button>
-        <div class="muted">repo の manifest URL、または GitHub blob/raw URL を入れる。将来は README / docs 推定もここに統合する。</div>
+        </details>
       </section>
     </section>
 

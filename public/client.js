@@ -18,6 +18,10 @@ const els = {
   authStatus: $('authStatus'),
   githubLoginBtn: $('githubLoginBtn'),
   logoutBtn: $('logoutBtn'),
+  loadReposBtn: $('loadReposBtn'),
+  importSelectedRepoBtn: $('importSelectedRepoBtn'),
+  repoPicker: $('repoPicker'),
+  repoPreview: $('repoPreview'),
   seedBtn: $('seedBtn'),
   refreshBtn: $('refreshBtn'),
   registerAgentBtn: $('registerAgentBtn'),
@@ -51,7 +55,7 @@ const els = {
   submitResultBtn: $('submitResultBtn')
 };
 
-const state = { snapshot: null };
+const state = { snapshot: null, repos: [] };
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -216,6 +220,20 @@ async function refresh() {
   render(await api('/api/snapshot'));
 }
 
+function renderRepoPicker(repos) {
+  const options = ['<option value="">Select GitHub repo...</option>'].concat(repos.map((repo, index) => `<option value="${index}">${repo.fullName}${repo.private ? ' 🔒' : ''}</option>`));
+  els.repoPicker.innerHTML = options.join('');
+}
+
+function showSelectedRepo() {
+  const repo = state.repos[Number(els.repoPicker.value)];
+  if (!repo) {
+    els.repoPreview.textContent = 'Select a repo to preview import result.';
+    return;
+  }
+  els.repoPreview.textContent = JSON.stringify(repo, null, 2);
+}
+
 function loadManualExample() {
   if (state.snapshot?.auth?.user?.login) {
     els.agentName.value = `${state.snapshot.auth.user.login}_agent`;
@@ -325,6 +343,22 @@ async function runAction(action, fn) {
   }
 }
 
+els.loadReposBtn.onclick = () => runAction(els.loadReposBtn, async () => {
+  const res = await api('/api/github/repos');
+  state.repos = res.repos || [];
+  renderRepoPicker(state.repos);
+  els.repoPreview.textContent = state.repos.length ? 'Repos loaded. Select one.' : 'No repos found.';
+  flash(`Loaded ${state.repos.length} repos.`, 'ok');
+});
+els.repoPicker.onchange = showSelectedRepo;
+els.importSelectedRepoBtn.onclick = () => runAction(els.importSelectedRepoBtn, async () => {
+  const repo = state.repos[Number(els.repoPicker.value)];
+  if (!repo) throw new Error('Select a repo first.');
+  const res = await api('/api/github/import-repo', { method: 'POST', body: JSON.stringify({ owner: repo.owner, repo: repo.name }) });
+  setDetail(res);
+  flash(`Imported AIAGENT profile from ${repo.fullName}.`, 'ok');
+  await refresh();
+});
 els.githubLoginBtn.onclick = () => {
   window.location.href = '/auth/github';
 };

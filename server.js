@@ -240,6 +240,7 @@ const server = http.createServer(async (req, res) => {
           avatarUrl: user.avatar_url,
           profileUrl: user.html_url
         },
+        githubAccessToken: token.access_token,
         createdAt: Date.now()
       });
       return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId) });
@@ -253,6 +254,81 @@ const server = http.createServer(async (req, res) => {
     const [id] = String(raw || '').split('.');
     if (id) sessions.delete(id);
     return json(res, 200, { ok: true }, { 'Set-Cookie': 'aiagent2_session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' });
+  }
+  if (req.method === 'GET' && url.pathname === '/api/github/repos') {
+    const session = getSession(req);
+    if (!session?.githubAccessToken) return json(res, 401, { error: 'Login required' });
+    try {
+      const repos = await fetchJson('https://api.github.com/user/repos?per_page=100&sort=updated', {
+        headers: { authorization: `Bearer ${session.githubAccessToken}`, 'user-agent': 'aiagent2' }
+      });
+      return json(res, 200, {
+        repos: repos.map(repo => ({
+          id: repo.id,
+          name: repo.name,
+          fullName: repo.full_name,
+          description: repo.description,
+          private: repo.private,
+          defaultBranch: repo.default_branch,
+          htmlUrl: repo.html_url,
+          owner: repo.owner?.login
+        }))
+      });
+    } catch (error) {
+      return json(res, 500, { error: error.message });
+    }
+  }
+  if (req.method === 'POST' && url.pathname === '/api/github/import-repo') {
+    const session = getSession(req);
+    if (!session?.githubAccessToken) return json(res, 401, { error: 'Login required' });
+    const body = await parseBody(req).catch(err => ({ __error: err.message }));
+    if (body.__error) return json(res, 400, { error: body.__error });
+    if (!body.owner || !body.repo) return json(res, 400, { error: 'owner and repo required' });
+    try {
+      const headers = { authorization: `Bearer ${session.githubAccessToken}`, 'user-agent': 'aiagent2' };
+      const repoMeta = await fetchJson(`https://api.github.com/repos/${body.owner}/${body.repo}`, { headers });
+      const contents = await fetchJson(`https://api.github.com/repos/${body.owner}/${body.repo}/contents`, { headers });
+      const names = Array.isArray(contents) ? contents.map(item => item.name.toLowerCase()) : [];
+      let readmeText = '';
+      try {
+        const readme = await fetch(`https://raw.githubusercontent.com/${body.owner}/${body.repo}/${repoMeta.default_branch}/README.md`, { headers: { 'user-agent': 'aiagent2', authorization: `Bearer ${session.githubAccessToken}` } });
+        if (readme.ok) readmeText = await readme.text();
+      } catch {}
+      const combined = `${repoMeta.name}\n${repoMeta.description || ''}\n${names.join(' ')}\n${readmeText}`.toLowerCase();
+      const taskTypes = [];
+      if (/(research|compare|scrape|crawler|summary|analysis)/.test(combined)) taskTypes.push('research');
+      if (/(seo|metadata|title|description)/.test(combined)) taskTypes.push('seo');
+      if (/(write|writer|copy|blog|content)/.test(combined)) taskTypes.push('writing');
+      if (/(code|api|worker|server|bug|debug|tool|automation)/.test(combined)) taskTypes.push('code');
+      if (/(listing|catalog|rakuma|mercari|yahoo)/.test(combined)) taskTypes.push('listing');
+      if (!taskTypes.length) taskTypes.push('summary');
+      const ownerInfo = ownerFromRequest(req);
+      const agent = createAgentFromInput({
+        name: repoMeta.name,
+        description: repoMeta.description || `Imported from ${repoMeta.full_name}`,
+        task_types: [...new Set(taskTypes)],
+        premium_rate: taskTypes.includes('code') ? 0.25 : 0.15,
+        basic_rate: 0.1,
+        success_rate: 0.9,
+        avg_latency_sec: 20,
+        owner: ownerInfo.owner,
+        manifest_url: repoMeta.html_url,
+        manifest_source: 'github-repo-import',
+        metadata: {
+          ...ownerInfo.metadata,
+          githubRepo: repoMeta.full_name,
+          githubRepoUrl: repoMeta.html_url,
+          githubPrivate: repoMeta.private,
+          importMode: 'repo-analysis',
+          repoFiles: names.slice(0, 50)
+        }
+      });
+      await storage.mutate(async (state) => { state.agents.unshift(agent); });
+      await touchEvent('REGISTERED', `${agent.name} imported from GitHub repo ${repoMeta.full_name}`);
+      return json(res, 201, { ok: true, agent, repo: { fullName: repoMeta.full_name, private: repoMeta.private } });
+    } catch (error) {
+      return json(res, 500, { error: error.message });
+    }
   }
   if (req.method === 'GET' && url.pathname === '/events') {
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
