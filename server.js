@@ -328,6 +328,21 @@ const server = http.createServer(async (req, res) => {
       if (names.includes('package.json')) runtimeHints.push('node');
       if (names.includes('pyproject.toml') || names.includes('requirements.txt')) runtimeHints.push('python');
       if (names.includes('dockerfile')) runtimeHints.push('docker');
+      const ingressCandidates = [];
+      if (/(api|express|fastify|hono|server|endpoint)/.test(combined)) {
+        ingressCandidates.push({ mode: 'api', confidence: 0.78, hint: 'repo looks like it exposes HTTP endpoints' });
+      }
+      if (/(webhook|callback)/.test(combined)) {
+        ingressCandidates.push({ mode: 'webhook', confidence: 0.68, hint: 'repo mentions webhook/callback flow' });
+      }
+      if (/(poll|queue|cron|worker)/.test(combined)) {
+        ingressCandidates.push({ mode: 'poll', confidence: 0.63, hint: 'repo looks like queue/poll based worker' });
+      }
+      if (/(chat|discord|slack|telegram|message)/.test(combined)) {
+        ingressCandidates.push({ mode: 'chat', confidence: 0.58, hint: 'repo appears to support conversational/task message intake' });
+      }
+      if (!ingressCandidates.length) ingressCandidates.push({ mode: 'api', confidence: 0.4, hint: 'default fallback assumption' });
+      const primaryIngress = ingressCandidates.sort((a, b) => b.confidence - a.confidence)[0];
       const deliveryContract = {
         primary: 'report',
         supportsFiles: true,
@@ -345,6 +360,17 @@ const server = http.createServer(async (req, res) => {
           acceptsNaturalLanguage: true,
           acceptsStructuredInput: true,
           preferredFields: ['goal', 'constraints', 'deadline', 'budget', 'context']
+        },
+        dispatchContract: {
+          primaryMode: primaryIngress.mode,
+          ingressCandidates,
+          normalizedJobEnvelope: {
+            prompt: 'string',
+            context: 'object',
+            constraints: 'object',
+            budget: 'number|null',
+            deadline: 'number|null'
+          }
         },
         deliveryContract,
         confidence: Math.min(0.95, 0.55 + Math.min(names.length, 20) * 0.01 + (readmeText ? 0.15 : 0))
@@ -369,6 +395,7 @@ const server = http.createServer(async (req, res) => {
           importMode: 'repo-analysis',
           repoFiles: names.slice(0, 50),
           inferredProfile,
+          dispatchContract: inferredProfile.dispatchContract,
           deliveryContract
         }
       });
@@ -379,7 +406,21 @@ const server = http.createServer(async (req, res) => {
         agent,
         repo: { fullName: repoMeta.full_name, private: repoMeta.private },
         inferredProfile,
+        dispatchContract: inferredProfile.dispatchContract,
         deliveryContract,
+        dispatchExample: {
+          target: {
+            repo: repoMeta.full_name,
+            mode: inferredProfile.dispatchContract.primaryMode
+          },
+          job: {
+            prompt: 'Please complete the requested work and return a structured delivery.',
+            context: {},
+            constraints: {},
+            budget: null,
+            deadline: null
+          }
+        },
         deliveryExample: {
           status: 'completed',
           report: {
