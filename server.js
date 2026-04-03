@@ -50,7 +50,9 @@ function getSession(req) {
   return sessions.get(id) || null;
 }
 function baseUrl(req) {
-  return process.env.BASE_URL || `${(req.headers['x-forwarded-proto'] || 'http')}://${req.headers.host}`;
+  const configured = (process.env.BASE_URL || '').trim();
+  if (configured) return configured.replace(/\/$/, '');
+  return `${(req.headers['x-forwarded-proto'] || 'http')}://${req.headers.host}`.replace(/\/$/, '');
 }
 function redirect(res, location, headers = {}) {
   res.writeHead(302, { Location: location, ...headers });
@@ -189,6 +191,18 @@ const server = http.createServer(async (req, res) => {
     if (serveStatic(res, url.pathname === '/' ? '/index.html' : url.pathname)) return;
   }
   if (req.method === 'GET' && url.pathname === '/auth/status') return json(res, 200, authStatus(req));
+  if (req.method === 'GET' && url.pathname === '/auth/debug') {
+    const callback = `${baseUrl(req)}/auth/github/callback`;
+    return json(res, 200, {
+      baseUrl: baseUrl(req),
+      callback,
+      githubConfigured: Boolean(githubClientId && githubClientSecret),
+      hasClientId: Boolean(githubClientId),
+      hasClientSecret: Boolean(githubClientSecret),
+      host: req.headers.host,
+      forwardedProto: req.headers['x-forwarded-proto'] || null
+    });
+  }
   if (req.method === 'GET' && url.pathname === '/auth/github') {
     if (!(githubClientId && githubClientSecret)) return json(res, 503, { error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' });
     const state = randomBytes(16).toString('hex');
