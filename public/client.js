@@ -22,6 +22,10 @@ const els = {
   importSelectedRepoBtn: $('importSelectedRepoBtn'),
   repoPicker: $('repoPicker'),
   repoPreview: $('repoPreview'),
+  repoSearch: $('repoSearch'),
+  repoPrevBtn: $('repoPrevBtn'),
+  repoNextBtn: $('repoNextBtn'),
+  repoPagerStatus: $('repoPagerStatus'),
   seedBtn: $('seedBtn'),
   refreshBtn: $('refreshBtn'),
   registerAgentBtn: $('registerAgentBtn'),
@@ -55,7 +59,7 @@ const els = {
   submitResultBtn: $('submitResultBtn')
 };
 
-const state = { snapshot: null, repos: [] };
+const state = { snapshot: null, repos: [], filteredRepos: [], repoPage: 0, repoPageSize: 50 };
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -220,13 +224,27 @@ async function refresh() {
   render(await api('/api/snapshot'));
 }
 
-function renderRepoPicker(repos) {
-  const options = ['<option value="">Select GitHub repo...</option>'].concat(repos.map((repo, index) => `<option value="${index}">${repo.fullName}${repo.private ? ' 🔒' : ''}</option>`));
-  els.repoPicker.innerHTML = options.join('');
+function applyRepoFilter() {
+  const q = (els.repoSearch.value || '').trim().toLowerCase();
+  state.filteredRepos = !q ? [...state.repos] : state.repos.filter((repo) => `${repo.fullName} ${repo.description || ''}`.toLowerCase().includes(q));
+  state.repoPage = 0;
+  renderRepoPicker();
+}
+
+function renderRepoPicker() {
+  const start = state.repoPage * state.repoPageSize;
+  const items = state.filteredRepos.slice(start, start + state.repoPageSize);
+  els.repoPicker.innerHTML = items.length
+    ? items.map((repo, index) => `<option value="${start + index}">${repo.fullName}${repo.private ? ' 🔒' : ''}</option>`).join('')
+    : '<option value="">No repos found</option>';
+  const totalPages = Math.max(1, Math.ceil(state.filteredRepos.length / state.repoPageSize));
+  els.repoPagerStatus.textContent = `${state.filteredRepos.length} repos / page ${state.repoPage + 1} of ${totalPages}`;
+  els.repoPrevBtn.disabled = state.repoPage <= 0;
+  els.repoNextBtn.disabled = state.repoPage >= totalPages - 1;
 }
 
 function showSelectedRepo() {
-  const repo = state.repos[Number(els.repoPicker.value)];
+  const repo = state.filteredRepos[Number(els.repoPicker.value)] || state.repos[Number(els.repoPicker.value)];
   if (!repo) {
     els.repoPreview.textContent = 'Select a repo to preview import result.';
     return;
@@ -346,13 +364,18 @@ async function runAction(action, fn) {
 els.loadReposBtn.onclick = () => runAction(els.loadReposBtn, async () => {
   const res = await api('/api/github/repos');
   state.repos = res.repos || [];
-  renderRepoPicker(state.repos);
+  state.filteredRepos = [...state.repos];
+  state.repoPage = 0;
+  renderRepoPicker();
   els.repoPreview.textContent = state.repos.length ? 'Repos loaded. Select one.' : 'No repos found.';
   flash(`Loaded ${state.repos.length} repos.`, 'ok');
 });
 els.repoPicker.onchange = showSelectedRepo;
+els.repoSearch.oninput = applyRepoFilter;
+els.repoPrevBtn.onclick = () => { if (state.repoPage > 0) { state.repoPage -= 1; renderRepoPicker(); } };
+els.repoNextBtn.onclick = () => { const totalPages = Math.max(1, Math.ceil(state.filteredRepos.length / state.repoPageSize)); if (state.repoPage < totalPages - 1) { state.repoPage += 1; renderRepoPicker(); } };
 els.importSelectedRepoBtn.onclick = () => runAction(els.importSelectedRepoBtn, async () => {
-  const repo = state.repos[Number(els.repoPicker.value)];
+  const repo = state.filteredRepos[Number(els.repoPicker.value)] || state.repos[Number(els.repoPicker.value)];
   if (!repo) throw new Error('Select a repo first.');
   const res = await api('/api/github/import-repo', { method: 'POST', body: JSON.stringify({ owner: repo.owner, repo: repo.name }) });
   setDetail(res);

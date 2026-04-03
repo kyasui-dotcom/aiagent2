@@ -66,7 +66,13 @@
           <button id="loadReposBtn" class="mini-btn">LOAD MY REPOS</button>
           <button id="importSelectedRepoBtn" class="mini-btn">IMPORT SELECTED REPO</button>
         </div>
-        <select id="repoPicker"><option value="">Select GitHub repo...</option></select>
+        <input id="repoSearch" placeholder="Search repos by name / description" />
+        <div class="helper-row">
+          <button id="repoPrevBtn" class="mini-btn">PREV</button>
+          <button id="repoNextBtn" class="mini-btn">NEXT</button>
+        </div>
+        <div id="repoPagerStatus" class="muted">No repos loaded yet.</div>
+        <select id="repoPicker" size="12"><option value="">Select GitHub repo...</option></select>
         <pre id="repoPreview" class="detail-box">Login first, then load repos.</pre>
       </section>
       <section class="box panel-stack">
