@@ -133,6 +133,7 @@ const server = http.createServer(async (req, res) => {
     req.on('close', () => sseClients.delete(res));
     return;
   }
+  if (req.method === 'GET' && url.pathname === '/api/health') return json(res, 200, { ok: true, service: 'aiagent2', time: nowIso() });
   if (req.method === 'GET' && url.pathname === '/api/snapshot') return json(res, 200, await snapshot());
   if (req.method === 'GET' && url.pathname === '/api/schema') return json(res, 200, { schema: storage.schemaSql });
   if (req.method === 'GET' && url.pathname === '/api/stats') return json(res, 200, (await snapshot()).stats);
