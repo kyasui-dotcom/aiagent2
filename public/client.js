@@ -12,6 +12,7 @@ const els = {
   agentsTable: $('agentsTable'),
   jobsTable: $('jobsTable'),
   billingTable: $('billingTable'),
+  openJobsTable: $('openJobsTable'),
   jobDetail: $('jobDetail'),
   flash: $('flash'),
   seedBtn: $('seedBtn'),
@@ -39,7 +40,12 @@ const els = {
   jobPrompt: $('jobPrompt'),
   jobBudget: $('jobBudget'),
   jobDeadline: $('jobDeadline'),
-  jobMode: $('jobMode')
+  jobMode: $('jobMode'),
+  claimAgentId: $('claimAgentId'),
+  claimJobId: $('claimJobId'),
+  submitOutput: $('submitOutput'),
+  claimJobBtn: $('claimJobBtn'),
+  submitResultBtn: $('submitResultBtn')
 };
 
 const state = { snapshot: null };
@@ -120,6 +126,33 @@ function renderJobs(jobs) {
   });
 }
 
+function renderOpenJobs(jobs) {
+  const open = jobs.filter((job) => ['queued', 'claimed', 'running'].includes(job.status));
+  if (!open.length) {
+    els.openJobsTable.innerHTML = '<div class="empty">No open jobs now.</div>';
+    return;
+  }
+  els.openJobsTable.innerHTML = `<div class="table-header jobs-grid"><div>JOB</div><div>TYPE</div><div>STATUS</div><div>AGENT</div><div>SCORE</div><div>CREATED</div></div>${open.map((job) => `
+    <div class="table-row jobs-grid" data-open-job-id="${job.id}">
+      <div>${job.id.slice(0, 8)}</div>
+      <div>${job.taskType}</div>
+      <div class="${job.status}">${job.status.toUpperCase()}</div>
+      <div>${job.assignedAgentId ? job.assignedAgentId.slice(0, 14) : '-'}</div>
+      <div>${job.score ?? '-'}</div>
+      <div>${new Date(job.createdAt).toLocaleString('ja-JP')}</div>
+    </div>`).join('')}`;
+  [...els.openJobsTable.querySelectorAll('[data-open-job-id]')].forEach((row) => {
+    row.onclick = () => {
+      const job = open.find((item) => item.id === row.dataset.openJobId);
+      if (job) {
+        els.claimJobId.value = job.id;
+        if (job.assignedAgentId) els.claimAgentId.value = job.assignedAgentId;
+        setDetail(job);
+      }
+    };
+  });
+}
+
 function renderBilling(jobs) {
   const billed = jobs.filter((job) => job.actualBilling);
   if (!billed.length) {
@@ -157,6 +190,7 @@ function render(snapshot) {
   renderStream(events);
   renderAgents(agents);
   renderJobs(jobs);
+  renderOpenJobs(jobs);
   renderBilling(jobs);
 }
 
@@ -240,6 +274,13 @@ async function createAndOptionallyRunJob() {
     flash(`Job ${created.job_id.slice(0, 8)} created and matched.`, 'ok');
     return refresh();
   }
+  if (els.jobMode.value === 'external-demo') {
+    const claim = await api(`/api/jobs/${created.job_id}/claim`, { method: 'POST', body: JSON.stringify({ agent_id: created.matched_agent_id }) });
+    const submit = await api(`/api/jobs/${created.job_id}/result`, { method: 'POST', body: JSON.stringify({ agent_id: created.matched_agent_id, status: 'completed', output: { summary: `Connected aiagent handled: ${els.jobPrompt.value}` }, usage: { api_cost: Math.max(60, Math.round(Number(els.jobBudget.value || 300) * 0.3)) } }) });
+    setDetail({ created, claim, submit });
+    flash(`Job ${created.job_id.slice(0, 8)} dispatched to connected aiagent demo.`, 'ok');
+    return refresh();
+  }
   const dev = await api('/api/dev/resolve-job', { method: 'POST', body: JSON.stringify({ job_id: created.job_id, mode: els.jobMode.value }) });
   setDetail({ created, resolved: dev });
   flash(`Job ${created.job_id.slice(0, 8)} ${dev.status}.`, dev.status === 'failed' ? 'error' : 'ok');
@@ -300,6 +341,18 @@ els.importUrlBtn.onclick = () => runAction(els.importUrlBtn, async () => {
   await refresh();
 });
 els.createJobBtn.onclick = () => runAction(els.createJobBtn, createAndOptionallyRunJob);
+els.claimJobBtn.onclick = () => runAction(els.claimJobBtn, async () => {
+  const res = await api(`/api/jobs/${els.claimJobId.value}/claim`, { method: 'POST', body: JSON.stringify({ agent_id: els.claimAgentId.value }) });
+  setDetail(res);
+  flash(`Job ${els.claimJobId.value.slice(0, 8)} claimed.`, 'ok');
+  await refresh();
+});
+els.submitResultBtn.onclick = () => runAction(els.submitResultBtn, async () => {
+  const res = await api(`/api/jobs/${els.claimJobId.value}/result`, { method: 'POST', body: JSON.stringify({ agent_id: els.claimAgentId.value, status: 'completed', output: { summary: els.submitOutput.value || 'Connected aiagent result' }, usage: { api_cost: 90 } }) });
+  setDetail(res);
+  flash(`Job ${els.claimJobId.value.slice(0, 8)} submitted.`, 'ok');
+  await refresh();
+});
 els.manualExampleBtn.onclick = loadManualExample;
 els.manifestExampleBtn.onclick = loadManifestExample;
 els.manifestFormatBtn.onclick = () => runAction(els.manifestFormatBtn, async () => formatManifestJson());

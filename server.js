@@ -222,6 +222,55 @@ const server = http.createServer(async (req, res) => {
     await touchEvent('MATCHED', `${job.taskType}/${job.id.slice(0, 6)} -> ${picked.agent.name}`);
     return json(res, 201, { job_id: job.id, matched_agent_id: job.assignedAgentId, estimated_cost: job.billingEstimate, inferred_task_type: taskType });
   }
+  const claimMatch = req.method === 'POST' && url.pathname.match(/^\/api\/jobs\/([^/]+)\/claim$/);
+  if (claimMatch) {
+    const body = await parseBody(req).catch(err => ({ __error: err.message }));
+    if (body.__error) return json(res, 400, { error: body.__error });
+    const result = await storage.mutate(async (state) => {
+      const job = state.jobs.find(j => j.id === claimMatch[1]);
+      if (!job) return { error: 'Job not found', statusCode: 404 };
+      const agent = state.agents.find(a => a.id === body.agent_id);
+      if (!agent) return { error: 'Agent not found', statusCode: 404 };
+      if (!agent.taskTypes.includes(job.taskType)) return { error: 'Agent cannot accept this job type', statusCode: 400 };
+      job.assignedAgentId = agent.id;
+      job.status = 'claimed';
+      job.claimedAt = nowIso();
+      job.logs.push(`claimed by ${agent.id}`);
+      return { ok: true, job, agent };
+    });
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    await touchEvent('RUNNING', `${result.agent.name} claimed ${result.job.taskType}/${result.job.id.slice(0, 6)}`);
+    return json(res, 200, result);
+  }
+
+  const resultSubmitMatch = req.method === 'POST' && url.pathname.match(/^\/api\/jobs\/([^/]+)\/result$/);
+  if (resultSubmitMatch) {
+    const body = await parseBody(req).catch(err => ({ __error: err.message }));
+    if (body.__error) return json(res, 400, { error: body.__error });
+    const result = await storage.mutate(async (state) => {
+      const job = state.jobs.find(j => j.id === resultSubmitMatch[1]);
+      if (!job) return { error: 'Job not found', statusCode: 404 };
+      const agent = state.agents.find(a => a.id === body.agent_id);
+      if (!agent) return { error: 'Agent not found', statusCode: 404 };
+      if (job.assignedAgentId && job.assignedAgentId !== agent.id) return { error: 'Invalid assignment', statusCode: 401 };
+      job.assignedAgentId = agent.id;
+      job.startedAt = job.startedAt || nowIso();
+      const billing = estimateBilling(agent, Number(body?.usage?.api_cost ?? 100));
+      job.status = body.status || 'completed';
+      job.output = body.output || {};
+      job.completedAt = nowIso();
+      job.usage = body.usage || null;
+      job.actualBilling = billing;
+      job.logs.push(`completed by ${agent.id}`, `billed total=${billing.total}`);
+      agent.earnings = +(Number(agent.earnings || 0) + billing.agentPayout).toFixed(1);
+      return { ok: true, job, billing, agent };
+    });
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    await touchEvent('COMPLETED', `${result.job.taskType}/${result.job.id.slice(0, 6)} completed by connected agent`);
+    await touchEvent('BILLED', `api=${result.billing.apiCost} total=${result.billing.total}`);
+    return json(res, 200, result);
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/dev/resolve-job') {
     const body = await parseBody(req).catch(err => ({ __error: err.message }));
     if (body.__error) return json(res, 400, { error: body.__error });

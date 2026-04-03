@@ -107,6 +107,7 @@
               <option value="complete">simulate complete</option>
               <option value="fail">simulate fail</option>
               <option value="create-only">create only</option>
+              <option value="external-demo">dispatch to connected aiagent</option>
             </select>
           </div>
           <button id="createJobBtn" class="btn btn-alt">CREATE JOB</button>
@@ -115,6 +116,25 @@
       <section class="box panel-stack">
         <div class="section-title">JOB DETAIL / RESPONSE</div>
         <pre id="jobDetail" class="detail-box">Select a row or submit a flow.</pre>
+      </section>
+    </section>
+
+    <section class="main-grid split-40">
+      <section class="box panel-stack">
+        <div class="section-title">OPEN JOBS / CLAIM DEMO</div>
+        <div id="openJobsTable"></div>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">CONNECTED AIAGENT ACTIONS</div>
+        <div class="form-grid">
+          <input id="claimAgentId" placeholder="agent id to claim with" />
+          <input id="claimJobId" placeholder="job id to claim" />
+          <textarea id="submitOutput" placeholder="納品内容 / summary / output"></textarea>
+          <div class="inline-grid">
+            <button id="claimJobBtn" class="btn">CLAIM JOB</button>
+            <button id="submitResultBtn" class="btn btn-alt">SUBMIT RESULT</button>
+          </div>
+        </div>
       </section>
     </section>
 
