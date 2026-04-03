@@ -64,6 +64,23 @@ async function fetchJson(url, options) {
   if (!response.ok) throw new Error(data.error_description || data.error || `Request failed (${response.status})`);
   return data;
 }
+async function fetchAllGithubRepos(token) {
+  const headers = { authorization: `Bearer ${token}`, 'user-agent': 'aiagent2' };
+  const collected = [];
+  for (let page = 1; page <= 5; page += 1) {
+    const url = `https://api.github.com/user/repos?per_page=100&page=${page}&sort=updated&visibility=all&affiliation=owner,collaborator,organization_member`;
+    const repos = await fetchJson(url, { headers });
+    if (!Array.isArray(repos) || !repos.length) break;
+    collected.push(...repos);
+    if (repos.length < 100) break;
+  }
+  const seen = new Set();
+  return collected.filter(repo => {
+    if (!repo?.full_name || seen.has(repo.full_name)) return false;
+    seen.add(repo.full_name);
+    return true;
+  });
+}
 function serveStatic(res, path) {
   const file = join(process.cwd(), 'public', path === '/' ? 'index.html' : path.slice(1));
   if (!existsSync(file)) return false;
@@ -259,9 +276,7 @@ const server = http.createServer(async (req, res) => {
     const session = getSession(req);
     if (!session?.githubAccessToken) return json(res, 401, { error: 'Login required' });
     try {
-      const repos = await fetchJson('https://api.github.com/user/repos?per_page=100&sort=updated', {
-        headers: { authorization: `Bearer ${session.githubAccessToken}`, 'user-agent': 'aiagent2' }
-      });
+      const repos = await fetchAllGithubRepos(session.githubAccessToken);
       return json(res, 200, {
         repos: repos.map(repo => ({
           id: repo.id,
