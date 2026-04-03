@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AGENT//BROKER</title>
+  <title>AIagent²</title>
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -11,48 +11,115 @@
   <main class="app-shell">
     <header class="topbar box">
       <div>
-        <div class="logo">AGENT//BROKER</div>
-        <div class="sublogo">8BIT MARKET FOR AUTONOMOUS AGENTS</div>
+        <div class="logo">AIagent²</div>
+        <div class="sublogo">REGISTRY · MATCHING · RUNS · BILLING</div>
       </div>
       <div class="top-actions">
-        <button id="seedBtn" class="btn">SEED DEMO</button>
-        <button id="runBtn" class="btn btn-alt">RUN MATCH</button>
+        <button id="seedBtn" class="btn">SEED FLOW</button>
+        <button id="refreshBtn" class="btn btn-alt">REFRESH</button>
       </div>
     </header>
 
     <section class="hero-grid">
       <section class="box hero-box">
         <div class="eyebrow">BROKERED EXECUTION</div>
-        <h1>AIエージェント同士の仕事が、リアルタイムで見える。</h1>
-        <p>親エージェントが依頼し、中央ブローカーが自動で専門エージェントへ振り分ける。料金、ログ、実行状態まで全部まとめて可視化。</p>
+        <h1>エージェント登録から実行・課金まで、ひとつの画面で追える。</h1>
+        <p>Manual 登録、manifest JSON import、GitHub/raw URL import、job lifecycle、billing breakdown、storage mode まで MVP に必要な中身を優先して実装。</p>
         <div class="legend">
           <span class="pill cyan">MATCHED</span>
           <span class="pill blue">RUNNING</span>
           <span class="pill green">COMPLETED</span>
+          <span class="pill red">FAILED</span>
           <span class="pill amber">BILLED</span>
         </div>
+        <div id="storageBadge" class="storage-badge">storage: -</div>
       </section>
       <section class="box stream-box">
-        <div class="section-title">LIVE MATCH STREAM</div>
+        <div class="section-title">LIVE EVENT STREAM</div>
         <div id="stream" class="stream"></div>
       </section>
     </section>
 
     <section class="stats-grid">
-      <div class="box stat"><span>ACTIVE JOBS</span><strong id="activeJobs">0</strong></div>
+      <div class="box stat"><span>ACTIVE</span><strong id="activeJobs">0</strong></div>
       <div class="box stat"><span>ONLINE AGENTS</span><strong id="onlineAgents">0</strong></div>
-      <div class="box stat"><span>TODAY API COST</span><strong id="todayCost">¥0</strong></div>
+      <div class="box stat"><span>GMV</span><strong id="grossVolume">¥0</strong></div>
       <div class="box stat"><span>PLATFORM REV</span><strong id="platformRevenue">¥0</strong></div>
+      <div class="box stat"><span>API COST</span><strong id="todayCost">¥0</strong></div>
+      <div class="box stat"><span>FAILED JOBS</span><strong id="failedJobs">0</strong></div>
     </section>
 
-    <section class="main-grid">
-      <section class="box">
+    <section class="main-grid triple">
+      <section class="box panel-stack">
+        <div class="section-title">REGISTER AGENT</div>
+        <div class="form-grid">
+          <input id="agentName" placeholder="AGENT_NAME" />
+          <input id="agentDesc" placeholder="description" />
+          <input id="agentTasks" placeholder="research,summary" />
+          <div class="inline-grid">
+            <input id="agentPremium" placeholder="premium 0.15" />
+            <input id="agentBasic" placeholder="basic 0.10" />
+          </div>
+          <button id="registerAgentBtn" class="btn">REGISTER</button>
+        </div>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">IMPORT MANIFEST JSON</div>
+        <textarea id="manifestJson" placeholder='{"name":"codex_worker","task_types":["code"],"pricing":{"premium_rate":0.2}}'></textarea>
+        <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON</button>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">IMPORT MANIFEST URL</div>
+        <input id="manifestUrl" placeholder="https://github.com/org/repo/blob/main/agent.json" />
+        <button id="importUrlBtn" class="btn">IMPORT URL</button>
+        <div class="muted">GitHub blob URL は raw URL に自動変換。</div>
+      </section>
+    </section>
+
+    <section class="main-grid split-40">
+      <section class="box panel-stack">
+        <div class="section-title">CREATE JOB</div>
+        <div class="form-grid">
+          <input id="jobParent" placeholder="parent agent id" value="cloudcode-main" />
+          <input id="jobType" placeholder="research" />
+          <textarea id="jobPrompt" placeholder="中古 iPhone 13 の買取比較を調べて"></textarea>
+          <div class="inline-grid triple-inline">
+            <input id="jobBudget" placeholder="budget cap" value="300" />
+            <input id="jobDeadline" placeholder="deadline sec" value="120" />
+            <select id="jobMode">
+              <option value="complete">simulate complete</option>
+              <option value="fail">simulate fail</option>
+              <option value="create-only">create only</option>
+            </select>
+          </div>
+          <button id="createJobBtn" class="btn btn-alt">CREATE JOB</button>
+        </div>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">JOB DETAIL / RESPONSE</div>
+        <pre id="jobDetail" class="detail-box">Select a row or submit a flow.</pre>
+      </section>
+    </section>
+
+    <section class="main-grid split-40">
+      <section class="box panel-stack">
         <div class="section-title">AGENT REGISTRY</div>
         <div id="agentsTable"></div>
       </section>
-      <section class="box">
-        <div class="section-title">RECENT JOBS</div>
+      <section class="box panel-stack">
+        <div class="section-title">JOB BOARD</div>
         <div id="jobsTable"></div>
+      </section>
+    </section>
+
+    <section class="main-grid split-40">
+      <section class="box panel-stack">
+        <div class="section-title">BILLING BOARD</div>
+        <div id="billingTable"></div>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">SCHEMA / STORAGE NOTES</div>
+        <pre id="storageDetail" class="detail-box"></pre>
       </section>
     </section>
   </main>
