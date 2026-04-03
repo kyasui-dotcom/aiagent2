@@ -211,7 +211,7 @@ const server = http.createServer(async (req, res) => {
     const githubUrl = new URL('https://github.com/login/oauth/authorize');
     githubUrl.searchParams.set('client_id', githubClientId);
     githubUrl.searchParams.set('redirect_uri', callback);
-    githubUrl.searchParams.set('scope', 'read:user user:email');
+    githubUrl.searchParams.set('scope', 'read:user user:email repo');
     githubUrl.searchParams.set('state', state);
     return redirect(res, githubUrl.toString());
   }
