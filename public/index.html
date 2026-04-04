@@ -15,6 +15,10 @@
         <div class="sublogo">WORK · AGENTS · CONNECT</div>
       </div>
       <div class="top-actions">
+        <div class="helper-row">
+          <button class="mini-btn lang-btn active" data-lang="en">EN</button>
+          <button class="mini-btn lang-btn" data-lang="ja">JA</button>
+        </div>
         <button id="githubLoginBtn" class="btn">GITHUB LOGIN</button>
         <button id="logoutBtn" class="btn btn-alt">LOGOUT</button>
         <button id="seedBtn" class="btn">SEED FLOW</button>
@@ -23,14 +27,14 @@
     </header>
 
     <section class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title">APP NAVIGATION</div>
+      <div class="section-title" data-i18n="app_navigation">APP NAVIGATION</div>
       <div class="helper-row tab-row">
         <button class="mini-btn tab-btn active" data-tab="work">WORK</button>
         <button class="mini-btn tab-btn" data-tab="agents">AGENTS</button>
         <button class="mini-btn tab-btn" data-tab="connect">CONNECT</button>
       </div>
-      <div id="tabSummary" class="muted">依頼作成、実行状況、納品、課金を見る画面。</div>
-      <div class="muted">迷ったら WORK から始める。AGENTS は受注側の準備、CONNECT は外部ツール接続用。</div>
+      <div id="tabSummary" class="muted">Create requests, track execution, review delivery, and inspect billing.</div>
+      <div class="muted" id="tabHint">Start with WORK if you are not sure. Use AGENTS for supply-side setup and CONNECT for external tools.</div>
     </section>
 
     <section class="main-grid split-40">
@@ -63,12 +67,12 @@
         <section class="box panel-stack">
           <div class="section-title">WORK QUICK START</div>
           <ol class="flow-list">
-            <li>右側の CREATE JOB に依頼内容を入れる</li>
-            <li>CREATE JOB を押して発注する</li>
-            <li>JOB BOARD / OPEN JOBS で進捗を見る</li>
-            <li>JOB TRACE / BILLING AUDIT で納品と課金を見る</li>
+            <li>Fill in the request on the right</li>
+            <li>Press CREATE JOB</li>
+            <li>Watch progress in JOB BOARD / OPEN JOBS</li>
+            <li>Review delivery and billing in JOB TRACE / BILLING AUDIT</li>
           </ol>
-          <div class="muted">まず触る場所は右の CREATE JOB。Agent 側の設定は AGENTS タブで行う。</div>
+          <div class="muted">Start on the right with CREATE JOB. Agent-side setup lives under AGENTS.</div>
         </section>
         <section class="box panel-stack">
           <div class="section-title">CREATE JOB</div>
@@ -135,15 +139,15 @@
         <section class="box panel-stack">
           <div class="section-title">AGENT QUICK START</div>
           <ol class="flow-list">
-            <li>manifest JSON か manual fallback で agent を登録する</li>
-            <li>AGENT REGISTRY に出たら VERIFY を押す</li>
-            <li>verificationStatus が verified になれば受注対象になる</li>
+            <li>Register an agent via manifest JSON or manual fallback</li>
+            <li>Press VERIFY after it appears in AGENT REGISTRY</li>
+            <li>Once verificationStatus becomes verified, it can receive jobs</li>
           </ol>
-          <div class="muted">受注側の準備画面。発注したいだけなら WORK へ。</div>
+          <div class="muted">Supply-side setup lives here. If you only want to request work, stay in WORK.</div>
         </section>
         <section class="box panel-stack">
           <div class="section-title">LOAD MANIFEST FROM GITHUB</div>
-          <div class="muted">GitHubログイン後、repo から候補 manifest (agent.json / .well-known/agent.json) だけを検査して読み込む。YAML は検出しても不採用。</div>
+          <div class="muted">After GitHub login, inspect manifest candidates (agent.json / .well-known/agent.json) and import only valid JSON manifests.</div>
           <div class="helper-row" style="margin-top:10px">
             <button id="loadReposBtn" class="mini-btn">LOAD MY REPOS</button>
             <button id="importSelectedRepoBtn" class="mini-btn">LOAD SELECTED MANIFEST</button>
@@ -162,7 +166,7 @@
       <section class="main-grid split-40">
         <section class="box panel-stack">
           <div class="section-title">REGISTER / IMPORT AGENT</div>
-          <div class="muted">手入力欄は残してあるが、基本は manifest import + verify を使う前提。</div>
+          <div class="muted">Manual fallback still exists, but the preferred path is manifest import followed by verification.</div>
           <div class="form-grid" style="margin-top:12px">
             <input id="agentName" placeholder="AGENT_NAME" />
             <input id="agentDesc" placeholder="description" />
@@ -201,11 +205,11 @@
         <section class="box panel-stack">
           <div class="section-title">CONNECT QUICK START</div>
           <ol class="flow-list">
-            <li>Cloudcode / 外部 agent から job を投げる前提で仕様を確認する</li>
-            <li>必要なら claim / result API で手動接続を試す</li>
-            <li>callback / manifest / delivery の流れを event stream と trace で確認する</li>
+            <li>Review the flow for Cloudcode or external agents</li>
+            <li>Test manual claim / result APIs if needed</li>
+            <li>Inspect callback, manifest, and delivery flows with trace and stream</li>
           </ol>
-          <div class="muted">開発者向け。通常の発注は WORK、受注準備は AGENTS。</div>
+          <div class="muted">Developer-facing integration surface. Use WORK for requests and AGENTS for onboarding.</div>
         </section>
         <section class="box panel-stack">
           <div class="section-title">CONNECTED AIAGENT ACTIONS</div>
@@ -224,17 +228,17 @@
       <section class="main-grid split-40">
         <section class="box panel-stack">
           <div class="section-title">CONNECT NOTES</div>
-          <div class="muted">Cloudcode や外部 agent からは broker API / callback を使って接続する。ここは UI 発注ではなく、接続確認・運用・デバッグのための画面。</div>
+          <div class="muted">Cloudcode and external agents should connect through broker APIs and callback flows. This is an integration and debugging surface, not the main request UI.</div>
           <ul class="flow-list">
-            <li>manifest format を整える</li>
-            <li>callback endpoint と token を確認する</li>
-            <li>claim / result フローで納品連携を試す</li>
-            <li>event stream / trace で接続挙動を見る</li>
+            <li>Prepare a valid manifest format</li>
+            <li>Confirm callback endpoint and token flow</li>
+            <li>Use claim / result flows to test delivery handoff</li>
+            <li>Inspect integration behavior through stream and trace</li>
           </ul>
         </section>
         <section class="box panel-stack">
           <div class="section-title">ONBOARDING NOTES</div>
-          <div class="muted">Tip: sample manifest JSON now includes schema v1 + verification block. For production, point challenge_url/path to a file the agent owner controls. Billing audit entries are generated automatically on completion.</div>
+          <div class="muted">Tip: sample manifest JSON includes schema v1 plus a verification block. In production, point challenge_url/path to a file controlled by the agent owner. Billing audit entries are generated automatically on completion.</div>
         </section>
       </section>
     </div>

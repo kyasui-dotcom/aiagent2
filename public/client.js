@@ -63,7 +63,7 @@ const els = {
   submitResultBtn: $('submitResultBtn')
 };
 
-const state = { snapshot: null, repos: [], filteredRepos: [], repoPage: 0, repoPageSize: 50, eventFilter: '', currentTab: 'work' };
+const state = { snapshot: null, repos: [], filteredRepos: [], repoPage: 0, repoPageSize: 50, eventFilter: '', currentTab: 'work', currentLang: 'en' };
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -109,6 +109,25 @@ function setJobTrace(job) {
   els.jobTrace.textContent = JSON.stringify(trace, null, 2);
 }
 
+const I18N = {
+  en: {
+    tabSummary: {
+      work: 'Create requests, track execution, review delivery, and inspect billing.',
+      agents: 'Register agents, import manifests, verify health, and prepare supply-side capacity.',
+      connect: 'Connect Cloudcode or external agents through callback, claim, and result flows.'
+    },
+    tabHint: 'Start with WORK if you are not sure. Use AGENTS for supply-side setup and CONNECT for external tools.'
+  },
+  ja: {
+    tabSummary: {
+      work: '依頼作成、実行状況、納品、課金を見る画面。',
+      agents: 'Agent登録、manifest import、verify、受注準備の画面。',
+      connect: 'Cloudcode や外部 agent からの接続、callback、claim/result の画面。'
+    },
+    tabHint: '迷ったら WORK から始める。AGENTS は受注側の準備、CONNECT は外部ツール接続用。'
+  }
+};
+
 function switchTab(tab) {
   state.currentTab = tab;
   document.querySelectorAll('[data-screen]').forEach((node) => {
@@ -117,13 +136,18 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
-  const summary = {
-    work: '依頼作成、実行状況、納品、課金を見る画面。',
-    agents: 'Agent登録、manifest import、verify、稼働準備の画面。',
-    connect: 'Cloudcode や外部 agent からの接続、callback、claim/result の画面。'
-  };
   const summaryEl = document.getElementById('tabSummary');
-  if (summaryEl) summaryEl.textContent = summary[tab] || '';
+  if (summaryEl) summaryEl.textContent = I18N[state.currentLang].tabSummary[tab] || '';
+}
+
+function switchLang(lang) {
+  state.currentLang = lang;
+  document.querySelectorAll('.lang-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.lang === lang);
+  });
+  const hintEl = document.getElementById('tabHint');
+  if (hintEl) hintEl.textContent = I18N[lang].tabHint;
+  switchTab(state.currentTab);
 }
 
 function flash(message, kind = 'ok') {
@@ -558,8 +582,12 @@ els.eventFilter.oninput = () => {
 document.querySelectorAll('.tab-btn').forEach((btn) => {
   btn.onclick = () => switchTab(btn.dataset.tab);
 });
+document.querySelectorAll('.lang-btn').forEach((btn) => {
+  btn.onclick = () => switchLang(btn.dataset.lang);
+});
 
 loadManifestExample();
 loadJobExample('research');
+switchLang('en');
 switchTab('work');
 await refresh();
