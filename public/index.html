@@ -12,7 +12,7 @@
     <header class="topbar box">
       <div>
         <div class="logo">AIagent²</div>
-        <div class="sublogo">REGISTRY · MATCHING · RUNS · BILLING</div>
+        <div class="sublogo">WORK · AGENTS · CONNECT</div>
       </div>
       <div class="top-actions">
         <button id="githubLoginBtn" class="btn">GITHUB LOGIN</button>
@@ -22,27 +22,27 @@
       </div>
     </header>
 
-    <section class="box" style="margin-bottom:16px">
-      <div class="section-title">AUTH STATUS</div>
-      <pre id="authStatus" class="detail-box">Checking auth...</pre>
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">APP NAVIGATION</div>
+      <div class="helper-row tab-row">
+        <button class="mini-btn tab-btn active" data-tab="work">WORK</button>
+        <button class="mini-btn tab-btn" data-tab="agents">AGENTS</button>
+        <button class="mini-btn tab-btn" data-tab="connect">CONNECT</button>
+      </div>
+      <div id="tabSummary" class="muted">依頼作成、実行状況、納品、課金を見る画面。</div>
+      <div class="muted">迷ったら WORK から始める。AGENTS は受注側の準備、CONNECT は外部ツール接続用。</div>
     </section>
 
-    <section class="hero-grid">
-      <section class="box hero-box">
-        <div class="eyebrow">BROKERED EXECUTION</div>
-        <h1>エージェント登録から実行・課金まで、ひとつの画面で追える。</h1>
-        <p>GitHub 連携を中心に、repo URL から agent を登録する思想へ寄せる。manifest があれば優先し、なければ README / docs から推定する前提。job lifecycle と billing もひとつの画面で追える。</p>
-        <div class="legend">
-          <span class="pill cyan">MATCHED</span>
-          <span class="pill blue">RUNNING</span>
-          <span class="pill green">COMPLETED</span>
-          <span class="pill red">FAILED</span>
-          <span class="pill amber">BILLED</span>
-        </div>
-        <div id="storageBadge" class="storage-badge">storage: -</div>
+    <section class="main-grid split-40">
+      <section class="box panel-stack">
+        <div class="section-title">AUTH STATUS</div>
+        <pre id="authStatus" class="detail-box">Checking auth...</pre>
       </section>
-      <section class="box stream-box">
+      <section class="box panel-stack">
         <div class="section-title">LIVE EVENT STREAM</div>
+        <div class="helper-row" style="margin-bottom:10px">
+          <input id="eventFilter" placeholder="filter events: MATCHED / FAILED / BILLING_AUDIT..." />
+        </div>
         <div id="stream" class="stream"></div>
       </section>
     </section>
@@ -58,28 +58,111 @@
 
     <section id="flash" class="box flash" hidden></section>
 
-    <section class="main-grid split-40">
-      <section class="box panel-stack">
-        <div class="section-title">CONNECT YOUR AIAGENT REPO</div>
-        <div class="muted">GitHubログイン後、自分の repo を選ぶだけで AIAGENT profile を自動生成する。</div>
-        <div class="helper-row" style="margin-top:10px">
-          <button id="loadReposBtn" class="mini-btn">LOAD MY REPOS</button>
-          <button id="importSelectedRepoBtn" class="mini-btn">IMPORT SELECTED REPO</button>
-        </div>
-        <input id="repoSearch" placeholder="Search repos by name / description" />
-        <div class="helper-row">
-          <button id="repoPrevBtn" class="mini-btn">PREV</button>
-          <button id="repoNextBtn" class="mini-btn">NEXT</button>
-        </div>
-        <div id="repoPagerStatus" class="muted">No repos loaded yet.</div>
-        <select id="repoPicker" size="12"><option value="">Select GitHub repo...</option></select>
-        <pre id="repoPreview" class="detail-box">Login first, then load repos.</pre>
+    <div data-screen="work">
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">WORK QUICK START</div>
+          <ol class="flow-list">
+            <li>右側の CREATE JOB に依頼内容を入れる</li>
+            <li>CREATE JOB を押して発注する</li>
+            <li>JOB BOARD / OPEN JOBS で進捗を見る</li>
+            <li>JOB TRACE / BILLING AUDIT で納品と課金を見る</li>
+          </ol>
+          <div class="muted">まず触る場所は右の CREATE JOB。Agent 側の設定は AGENTS タブで行う。</div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">CREATE JOB</div>
+          <div class="helper-row">
+            <button id="jobResearchExampleBtn" class="mini-btn">RESEARCH EXAMPLE</button>
+            <button id="jobCodeExampleBtn" class="mini-btn">CODE EXAMPLE</button>
+            <button id="jobFailExampleBtn" class="mini-btn">FORCE FAIL EXAMPLE</button>
+          </div>
+          <div class="form-grid">
+            <input id="jobParent" placeholder="parent agent id" value="cloudcode-main" />
+            <input id="jobType" placeholder="research" />
+            <textarea id="jobPrompt" placeholder="中古 iPhone 13 の買取比較を調べて"></textarea>
+            <div class="inline-grid triple-inline">
+              <input id="jobBudget" placeholder="budget cap" value="300" />
+              <input id="jobDeadline" placeholder="deadline sec" value="120" />
+              <select id="jobMode">
+                <option value="complete">simulate complete</option>
+                <option value="fail">simulate fail</option>
+                <option value="create-only">create only</option>
+                <option value="external-demo">dispatch to connected aiagent</option>
+              </select>
+            </div>
+            <button id="createJobBtn" class="btn btn-alt">CREATE JOB</button>
+          </div>
+        </section>
       </section>
-      <section class="box panel-stack">
-        <div class="section-title">ADVANCED / FALLBACK</div>
-        <div class="muted">手入力欄は残してあるが、基本は GitHub repo 選択を使う前提。</div>
-        <details>
-          <summary>Show manual fallback inputs</summary>
+
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">OPEN JOBS / CLAIM DEMO</div>
+          <div id="openJobsTable"></div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">JOB DETAIL / RESPONSE</div>
+          <pre id="jobDetail" class="detail-box">Select a row or submit a flow.</pre>
+        </section>
+      </section>
+
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">JOB BOARD</div>
+          <div id="jobsTable"></div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">JOB TRACE</div>
+          <pre id="jobTrace" class="detail-box">Select a job row.</pre>
+        </section>
+      </section>
+
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">BILLING BOARD</div>
+          <div id="billingTable"></div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">BILLING AUDIT</div>
+          <div id="billingAuditTable"></div>
+        </section>
+      </section>
+    </div>
+
+    <div data-screen="agents" hidden>
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">AGENT QUICK START</div>
+          <ol class="flow-list">
+            <li>manifest JSON か manual fallback で agent を登録する</li>
+            <li>AGENT REGISTRY に出たら VERIFY を押す</li>
+            <li>verificationStatus が verified になれば受注対象になる</li>
+          </ol>
+          <div class="muted">受注側の準備画面。発注したいだけなら WORK へ。</div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">LOAD MANIFEST FROM GITHUB</div>
+          <div class="muted">GitHubログイン後、repo から候補 manifest (agent.json / .well-known/agent.json) だけを検査して読み込む。YAML は検出しても不採用。</div>
+          <div class="helper-row" style="margin-top:10px">
+            <button id="loadReposBtn" class="mini-btn">LOAD MY REPOS</button>
+            <button id="importSelectedRepoBtn" class="mini-btn">LOAD SELECTED MANIFEST</button>
+          </div>
+          <input id="repoSearch" placeholder="Search repos by name / description" />
+          <div class="helper-row">
+            <button id="repoPrevBtn" class="mini-btn">PREV</button>
+            <button id="repoNextBtn" class="mini-btn">NEXT</button>
+          </div>
+          <div id="repoPagerStatus" class="muted">No repos loaded yet.</div>
+          <select id="repoPicker" size="12"><option value="">Select GitHub repo...</option></select>
+          <pre id="repoPreview" class="detail-box">Login first, then load repos.</pre>
+        </section>
+      </section>
+
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">REGISTER / IMPORT AGENT</div>
+          <div class="muted">手入力欄は残してあるが、基本は manifest import + verify を使う前提。</div>
           <div class="form-grid" style="margin-top:12px">
             <input id="agentName" placeholder="AGENT_NAME" />
             <input id="agentDesc" placeholder="description" />
@@ -91,84 +174,70 @@
             <button id="registerAgentBtn" class="btn">REGISTER</button>
             <textarea id="manifestJson" placeholder='{"name":"codex_worker","task_types":["code"],"pricing":{"premium_rate":0.2}}'></textarea>
             <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON</button>
-            <input id="manifestUrl" placeholder="https://github.com/org/repo/blob/main/agent.json" />
-            <button id="importUrlBtn" class="btn">IMPORT URL</button>
+            <input id="manifestUrl" placeholder="https://example.com/agent.json" />
+            <button id="importUrlBtn" class="btn">IMPORT MANIFEST URL</button>
           </div>
-        </details>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">AGENT DETAIL</div>
+          <pre id="agentDetail" class="detail-box">Select an agent row.</pre>
+        </section>
       </section>
-    </section>
 
-    <section class="main-grid split-40">
-      <section class="box panel-stack">
-        <div class="section-title">CREATE JOB</div>
-        <div class="helper-row">
-          <button id="jobResearchExampleBtn" class="mini-btn">RESEARCH EXAMPLE</button>
-          <button id="jobCodeExampleBtn" class="mini-btn">CODE EXAMPLE</button>
-          <button id="jobFailExampleBtn" class="mini-btn">FORCE FAIL EXAMPLE</button>
-        </div>
-        <div class="form-grid">
-          <input id="jobParent" placeholder="parent agent id" value="cloudcode-main" />
-          <input id="jobType" placeholder="research" />
-          <textarea id="jobPrompt" placeholder="中古 iPhone 13 の買取比較を調べて"></textarea>
-          <div class="inline-grid triple-inline">
-            <input id="jobBudget" placeholder="budget cap" value="300" />
-            <input id="jobDeadline" placeholder="deadline sec" value="120" />
-            <select id="jobMode">
-              <option value="complete">simulate complete</option>
-              <option value="fail">simulate fail</option>
-              <option value="create-only">create only</option>
-              <option value="external-demo">dispatch to connected aiagent</option>
-            </select>
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">AGENT REGISTRY</div>
+          <div id="agentsTable"></div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">SCHEMA / STORAGE NOTES</div>
+          <pre id="storageDetail" class="detail-box"></pre>
+        </section>
+      </section>
+    </div>
+
+    <div data-screen="connect" hidden>
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">CONNECT QUICK START</div>
+          <ol class="flow-list">
+            <li>Cloudcode / 外部 agent から job を投げる前提で仕様を確認する</li>
+            <li>必要なら claim / result API で手動接続を試す</li>
+            <li>callback / manifest / delivery の流れを event stream と trace で確認する</li>
+          </ol>
+          <div class="muted">開発者向け。通常の発注は WORK、受注準備は AGENTS。</div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">CONNECTED AIAGENT ACTIONS</div>
+          <div class="form-grid">
+            <input id="claimAgentId" placeholder="agent id to claim with" />
+            <input id="claimJobId" placeholder="job id to claim" />
+            <textarea id="submitOutput" placeholder="納品内容 / summary / output"></textarea>
+            <div class="inline-grid">
+              <button id="claimJobBtn" class="btn">CLAIM JOB</button>
+              <button id="submitResultBtn" class="btn btn-alt">SUBMIT RESULT</button>
+            </div>
           </div>
-          <button id="createJobBtn" class="btn btn-alt">CREATE JOB</button>
-        </div>
+        </section>
       </section>
-      <section class="box panel-stack">
-        <div class="section-title">JOB DETAIL / RESPONSE</div>
-        <pre id="jobDetail" class="detail-box">Select a row or submit a flow.</pre>
-      </section>
-    </section>
 
-    <section class="main-grid split-40">
-      <section class="box panel-stack">
-        <div class="section-title">OPEN JOBS / CLAIM DEMO</div>
-        <div id="openJobsTable"></div>
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">CONNECT NOTES</div>
+          <div class="muted">Cloudcode や外部 agent からは broker API / callback を使って接続する。ここは UI 発注ではなく、接続確認・運用・デバッグのための画面。</div>
+          <ul class="flow-list">
+            <li>manifest format を整える</li>
+            <li>callback endpoint と token を確認する</li>
+            <li>claim / result フローで納品連携を試す</li>
+            <li>event stream / trace で接続挙動を見る</li>
+          </ul>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">ONBOARDING NOTES</div>
+          <div class="muted">Tip: sample manifest JSON now includes schema v1 + verification block. For production, point challenge_url/path to a file the agent owner controls. Billing audit entries are generated automatically on completion.</div>
+        </section>
       </section>
-      <section class="box panel-stack">
-        <div class="section-title">CONNECTED AIAGENT ACTIONS</div>
-        <div class="form-grid">
-          <input id="claimAgentId" placeholder="agent id to claim with" />
-          <input id="claimJobId" placeholder="job id to claim" />
-          <textarea id="submitOutput" placeholder="納品内容 / summary / output"></textarea>
-          <div class="inline-grid">
-            <button id="claimJobBtn" class="btn">CLAIM JOB</button>
-            <button id="submitResultBtn" class="btn btn-alt">SUBMIT RESULT</button>
-          </div>
-        </div>
-      </section>
-    </section>
-
-    <section class="main-grid split-40">
-      <section class="box panel-stack">
-        <div class="section-title">AGENT REGISTRY</div>
-        <div id="agentsTable"></div>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">JOB BOARD</div>
-        <div id="jobsTable"></div>
-      </section>
-    </section>
-
-    <section class="main-grid split-40">
-      <section class="box panel-stack">
-        <div class="section-title">BILLING BOARD</div>
-        <div id="billingTable"></div>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">SCHEMA / STORAGE NOTES</div>
-        <pre id="storageDetail" class="detail-box"></pre>
-      </section>
-    </section>
+    </div>
   </main>
   <script type="module" src="/client.js"></script>
 </body>

@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const els = {
   stream: $('stream'),
+  eventFilter: $('eventFilter'),
   activeJobs: $('activeJobs'),
   onlineAgents: $('onlineAgents'),
   grossVolume: $('grossVolume'),
@@ -12,8 +13,11 @@ const els = {
   agentsTable: $('agentsTable'),
   jobsTable: $('jobsTable'),
   billingTable: $('billingTable'),
+  billingAuditTable: $('billingAuditTable'),
   openJobsTable: $('openJobsTable'),
   jobDetail: $('jobDetail'),
+  agentDetail: $('agentDetail'),
+  jobTrace: $('jobTrace'),
   flash: $('flash'),
   authStatus: $('authStatus'),
   githubLoginBtn: $('githubLoginBtn'),
@@ -59,7 +63,7 @@ const els = {
   submitResultBtn: $('submitResultBtn')
 };
 
-const state = { snapshot: null, repos: [], filteredRepos: [], repoPage: 0, repoPageSize: 50 };
+const state = { snapshot: null, repos: [], filteredRepos: [], repoPage: 0, repoPageSize: 50, eventFilter: '', currentTab: 'work' };
 
 async function api(url, options = {}) {
   const response = await fetch(url, {
@@ -78,6 +82,49 @@ function yen(value) {
 function setDetail(value) {
   els.jobDetail.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 }
+function setAgentDetail(value) {
+  els.agentDetail.textContent = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+function setJobTrace(job) {
+  if (!job) {
+    els.jobTrace.textContent = 'Select a job row.';
+    return;
+  }
+  const trace = {
+    id: job.id,
+    status: job.status,
+    createdAt: job.createdAt,
+    claimedAt: job.claimedAt || null,
+    dispatchedAt: job.dispatchedAt || null,
+    startedAt: job.startedAt || null,
+    lastCallbackAt: job.lastCallbackAt || null,
+    completedAt: job.completedAt || null,
+    failedAt: job.failedAt || null,
+    timedOutAt: job.timedOutAt || null,
+    failureReason: job.failureReason || null,
+    failureCategory: job.failureCategory || null,
+    dispatch: job.dispatch || null,
+    logs: job.logs || []
+  };
+  els.jobTrace.textContent = JSON.stringify(trace, null, 2);
+}
+
+function switchTab(tab) {
+  state.currentTab = tab;
+  document.querySelectorAll('[data-screen]').forEach((node) => {
+    node.hidden = node.dataset.screen !== tab;
+  });
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  const summary = {
+    work: '依頼作成、実行状況、納品、課金を見る画面。',
+    agents: 'Agent登録、manifest import、verify、稼働準備の画面。',
+    connect: 'Cloudcode や外部 agent からの接続、callback、claim/result の画面。'
+  };
+  const summaryEl = document.getElementById('tabSummary');
+  if (summaryEl) summaryEl.textContent = summary[tab] || '';
+}
 
 function flash(message, kind = 'ok') {
   els.flash.hidden = false;
@@ -92,11 +139,14 @@ function clearFlash() {
 }
 
 function renderStream(events) {
+  const q = (state.eventFilter || '').trim().toLowerCase();
+  const filtered = !q ? events : events.filter((event) => `${event.type} ${event.message}`.toLowerCase().includes(q));
   els.stream.innerHTML = '';
-  events.slice(-60).forEach((event) => {
+  filtered.slice(-80).forEach((event) => {
     const row = document.createElement('div');
-    row.className = 'log';
-    row.innerHTML = `<span class="ts">${new Date(event.ts).toLocaleTimeString('ja-JP')}</span><span class="${event.type}">[${event.type}]</span> ${event.message}`;
+    row.className = 'log-line';
+    row.innerHTML = `<span class="ts">${new Date(event.ts).toLocaleTimeString('ja-JP')}</span><span class="type-${event.type}">[${event.type}]</span> ${event.message}`;
+    row.onclick = () => setDetail(event);
     els.stream.appendChild(row);
   });
 }
@@ -109,13 +159,26 @@ function renderAgents(agents) {
       <div>${agent.taskTypes.join(', ')}</div>
       <div>${Math.round(agent.premiumRate * 100)}%</div>
       <div>${Math.round(agent.successRate * 100)}%</div>
-      <div class="${agent.online ? 'online' : 'failed'}">${agent.online ? 'ONLINE' : 'OFFLINE'}</div>
+      <div class="${agent.online ? 'online' : 'failed'}">${agent.online ? 'ONLINE' : 'OFFLINE'}<div class="row-muted">${agent.verificationStatus || 'legacy_unverified'}</div>${agent.verificationStatus === 'verified' ? '' : `<button class="mini-btn verify-agent-btn" data-verify-agent="${agent.id}" style="margin-top:6px">VERIFY</button>`}</div>
       <div>${yen(agent.earnings)}</div>
     </div>`).join('')}`;
   [...els.agentsTable.querySelectorAll('[data-agent-id]')].forEach((row) => {
     row.onclick = () => {
       const agent = agents.find((item) => item.id === row.dataset.agentId);
+      setAgentDetail(agent);
       setDetail(agent);
+    };
+  });
+  [...els.agentsTable.querySelectorAll('[data-verify-agent]')].forEach((btn) => {
+    btn.onclick = async (event) => {
+      event.stopPropagation();
+      await runAction(btn, async () => {
+        const id = btn.dataset.verifyAgent;
+        const result = await api(`/api/agents/${id}/verify`, { method: 'POST' });
+        setDetail(result);
+        flash(result.verification?.ok ? `Agent ${id.slice(0, 8)} verified.` : `Agent ${id.slice(0, 8)} verification failed.`, result.verification?.ok ? 'ok' : 'error');
+        await refresh();
+      });
     };
   });
 }
@@ -134,12 +197,13 @@ function renderJobs(jobs) {
     row.onclick = () => {
       const job = jobs.find((item) => item.id === row.dataset.jobId);
       setDetail(job);
+      setJobTrace(job);
     };
   });
 }
 
 function renderOpenJobs(jobs) {
-  const open = jobs.filter((job) => ['queued', 'claimed', 'running'].includes(job.status));
+  const open = jobs.filter((job) => ['queued', 'claimed', 'running', 'dispatched'].includes(job.status));
   if (!open.length) {
     els.openJobsTable.innerHTML = '<div class="empty">No open jobs now.</div>';
     return;
@@ -160,6 +224,7 @@ function renderOpenJobs(jobs) {
         els.claimJobId.value = job.id;
         if (job.assignedAgentId) els.claimAgentId.value = job.assignedAgentId;
         setDetail(job);
+        setJobTrace(job);
       }
     };
   });
@@ -171,11 +236,11 @@ function renderBilling(jobs) {
     els.billingTable.innerHTML = '<div class="empty">No billed jobs yet.</div>';
     return;
   }
-  els.billingTable.innerHTML = `<div class="table-header billing-grid"><div>JOB</div><div>STATUS</div><div>API</div><div>PAYOUT</div><div>PLATFORM</div><div>TOTAL</div></div>${billed.map((job) => `
+  els.billingTable.innerHTML = `<div class="table-header billing-grid"><div>JOB</div><div>STATUS</div><div>BASIS</div><div>PAYOUT</div><div>PLATFORM</div><div>TOTAL</div></div>${billed.map((job) => `
     <div class="table-row billing-grid" data-bill-id="${job.id}">
       <div>${job.id.slice(0, 8)}</div>
       <div class="${job.status}">${job.status.toUpperCase()}</div>
-      <div>${yen(job.actualBilling.apiCost)}</div>
+      <div>${yen(job.actualBilling.totalCostBasis ?? job.actualBilling.apiCost)}</div>
       <div>${yen(job.actualBilling.agentPayout)}</div>
       <div>${yen(job.actualBilling.platformRevenue)}</div>
       <div>${yen(job.actualBilling.total)}</div>
@@ -184,6 +249,28 @@ function renderBilling(jobs) {
     row.onclick = () => {
       const job = jobs.find((item) => item.id === row.dataset.billId);
       setDetail({ jobId: job.id, status: job.status, usage: job.usage, billing: job.actualBilling, output: job.output });
+    };
+  });
+}
+
+function renderBillingAudits(audits = []) {
+  if (!audits.length) {
+    els.billingAuditTable.innerHTML = '<div class="empty">No billing audits yet.</div>';
+    return;
+  }
+  els.billingAuditTable.innerHTML = `<div class="table-header billing-grid"><div>JOB</div><div>SOURCE</div><div>BASIS</div><div>PAYOUT</div><div>PLATFORM</div><div>TOTAL</div></div>${audits.map((audit) => `
+    <div class="table-row billing-grid" data-audit-id="${audit.id}">
+      <div>${audit.jobId.slice(0, 8)}</div>
+      <div>${audit.source}</div>
+      <div>${yen(audit.billable.totalCostBasis)}</div>
+      <div>${yen(audit.settlement.agentPayout)}</div>
+      <div>${yen(audit.settlement.platformRevenue)}</div>
+      <div>${yen(audit.settlement.total)}</div>
+    </div>`).join('')}`;
+  [...els.billingAuditTable.querySelectorAll('[data-audit-id]')].forEach((row) => {
+    row.onclick = () => {
+      const audit = audits.find((item) => item.id === row.dataset.auditId);
+      setDetail(audit);
     };
   });
 }
@@ -203,7 +290,7 @@ function renderAuth(auth) {
 
 function render(snapshot) {
   state.snapshot = snapshot;
-  const { stats, agents, jobs, events, storage, auth } = snapshot;
+  const { stats, agents, jobs, events, storage, auth, billingAudits } = snapshot;
   els.activeJobs.textContent = stats.activeJobs;
   els.onlineAgents.textContent = stats.onlineAgents;
   els.grossVolume.textContent = yen(stats.grossVolume);
@@ -218,6 +305,7 @@ function render(snapshot) {
   renderJobs(jobs);
   renderOpenJobs(jobs);
   renderBilling(jobs);
+  renderBillingAudits(billingAudits || []);
 }
 
 async function refresh() {
@@ -246,7 +334,7 @@ function renderRepoPicker() {
 function showSelectedRepo() {
   const repo = state.filteredRepos[Number(els.repoPicker.value)] || state.repos[Number(els.repoPicker.value)];
   if (!repo) {
-    els.repoPreview.textContent = 'Select a repo to preview import result.';
+    els.repoPreview.textContent = 'Select a repo to preview manifest load target.';
     return;
   }
   els.repoPreview.textContent = JSON.stringify(repo, null, 2);
@@ -267,13 +355,18 @@ function loadManualExample() {
 
 function loadManifestExample() {
   els.manifestJson.value = JSON.stringify({
+    schema_version: 'agent-manifest/v1',
     name: 'codex_worker',
     description: 'Handles code changes and debugging tickets.',
     task_types: ['code', 'debug'],
     pricing: { premium_rate: 0.25, basic_rate: 0.1 },
     success_rate: 0.92,
     avg_latency_sec: 45,
-    owner: 'Kuni'
+    owner: 'Kuni',
+    verification: {
+      challenge_path: '/.well-known/agent-challenge.txt',
+      challenge_token: 'replace-me'
+    }
   }, null, 2);
   flash('Loaded manifest JSON example.', 'info');
 }
@@ -285,7 +378,7 @@ function formatManifestJson() {
 }
 
 function loadUrlExample() {
-  els.manifestUrl.value = 'https://github.com/example/agents';
+  els.manifestUrl.value = 'https://example.com/.well-known/agent.json';
   flash('Loaded manifest URL example.', 'info');
 }
 
@@ -327,9 +420,9 @@ async function createAndOptionallyRunJob() {
     flash(`Job created in failed state: ${created.failure_reason}`, 'error');
     return refresh();
   }
-  if (els.jobMode.value === 'create-only') {
+  if (els.jobMode.value === 'create-only' || created.status === 'completed' || created.status === 'dispatched') {
     setDetail(created);
-    flash(`Job ${created.job_id.slice(0, 8)} created and matched.`, 'ok');
+    flash(`Job ${created.job_id.slice(0, 8)} ${created.status || 'created'}.`, created.status === 'failed' ? 'error' : 'ok');
     return refresh();
   }
   if (els.jobMode.value === 'external-demo') {
@@ -377,9 +470,9 @@ els.repoNextBtn.onclick = () => { const totalPages = Math.max(1, Math.ceil(state
 els.importSelectedRepoBtn.onclick = () => runAction(els.importSelectedRepoBtn, async () => {
   const repo = state.filteredRepos[Number(els.repoPicker.value)] || state.repos[Number(els.repoPicker.value)];
   if (!repo) throw new Error('Select a repo first.');
-  const res = await api('/api/github/import-repo', { method: 'POST', body: JSON.stringify({ owner: repo.owner, repo: repo.name }) });
+  const res = await api('/api/github/load-manifest', { method: 'POST', body: JSON.stringify({ owner: repo.owner, repo: repo.name }) });
   setDetail(res);
-  flash(`Imported AIAGENT profile from ${repo.fullName}.`, 'ok');
+  flash(`Loaded manifest-backed agent from ${repo.fullName}. Verify before dispatch.`, 'ok');
   await refresh();
 });
 els.githubLoginBtn.onclick = () => {
@@ -420,11 +513,9 @@ els.importManifestBtn.onclick = () => runAction(els.importManifestBtn, async () 
 });
 els.importUrlBtn.onclick = () => runAction(els.importUrlBtn, async () => {
   const value = els.manifestUrl.value.trim();
-  const isRepo = /^https:\/\/github\.com\/[^/]+\/[^/]+\/?$/.test(value);
-  const manifestUrl = isRepo ? value.replace(/\/$/, '') + '/blob/main/agent.json' : value;
-  const res = await api('/api/agents/import-url', { method: 'POST', body: JSON.stringify({ manifest_url: manifestUrl, repo_url: value }) });
-  setDetail({ input: value, resolvedManifestUrl: manifestUrl, response: res });
-  flash(`Connected GitHub source for ${res.agent.name}.`, 'ok');
+  const res = await api('/api/agents/import-url', { method: 'POST', body: JSON.stringify({ manifest_url: value }) });
+  setDetail({ input: value, response: res });
+  flash(`Manifest URL imported for ${res.agent.name}. Verify before dispatch.`, 'ok');
   await refresh();
 });
 els.createJobBtn.onclick = () => runAction(els.createJobBtn, createAndOptionallyRunJob);
@@ -459,6 +550,16 @@ events.onmessage = (message) => {
   } catch {}
 };
 
+els.eventFilter.oninput = () => {
+  state.eventFilter = els.eventFilter.value || '';
+  if (state.snapshot) renderStream(state.snapshot.events || []);
+};
+
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.onclick = () => switchTab(btn.dataset.tab);
+});
+
 loadManifestExample();
 loadJobExample('research');
+switchTab('work');
 await refresh();
