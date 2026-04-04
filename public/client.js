@@ -478,7 +478,7 @@ async function runAction(action, fn) {
   }
 }
 
-els.loadReposBtn.onclick = () => runAction(els.loadReposBtn, async () => {
+if (els.loadReposBtn) els.loadReposBtn.onclick = () => runAction(els.loadReposBtn, async () => {
   const res = await api('/api/github/repos');
   state.repos = res.repos || [];
   state.filteredRepos = [...state.repos];
@@ -487,11 +487,11 @@ els.loadReposBtn.onclick = () => runAction(els.loadReposBtn, async () => {
   els.repoPreview.textContent = state.repos.length ? 'Repos loaded. Select one.' : 'No repos found.';
   flash(`Loaded ${state.repos.length} repos.`, 'ok');
 });
-els.repoPicker.onchange = showSelectedRepo;
-els.repoSearch.oninput = applyRepoFilter;
-els.repoPrevBtn.onclick = () => { if (state.repoPage > 0) { state.repoPage -= 1; renderRepoPicker(); } };
-els.repoNextBtn.onclick = () => { const totalPages = Math.max(1, Math.ceil(state.filteredRepos.length / state.repoPageSize)); if (state.repoPage < totalPages - 1) { state.repoPage += 1; renderRepoPicker(); } };
-els.importSelectedRepoBtn.onclick = () => runAction(els.importSelectedRepoBtn, async () => {
+if (els.repoPicker) els.repoPicker.onchange = showSelectedRepo;
+if (els.repoSearch) els.repoSearch.oninput = applyRepoFilter;
+if (els.repoPrevBtn) els.repoPrevBtn.onclick = () => { if (state.repoPage > 0) { state.repoPage -= 1; renderRepoPicker(); } };
+if (els.repoNextBtn) els.repoNextBtn.onclick = () => { const totalPages = Math.max(1, Math.ceil(state.filteredRepos.length / state.repoPageSize)); if (state.repoPage < totalPages - 1) { state.repoPage += 1; renderRepoPicker(); } };
+if (els.importSelectedRepoBtn) els.importSelectedRepoBtn.onclick = () => runAction(els.importSelectedRepoBtn, async () => {
   const repo = state.filteredRepos[Number(els.repoPicker.value)] || state.repos[Number(els.repoPicker.value)];
   if (!repo) throw new Error('Select a repo first.');
   const res = await api('/api/github/load-manifest', { method: 'POST', body: JSON.stringify({ owner: repo.owner, repo: repo.name }) });
@@ -499,22 +499,22 @@ els.importSelectedRepoBtn.onclick = () => runAction(els.importSelectedRepoBtn, a
   flash(`Loaded manifest-backed agent from ${repo.fullName}. Verify before dispatch.`, 'ok');
   await refresh();
 });
-els.githubLoginBtn.onclick = () => {
+if (els.githubLoginBtn) els.githubLoginBtn.onclick = () => {
   window.location.href = '/auth/github';
 };
-els.logoutBtn.onclick = () => runAction(els.logoutBtn, async () => {
+if (els.logoutBtn) els.logoutBtn.onclick = () => runAction(els.logoutBtn, async () => {
   await api('/auth/logout', { method: 'POST' });
   flash('Logged out.', 'ok');
   await refresh();
 });
-els.refreshBtn.onclick = () => runAction(els.refreshBtn, refresh);
-els.seedBtn.onclick = () => runAction(els.seedBtn, async () => {
+if (els.refreshBtn) els.refreshBtn.onclick = () => runAction(els.refreshBtn, refresh);
+if (els.seedBtn) els.seedBtn.onclick = () => runAction(els.seedBtn, async () => {
   const seeded = await api('/api/seed', { method: 'POST' });
   setDetail(seeded);
   flash(`Seeded ${seeded.job_ids.length} demo jobs.`, 'ok');
   await refresh();
 });
-els.registerAgentBtn.onclick = () => runAction(els.registerAgentBtn, async () => {
+if (els.registerAgentBtn) els.registerAgentBtn.onclick = () => runAction(els.registerAgentBtn, async () => {
   const res = await api('/api/agents', {
     method: 'POST',
     body: JSON.stringify({
@@ -529,39 +529,39 @@ els.registerAgentBtn.onclick = () => runAction(els.registerAgentBtn, async () =>
   flash(`Registered ${res.agent.name}. Token shown in detail panel only once.`, 'ok');
   await refresh();
 });
-els.importManifestBtn.onclick = () => runAction(els.importManifestBtn, async () => {
+if (els.importManifestBtn) els.importManifestBtn.onclick = () => runAction(els.importManifestBtn, async () => {
   const res = await api('/api/agents/import-manifest', { method: 'POST', body: JSON.stringify({ manifest: JSON.parse(els.manifestJson.value || '{}') }) });
   setDetail(res);
   flash(`Imported manifest for ${res.agent.name}.`, 'ok');
   await refresh();
 });
-els.importUrlBtn.onclick = () => runAction(els.importUrlBtn, async () => {
+if (els.importUrlBtn) els.importUrlBtn.onclick = () => runAction(els.importUrlBtn, async () => {
   const value = els.manifestUrl.value.trim();
   const res = await api('/api/agents/import-url', { method: 'POST', body: JSON.stringify({ manifest_url: value }) });
   setDetail({ input: value, response: res });
   flash(`Manifest URL imported for ${res.agent.name}. Verify before dispatch.`, 'ok');
   await refresh();
 });
-els.createJobBtn.onclick = () => runAction(els.createJobBtn, createAndOptionallyRunJob);
-els.claimJobBtn.onclick = () => runAction(els.claimJobBtn, async () => {
+if (els.createJobBtn) els.createJobBtn.onclick = () => runAction(els.createJobBtn, createAndOptionallyRunJob);
+if (els.claimJobBtn) els.claimJobBtn.onclick = () => runAction(els.claimJobBtn, async () => {
   const res = await api(`/api/jobs/${els.claimJobId.value}/claim`, { method: 'POST', body: JSON.stringify({ agent_id: els.claimAgentId.value }) });
   setDetail(res);
   flash(`Job ${els.claimJobId.value.slice(0, 8)} claimed.`, 'ok');
   await refresh();
 });
-els.submitResultBtn.onclick = () => runAction(els.submitResultBtn, async () => {
+if (els.submitResultBtn) els.submitResultBtn.onclick = () => runAction(els.submitResultBtn, async () => {
   const res = await api(`/api/jobs/${els.claimJobId.value}/result`, { method: 'POST', body: JSON.stringify({ agent_id: els.claimAgentId.value, status: 'completed', output: { summary: els.submitOutput.value || 'Connected aiagent result' }, usage: { api_cost: 90 } }) });
   setDetail(res);
   flash(`Job ${els.claimJobId.value.slice(0, 8)} submitted.`, 'ok');
   await refresh();
 });
-els.manualExampleBtn.onclick = loadManualExample;
-els.manifestExampleBtn.onclick = loadManifestExample;
-els.manifestFormatBtn.onclick = () => runAction(els.manifestFormatBtn, async () => formatManifestJson());
-els.urlExampleBtn.onclick = loadUrlExample;
-els.jobResearchExampleBtn.onclick = () => loadJobExample('research');
-els.jobCodeExampleBtn.onclick = () => loadJobExample('code');
-els.jobFailExampleBtn.onclick = () => loadJobExample('fail');
+if (els.manualExampleBtn) els.manualExampleBtn.onclick = loadManualExample;
+if (els.manifestExampleBtn) els.manifestExampleBtn.onclick = loadManifestExample;
+if (els.manifestFormatBtn) els.manifestFormatBtn.onclick = () => runAction(els.manifestFormatBtn, async () => formatManifestJson());
+if (els.urlExampleBtn) els.urlExampleBtn.onclick = loadUrlExample;
+if (els.jobResearchExampleBtn) els.jobResearchExampleBtn.onclick = () => loadJobExample('research');
+if (els.jobCodeExampleBtn) els.jobCodeExampleBtn.onclick = () => loadJobExample('code');
+if (els.jobFailExampleBtn) els.jobFailExampleBtn.onclick = () => loadJobExample('fail');
 
 const events = new EventSource('/events');
 events.onmessage = (message) => {
