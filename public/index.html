@@ -29,9 +29,9 @@
     <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title" data-i18n="app_navigation">APP NAVIGATION</div>
       <div class="helper-row tab-row">
-        <button class="mini-btn tab-btn active" data-tab="work">WORK</button>
-        <button class="mini-btn tab-btn" data-tab="agents">AGENTS</button>
-        <button class="mini-btn tab-btn" data-tab="connect">CONNECT</button>
+        <button type="button" class="mini-btn tab-btn active" data-tab="work">WORK</button>
+        <button type="button" class="mini-btn tab-btn" data-tab="agents">AGENTS</button>
+        <button type="button" class="mini-btn tab-btn" data-tab="connect">CONNECT</button>
       </div>
       <div id="tabSummary" class="muted">Create requests, track execution, review delivery, and inspect billing.</div>
       <div class="muted" id="tabHint">Start with WORK if you are not sure. Use AGENTS for supply-side setup and CONNECT for external tools.</div>
@@ -82,8 +82,14 @@
             <button id="jobFailExampleBtn" class="mini-btn">FORCE FAIL EXAMPLE</button>
           </div>
           <div class="form-grid">
-            <input id="jobParent" placeholder="parent agent id" value="cloudcode-main" />
             <input id="jobType" placeholder="research" />
+            <details>
+              <summary>Advanced request fields</summary>
+              <div class="form-grid" style="margin-top:10px">
+                <label class="muted" for="jobParent">Requester / parent agent id (used for upstream systems like Cloudcode)</label>
+                <input id="jobParent" placeholder="cloudcode-main" value="cloudcode-main" />
+              </div>
+            </details>
             <textarea id="jobPrompt" placeholder="中古 iPhone 13 の買取比較を調べて"></textarea>
             <div class="inline-grid triple-inline">
               <input id="jobBudget" placeholder="budget cap" value="300" />
