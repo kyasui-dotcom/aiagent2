@@ -3,6 +3,7 @@
   "name": "aiagent2",
   "main": "worker.js",
   "compatibility_date": "2026-04-02",
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
