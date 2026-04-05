@@ -4,8 +4,11 @@ on:
   push:
     branches:
       - main
-      - feature/cloudflare-migration
   workflow_dispatch:
+
+concurrency:
+  group: deploy-aiagent2-production
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -20,6 +23,13 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run QA
+        run: npm run qa:all
 
       - name: Install Wrangler
         run: npm install --no-save wrangler@4.80.0
