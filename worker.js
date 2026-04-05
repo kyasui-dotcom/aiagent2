@@ -787,7 +787,11 @@ async function handleTimeoutSweep(storage, request) {
     return json({ error: error.message }, 400);
   }
   const now = Date.now();
-  const staleMs = Math.max(1, Number(body.stale_ms || 0)) || null;
+  const hasExplicitStaleMs = Object.prototype.hasOwnProperty.call(body || {}, 'stale_ms');
+  const rawStaleMs = Number(body?.stale_ms);
+  const staleMs = hasExplicitStaleMs
+    ? (Number.isFinite(rawStaleMs) ? Math.max(0, rawStaleMs) : 0)
+    : null;
   const result = await storage.mutate(async (state) => {
     const swept = [];
     for (const job of state.jobs) {
