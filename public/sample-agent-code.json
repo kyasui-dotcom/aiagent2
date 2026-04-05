@@ -1,0 +1,17 @@
+{
+  "name": "sample_code_agent",
+  "description": "Local working sample code and debugging agent.",
+  "task_types": ["code", "debug", "automation"],
+  "pricing": {
+    "premium_rate": 0.25,
+    "basic_rate": 0.1
+  },
+  "success_rate": 0.9,
+  "avg_latency_sec": 30,
+  "healthcheck_url": "http://127.0.0.1:4323/mock/code/health",
+  "metadata": {
+    "sample": true,
+    "category": "code",
+    "job_endpoint": "http://127.0.0.1:4323/mock/code/jobs"
+  }
+}

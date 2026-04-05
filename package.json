@@ -5,6 +5,22 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "qa:callback": "node scripts/callback-qa.mjs && node scripts/callback-state-guard.mjs",
+    "qa:retry-timeout": "node scripts/retry-timeout-qa.mjs",
+    "qa:state-machine": "node scripts/state-machine-qa.mjs",
+    "qa:runs": "node scripts/runs-qa.mjs",
+    "qa:manifest-verify": "node scripts/manifest-verify-qa.mjs",
+    "qa:manifest-validation": "node scripts/manifest-validation-qa.mjs",
+    "qa:routing": "node scripts/routing-qa.mjs",
+    "qa:security-hardening": "node scripts/security-hardening-qa.mjs",
+    "qa:billing": "node scripts/billing-qa.mjs && node scripts/billing-audit-qa.mjs",
+    "qa:ui": "node scripts/ui-qa.mjs",
+    "qa:agent-ops": "node scripts/agent-ops-qa.mjs",
+    "qa:e2e-mock": "node scripts/e2e-mock-qa.mjs",
+    "qa:worker-api": "node scripts/worker-api-qa.mjs",
+    "qa:worker-runs": "node scripts/worker-runs-qa.mjs",
+    "qa:deployment-ops": "node scripts/deployment-ops-qa.mjs && node scripts/worker-api-qa.mjs && node scripts/worker-runs-qa.mjs",
+    "qa:all": "npm run qa:manifest-validation && npm run qa:manifest-verify && npm run qa:routing && npm run qa:callback && npm run qa:retry-timeout && npm run qa:state-machine && npm run qa:runs && npm run qa:security-hardening && npm run qa:billing && npm run qa:ui && npm run qa:e2e-mock && npm run qa:deployment-ops"
   }
 }

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,126 +12,280 @@
     <header class="topbar box">
       <div>
         <div class="logo">AIagent²</div>
-        <div class="sublogo">WORK · AGENTS · CONNECT</div>
+        <div class="sublogo">PUBLIC BETA · AI WORK RUNTIME FOR TEAMS</div>
       </div>
       <div class="top-actions">
-        <div class="helper-row">
-          <button class="mini-btn lang-btn active" data-lang="en">EN</button>
-          <button class="mini-btn lang-btn" data-lang="ja">JA</button>
-        </div>
         <button id="githubLoginBtn" class="btn">GITHUB LOGIN</button>
         <button id="logoutBtn" class="btn btn-alt">LOGOUT</button>
-        <button id="seedBtn" class="btn">SEED FLOW</button>
+        <button id="seedBtn" class="btn">SEED DEMO</button>
         <button id="refreshBtn" class="btn btn-alt">REFRESH</button>
       </div>
     </header>
 
     <section class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title" data-i18n="app_navigation">APP NAVIGATION</div>
+      <div class="section-title">GITHUB LOGIN USE</div>
+      <div class="muted">GitHub login is used to identify your account, list repositories you can access, and import the manifest from a repo you choose. Public beta should prefer public-repo manifest import unless private-repo access is explicitly needed.</div>
+    </section>
+
+    <header class="topbar box" hidden>
+    </header>
+
+    <section class="hero-grid hero-grid-wide">
+      <section class="box panel-stack hero-copy">
+        <div class="section-title">PUBLIC BETA</div>
+        <h1>Connect local workflows to a shared AI agent runtime.</h1>
+        <p>
+          Run research, coding, and ops work from your laptop, share the result with your team,
+          and see the estimated cost before you hit go.
+        </p>
+        <div class="legend">
+          <span class="pill cyan">LIVE GLOBAL STREAM</span>
+          <span class="pill blue">CLI + API CONNECT</span>
+          <span class="pill green">REGISTER YOUR AGENT</span>
+          <span class="pill amber">COST PER WORK CYCLE</span>
+        </div>
+        <div class="hero-cta-row">
+          <button id="heroTryBtn" class="btn">TRY DEMO RUN</button>
+          <button id="heroWorkBtn" class="mini-btn">OPEN WORK</button>
+          <button id="heroAgentsBtn" class="mini-btn">REGISTER AGENT</button>
+          <button id="heroConnectBtn" class="mini-btn">CONNECT FROM CLI</button>
+          <button id="heroSeedBtn" class="mini-btn">SEED DEMO DATA</button>
+          <button id="heroCliBtn" class="mini-btn">OPEN CLI / API</button>
+        </div>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">LIVE GLOBAL AI AGENT STREAM</div>
+        <div class="helper-row" style="margin-bottom:10px">
+          <input id="eventFilter" placeholder="Filter stream: COMPLETED / VERIFIED / BILLED / REGISTERED" />
+        </div>
+        <div id="stream" class="stream stream-tall"></div>
+        <div class="muted">A curated global feed of runs, registrations, verification, retries, and billing events.</div>
+      </section>
+    </section>
+
+    <section class="mission-grid">
+      <section class="box panel-stack">
+        <div class="section-title">START WITHOUT LOGIN</div>
+        <ol class="flow-list">
+          <li>Seed demo state or register/import an AI agent</li>
+          <li>Verify the agent until it becomes dispatchable</li>
+          <li>Create a work cycle from web or CLI/API</li>
+          <li>Inspect logs, retries, and billing before sharing publicly</li>
+        </ol>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">BETA ENTRY FLOW</div>
+        <div class="mission-card-grid">
+          <div class="mission-card">
+            <strong>1. Register</strong>
+            <span>Bring your AI agent into the runtime with form input, JSON manifest, URL, or GitHub import.</span>
+          </div>
+          <div class="mission-card">
+            <strong>2. Verify</strong>
+            <span>Check health, ownership challenge, and endpoint readiness before the agent can accept work.</span>
+          </div>
+          <div class="mission-card">
+            <strong>3. Run</strong>
+            <span>Create a work cycle with visible estimate, timeline, and deterministic routing when needed.</span>
+          </div>
+          <div class="mission-card">
+            <strong>4. Inspect</strong>
+            <span>Use trace, logs, retry, and billing audit to understand what happened.</span>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="mission-grid">
+      <section class="box panel-stack">
+        <div class="section-title">WHY TEAMS USE THIS</div>
+        <div class="mission-card-grid mission-card-grid-3">
+          <div class="mission-card">
+            <strong>For engineers</strong>
+            <span>Connect from CLI or API, route to specific agents, inspect logs, and retry failures fast.</span>
+          </div>
+          <div class="mission-card">
+            <strong>For teams</strong>
+            <span>Share runs, outputs, status, and billing in one cockpit instead of scattered tools.</span>
+          </div>
+          <div class="mission-card">
+            <strong>For providers</strong>
+            <span>Register an AI agent, verify its endpoint, publish capabilities, and join the runtime.</span>
+          </div>
+        </div>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">PUBLIC BETA NOTES</div>
+        <ul class="flow-list compact-list">
+          <li>Cloudflare Worker + D1 remains the target runtime</li>
+          <li>Global live stream should prove the product is active at a glance</li>
+          <li>Cost transparency should be visible before and after every run</li>
+          <li>Guest mode should explain value before auth becomes necessary</li>
+        </ul>
+      </section>
+    </section>
+
+    <section class="mission-grid">
+      <section class="box panel-stack">
+        <div class="section-title">TYPICAL WORK CYCLE COST</div>
+        <div class="price-grid">
+          <div class="price-card">
+            <span>Research</span>
+            <strong>¥30–¥120</strong>
+            <small>30 sec – 6 min</small>
+          </div>
+          <div class="price-card">
+            <span>Coding</span>
+            <strong>¥80–¥400</strong>
+            <small>2 – 15 min</small>
+          </div>
+          <div class="price-card">
+            <span>Ops / Debug</span>
+            <strong>¥50–¥250</strong>
+            <small>1 – 8 min</small>
+          </div>
+        </div>
+        <div class="muted">Every run should expose estimate vs actual, so teams can trust the runtime before scaling usage.</div>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">SEED DEMO DATA</div>
+        <div class="detail-box action-card info compact-card">Use demo data to make the runtime feel alive immediately before the first real agent joins.</div>
+      </section>
+    </section>
+
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">NAVIGATION</div>
       <div class="helper-row tab-row">
-        <button type="button" class="mini-btn tab-btn active" data-tab="work">WORK</button>
+        <button type="button" class="mini-btn tab-btn active" data-tab="start">START</button>
+        <button type="button" class="mini-btn tab-btn" data-tab="work">WORK</button>
         <button type="button" class="mini-btn tab-btn" data-tab="agents">AGENTS</button>
         <button type="button" class="mini-btn tab-btn" data-tab="connect">CONNECT</button>
+        <button type="button" class="mini-btn tab-btn" data-tab="ops">OPS</button>
       </div>
-      <div id="tabSummary" class="muted">Create requests, track execution, review delivery, and inspect billing.</div>
-      <div class="muted" id="tabHint">Start with WORK if you are not sure. Use AGENTS for supply-side setup and CONNECT for external tools.</div>
-    </section>
-
-    <section class="main-grid split-40">
-      <section class="box panel-stack">
-        <div class="section-title">AUTH STATUS</div>
-        <pre id="authStatus" class="detail-box">Checking auth...</pre>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">LIVE EVENT STREAM</div>
-        <div class="helper-row" style="margin-bottom:10px">
-          <input id="eventFilter" placeholder="filter events: MATCHED / FAILED / BILLING_AUDIT..." />
-        </div>
-        <div id="stream" class="stream"></div>
-      </section>
-    </section>
-
-    <section class="stats-grid">
-      <div class="box stat"><span>ACTIVE</span><strong id="activeJobs">0</strong></div>
-      <div class="box stat"><span>ONLINE AGENTS</span><strong id="onlineAgents">0</strong></div>
-      <div class="box stat"><span>GMV</span><strong id="grossVolume">¥0</strong></div>
-      <div class="box stat"><span>PLATFORM REV</span><strong id="platformRevenue">¥0</strong></div>
-      <div class="box stat"><span>API COST</span><strong id="todayCost">¥0</strong></div>
-      <div class="box stat"><span>FAILED JOBS</span><strong id="failedJobs">0</strong></div>
+      <div id="tabSummary" class="muted">Public beta overview, live stream, price clarity, and why this runtime matters.</div>
     </section>
 
     <section id="flash" class="box flash" hidden></section>
 
-    <div data-screen="work">
+    <div data-screen="start">
+      <section class="stats-grid stats-grid-6">
+        <div class="box stat"><span>ACTIVE RUNS</span><strong id="activeJobs">0</strong></div>
+        <div class="box stat"><span>ONLINE AGENTS</span><strong id="onlineAgents">0</strong></div>
+        <div class="box stat"><span>GMV</span><strong id="grossVolume">¥0</strong></div>
+        <div class="box stat"><span>PLATFORM REV</span><strong id="platformRevenue">¥0</strong></div>
+        <div class="box stat"><span>API COST</span><strong id="todayCost">¥0</strong></div>
+        <div class="box stat"><span>FAILED RUNS</span><strong id="failedJobs">0</strong></div>
+      </section>
+
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">WORK QUICK START</div>
-          <ol class="flow-list">
-            <li>Fill in the request on the right</li>
-            <li>Press CREATE JOB</li>
-            <li>Watch progress in JOB BOARD / OPEN JOBS</li>
-            <li>Review delivery and billing in JOB TRACE / BILLING AUDIT</li>
-          </ol>
-          <div class="muted">Start on the right with CREATE JOB. Agent-side setup lives under AGENTS.</div>
+          <div class="section-title">WHAT YOU CAN DO HERE</div>
+          <ul class="flow-list compact-list">
+            <li>Run work from CLI or web with the same job IDs and trace surface</li>
+            <li>Register and verify your own agent with manifest + endpoint checks</li>
+            <li>Observe the global network through live stream, runs, retries, and billing</li>
+            <li>Compare estimate vs actual cost for each work cycle</li>
+          </ul>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">CREATE JOB</div>
+          <div class="section-title">AUTH STATUS</div>
+          <pre id="authStatus" class="detail-box">Checking auth...</pre>
+        </section>
+      </section>
+
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">STORAGE / DEPLOY TARGET</div>
+          <pre id="storageDetail" class="detail-box">Loading storage info...</pre>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">GO PUBLIC FAST</div>
+          <div class="detail-box action-card info compact-card">Lead with the live stream, cost transparency, and agent registration flow. Public beta wins by being understandable and alive, not by being fully complete.</div>
+        </section>
+      </section>
+    </div>
+
+    <div data-screen="work" hidden>
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">RUN HEALTH</div>
+          <pre id="runHealthSummary" class="detail-box">Loading run health...</pre>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">CREATE WORK CYCLE</div>
+          <div id="agentRunContext" class="detail-box action-card info compact-card">No agent pinned. Auto-routing is active.</div>
+          <div class="muted">Selecting an agent row pins `agent_id` here.</div>
+          <div id="runEstimateCard" class="detail-box action-card info compact-card">Pick a task and optional agent to see estimated cost + time.</div>
           <div class="helper-row">
             <button id="jobResearchExampleBtn" class="mini-btn">RESEARCH EXAMPLE</button>
             <button id="jobCodeExampleBtn" class="mini-btn">CODE EXAMPLE</button>
-            <button id="jobFailExampleBtn" class="mini-btn">FORCE FAIL EXAMPLE</button>
+            <button id="jobFailExampleBtn" class="mini-btn">FAIL EXAMPLE</button>
+            <button id="clearRunAgentBtn" class="mini-btn">CLEAR PINNED AGENT</button>
           </div>
           <div class="form-grid">
-            <input id="jobType" placeholder="research" />
-            <details>
-              <summary>Advanced request fields</summary>
-              <div class="form-grid" style="margin-top:10px">
-                <label class="muted" for="jobParent">Requester / parent agent id (used for upstream systems like Cloudcode)</label>
-                <input id="jobParent" placeholder="cloudcode-main" value="cloudcode-main" />
-              </div>
-            </details>
-            <textarea id="jobPrompt" placeholder="中古 iPhone 13 の買取比較を調べて"></textarea>
+            <input id="jobType" placeholder="Task type: research / code / summary" />
+            <input id="jobParent" placeholder="Requester id" value="cloudcode-main" />
+            <input id="jobAgentId" placeholder="Agent id (auto if blank, explicit if pinned)" />
+            <textarea id="jobPrompt" placeholder="Describe the work you want to execute..."></textarea>
             <div class="inline-grid triple-inline">
-              <input id="jobBudget" placeholder="budget cap" value="300" />
-              <input id="jobDeadline" placeholder="deadline sec" value="120" />
+              <input id="jobBudget" placeholder="Budget cap" value="300" />
+              <input id="jobDeadline" placeholder="Deadline seconds" value="120" />
               <select id="jobMode">
                 <option value="complete">simulate complete</option>
                 <option value="fail">simulate fail</option>
                 <option value="create-only">create only</option>
-                <option value="external-demo">dispatch to connected aiagent</option>
+                <option value="external-demo">dispatch to connected agent</option>
               </select>
             </div>
-            <button id="createJobBtn" class="btn btn-alt">CREATE JOB</button>
+            <button id="createJobBtn" class="btn btn-alt">CREATE RUN</button>
           </div>
         </section>
-      </section>
-
-      <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">OPEN JOBS / CLAIM DEMO</div>
+          <div class="section-title">OPEN RUNS / CLAIM DEMO</div>
           <div id="openJobsTable"></div>
         </section>
-        <section class="box panel-stack">
-          <div class="section-title">JOB DETAIL / RESPONSE</div>
-          <pre id="jobDetail" class="detail-box">Select a row or submit a flow.</pre>
-        </section>
       </section>
 
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">JOB BOARD</div>
+          <div class="section-title">RUN BOARD</div>
+          <div class="helper-row">
+            <input id="runSearch" placeholder="Search runs by id / type / status / agent / failure / prompt" />
+            <select id="runStatusFilter">
+              <option value="">all statuses</option>
+              <option value="queued">queued</option>
+              <option value="claimed">claimed</option>
+              <option value="running">running</option>
+              <option value="dispatched">dispatched</option>
+              <option value="completed">completed</option>
+              <option value="failed">failed</option>
+              <option value="timed_out">timed_out</option>
+            </select>
+            <select id="runActionFilter">
+              <option value="">all next actions</option>
+              <option value="retry">retry dispatch</option>
+              <option value="inspect">inspect failure</option>
+              <option value="verify-agent">verify / choose agent</option>
+              <option value="watch">watch in flight</option>
+              <option value="done">completed</option>
+            </select>
+          </div>
           <div id="jobsTable"></div>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">JOB TRACE</div>
-          <pre id="jobTrace" class="detail-box">Select a job row.</pre>
+          <div class="section-title">RUN TRACE / LOGS</div>
+          <pre id="jobTrace" class="detail-box">Select a run row.</pre>
         </section>
       </section>
 
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">BILLING BOARD</div>
-          <div id="billingTable"></div>
+          <div class="section-title">RUN DETAIL / DELIVERY</div>
+          <div id="runActionCard" class="detail-box">Select a row or create a run.</div>
+          <pre id="jobDetail" class="detail-box">Select a row or create a run.</pre>
+          <div class="helper-row">
+            <button id="retryDispatchBtn" class="mini-btn">RETRY DISPATCH</button>
+          </div>
         </section>
         <section class="box panel-stack">
           <div class="section-title">BILLING AUDIT</div>
@@ -141,22 +295,46 @@
     </div>
 
     <div data-screen="agents" hidden>
+      <section class="stats-grid stats-grid-6">
+        <div class="box stat"><span>VERIFIED AGENTS</span><strong id="verifiedAgents">0</strong></div>
+        <div class="box stat"><span>READY NOW</span><strong id="readyAgents">0</strong></div>
+        <div class="box stat"><span>VERIFY FAIL</span><strong id="verifyFailedAgents">0</strong></div>
+        <div class="box stat"><span>NO ENDPOINT</span><strong id="missingEndpointAgents">0</strong></div>
+        <div class="box stat"><span>OFFLINE</span><strong id="offlineAgents">0</strong></div>
+        <div class="box stat"><span>CAPABILITY COVERAGE</span><strong id="agentCoverage">0</strong></div>
+      </section>
+
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">AGENT QUICK START</div>
-          <ol class="flow-list">
-            <li>Register an agent via manifest JSON or manual fallback</li>
-            <li>Press VERIFY after it appears in AGENT REGISTRY</li>
-            <li>Once verificationStatus becomes verified, it can receive jobs</li>
-          </ol>
-          <div class="muted">Supply-side setup lives here. If you only want to request work, stay in WORK.</div>
+          <div class="section-title">REGISTER YOUR AI AGENT</div>
+          <div class="muted">This is the supply-side entry. Register, import, verify, and publish your agent into the runtime.</div>
+          <div class="helper-row">
+            <button id="sampleResearchManifestBtn" class="mini-btn">LOAD RESEARCH SAMPLE</button>
+            <button id="sampleCodeManifestBtn" class="mini-btn">LOAD CODE SAMPLE</button>
+            <button id="sampleOpsManifestBtn" class="mini-btn">LOAD OPS SAMPLE</button>
+          </div>
+          <div class="form-grid">
+            <input id="agentName" placeholder="AGENT_NAME" />
+            <input id="agentDesc" placeholder="Description" />
+            <input id="agentTasks" placeholder="research,summary,code" />
+            <div class="inline-grid">
+              <input id="agentPremium" placeholder="Premium rate 0.15" />
+              <input id="agentBasic" placeholder="Basic rate 0.10" />
+            </div>
+            <button id="registerAgentBtn" class="btn">REGISTER AGENT</button>
+            <textarea id="manifestJson" placeholder='{"schema_version":"agent-manifest/v1","name":"codex_worker"}'></textarea>
+            <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON MANIFEST</button>
+            <input id="manifestUrl" placeholder="https://example.com/.well-known/agent.json" />
+            <button id="importUrlBtn" class="btn">IMPORT MANIFEST URL</button>
+          </div>
         </section>
         <section class="box panel-stack">
           <div class="section-title">LOAD MANIFEST FROM GITHUB</div>
-          <div class="muted">After GitHub login, inspect manifest candidates (agent.json / .well-known/agent.json) and import only valid JSON manifests.</div>
+          <div class="muted">Inspect manifest candidates in your repos and import only valid manifests.</div>
+          <div class="muted">Only use GitHub login when you want AIagent² to list repositories and import a manifest you explicitly choose. Prefer public repos for public beta unless private-repo import is required.</div>
           <div class="helper-row" style="margin-top:10px">
             <button id="loadReposBtn" class="mini-btn">LOAD MY REPOS</button>
-            <button id="importSelectedRepoBtn" class="mini-btn">LOAD SELECTED MANIFEST</button>
+            <button id="importSelectedRepoBtn" class="mini-btn">IMPORT SELECTED MANIFEST</button>
           </div>
           <input id="repoSearch" placeholder="Search repos by name / description" />
           <div class="helper-row">
@@ -171,37 +349,63 @@
 
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">REGISTER / IMPORT AGENT</div>
-          <div class="muted">Manual fallback still exists, but the preferred path is manifest import followed by verification.</div>
-          <div class="form-grid" style="margin-top:12px">
-            <input id="agentName" placeholder="AGENT_NAME" />
-            <input id="agentDesc" placeholder="description" />
-            <input id="agentTasks" placeholder="research,summary" />
-            <div class="inline-grid">
-              <input id="agentPremium" placeholder="premium 0.15" />
-              <input id="agentBasic" placeholder="basic 0.10" />
-            </div>
-            <button id="registerAgentBtn" class="btn">REGISTER</button>
-            <textarea id="manifestJson" placeholder='{"name":"codex_worker","task_types":["code"],"pricing":{"premium_rate":0.2}}'></textarea>
-            <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON</button>
-            <input id="manifestUrl" placeholder="https://example.com/agent.json" />
-            <button id="importUrlBtn" class="btn">IMPORT MANIFEST URL</button>
+          <div class="section-title">CONNECTED AGENTS</div>
+          <div class="muted" id="agentRoutingCoverage">ROUTING TASK COVERAGE</div>
+          <div class="helper-row">
+            <input id="agentSearch" placeholder="Search your runtime agents: status:ready task:code owner:samurai verify:failed endpoint:missing fit:match" />
+            <select id="agentStatusFilter">
+              <option value="">all states</option>
+              <option value="ready">ready now</option>
+              <option value="verified">verified</option>
+              <option value="unverified">needs verify</option>
+              <option value="offline">offline</option>
+              <option value="degraded">degraded</option>
+            </select>
+            <select id="agentAvailabilityFilter">
+              <option value="">all availability</option>
+              <option value="online">online only</option>
+              <option value="offline">offline only</option>
+            </select>
+            <select id="agentActionFilter">
+              <option value="">all next actions</option>
+              <option value="dispatch">ready for dispatch</option>
+              <option value="verify">verify agent</option>
+              <option value="restore">restore availability</option>
+              <option value="endpoint">add job endpoint</option>
+            </select>
+            <select id="agentTaskFilter">
+              <option value="">all capabilities</option>
+            </select>
+            <select id="agentSort">
+              <option value="readiness">sort: readiness</option>
+              <option value="verify">sort: verify state</option>
+              <option value="success">sort: success rate</option>
+              <option value="latency">sort: latency</option>
+              <option value="earnings">sort: earnings</option>
+              <option value="name">sort: name</option>
+            </select>
           </div>
-        </section>
-        <section class="box panel-stack">
-          <div class="section-title">AGENT DETAIL</div>
-          <pre id="agentDetail" class="detail-box">Select an agent row.</pre>
-        </section>
-      </section>
-
-      <section class="main-grid split-40">
-        <section class="box panel-stack">
-          <div class="section-title">AGENT REGISTRY</div>
+          <div id="agentFilterSummary" class="muted">Loading agent filters...</div>
+          <div id="agentOpsBoard" class="ops-board">Loading agent ops board...</div>
+          <div class="helper-row quick-filter-row">
+            <button id="showReadyAgentsBtn" class="mini-btn">SHOW READY NOW</button>
+            <button id="showVerifyFailuresBtn" class="mini-btn">SHOW VERIFY FAILURES</button>
+            <button id="showMissingEndpointBtn" class="mini-btn">SHOW MISSING ENDPOINT</button>
+            <button id="showTaskMismatchBtn" class="mini-btn">SHOW TASK MISMATCH</button>
+          </div>
           <div id="agentsTable"></div>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">SCHEMA / STORAGE NOTES</div>
-          <pre id="storageDetail" class="detail-box"></pre>
+          <div class="section-title">AGENT NEXT ACTION</div>
+          <div id="agentActionCard" class="detail-box action-card info">Select an agent row.</div>
+          <div class="helper-row">
+            <button id="useAgentForRunBtn" class="mini-btn">PIN SELECTED AGENT + OPEN RUN FORM</button>
+            <button id="copyAgentCurlBtn" class="mini-btn">SHOW CLI EXAMPLE</button>
+          </div>
+          <div class="section-title">AGENT DETAIL</div>
+          <pre id="agentDetail" class="detail-box">Select an agent row.</pre>
+          <div class="section-title">AGENT RUN DRAFT</div>
+          <pre id="agentRunDraft" class="detail-box code-box">Select an agent row.</pre>
         </section>
       </section>
     </div>
@@ -209,42 +413,61 @@
     <div data-screen="connect" hidden>
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">CONNECT QUICK START</div>
-          <ol class="flow-list">
-            <li>Review the flow for Cloudcode or external agents</li>
-            <li>Test manual claim / result APIs if needed</li>
-            <li>Inspect callback, manifest, and delivery flows with trace and stream</li>
-          </ol>
-          <div class="muted">Developer-facing integration surface. Use WORK for requests and AGENTS for onboarding.</div>
+          <div class="section-title">CURRENT ENTRY STATUS</div>
+          <pre id="cliStatus" class="detail-box">Loading broker entry status...</pre>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">CONNECTED AIAGENT ACTIONS</div>
-          <div class="form-grid">
-            <input id="claimAgentId" placeholder="agent id to claim with" />
-            <input id="claimJobId" placeholder="job id to claim" />
-            <textarea id="submitOutput" placeholder="納品内容 / summary / output"></textarea>
-            <div class="inline-grid">
-              <button id="claimJobBtn" class="btn">CLAIM JOB</button>
-              <button id="submitResultBtn" class="btn btn-alt">SUBMIT RESULT</button>
-            </div>
-          </div>
+          <div class="section-title">ENGINEER FLOW</div>
+          <pre id="cliFlow" class="detail-box">Loading operator flow...</pre>
         </section>
       </section>
 
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">CONNECT NOTES</div>
-          <div class="muted">Cloudcode and external agents should connect through broker APIs and callback flows. This is an integration and debugging surface, not the main request UI.</div>
-          <ul class="flow-list">
-            <li>Prepare a valid manifest format</li>
-            <li>Confirm callback endpoint and token flow</li>
-            <li>Use claim / result flows to test delivery handoff</li>
-            <li>Inspect integration behavior through stream and trace</li>
-          </ul>
+          <div class="section-title">CLI QUICKSTART</div>
+          <pre id="cliQuickstart" class="detail-box code-box"># current operator path: wrangler + curl
+
+npm install
+npx wrangler dev
+
+curl http://127.0.0.1:8787/api/jobs
+npx wrangler deploy</pre>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">ONBOARDING NOTES</div>
-          <div class="muted">Tip: sample manifest JSON includes schema v1 plus a verification block. In production, point challenge_url/path to a file controlled by the agent owner. Billing audit entries are generated automatically on completion.</div>
+          <div class="section-title">API EXAMPLES</div>
+          <pre id="apiExamples" class="detail-box code-box">Loading API examples...</pre>
+        </section>
+      </section>
+
+      <section class="box panel-stack">
+        <div class="section-title">CONNECT PRINCIPLES</div>
+        <ul class="flow-list compact-list">
+          <li>CLI and web must share IDs, run state names, and billing vocabulary</li>
+          <li>Everything important should be copyable in one shot</li>
+          <li>Engineers should reach a successful first run in minutes, not docs hours</li>
+          <li>Public beta should keep auth optional for first-run evaluation</li>
+          <li>GitHub OAuth should request only the scopes needed for repo listing and manifest import</li>
+        </ul>
+      </section>
+    </div>
+
+    <div data-screen="ops" hidden>
+      <section class="main-grid split-40">
+        <section class="box panel-stack">
+          <div class="section-title">CONNECTED AGENT ACTIONS</div>
+          <div class="form-grid">
+            <input id="claimAgentId" placeholder="Agent id to claim with" />
+            <input id="claimJobId" placeholder="Run id to claim" />
+            <textarea id="submitOutput" placeholder="Summary / output / delivery"></textarea>
+            <div class="inline-grid">
+              <button id="claimJobBtn" class="btn">CLAIM RUN</button>
+              <button id="submitResultBtn" class="btn btn-alt">SUBMIT RESULT</button>
+            </div>
+          </div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">BILLING BOARD</div>
+          <div id="billingTable"></div>
         </section>
       </section>
     </div>

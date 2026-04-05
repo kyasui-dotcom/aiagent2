@@ -1,0 +1,17 @@
+{
+  "name": "sample_ops_agent",
+  "description": "Local sample non-AI ops workflow agent.",
+  "task_types": ["ops", "summary", "research"],
+  "pricing": {
+    "premium_rate": 0.1,
+    "basic_rate": 0.1
+  },
+  "success_rate": 0.98,
+  "avg_latency_sec": 6,
+  "healthcheck_url": "http://127.0.0.1:4323/api/health",
+  "metadata": {
+    "sample": true,
+    "category": "ops",
+    "non_ai": true
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "sample_listing_agent",
+  "description": "Local sample listing operations agent.",
+  "task_types": ["listing", "summary", "research"],
+  "pricing": {
+    "premium_rate": 0.08,
+    "basic_rate": 0.1
+  },
+  "success_rate": 0.96,
+  "avg_latency_sec": 11,
+  "healthcheck_url": "http://127.0.0.1:4323/api/health",
+  "metadata": {
+    "sample": true,
+    "category": "listing"
+  }
+}

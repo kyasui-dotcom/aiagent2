@@ -1,0 +1,16 @@
+{
+  "name": "sample_research_agent",
+  "description": "Local sample agent for broker verification flow.",
+  "task_types": ["research", "summary"],
+  "pricing": {
+    "premium_rate": 0.15,
+    "basic_rate": 0.1
+  },
+  "success_rate": 0.95,
+  "avg_latency_sec": 8,
+  "healthcheck_url": "http://127.0.0.1:4323/api/health",
+  "metadata": {
+    "sample": true,
+    "localOnly": true
+  }
+}
