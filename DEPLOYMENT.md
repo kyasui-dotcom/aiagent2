@@ -1,17 +1,99 @@
 # Deployment
 
-## Automatic deploy
-This repo deploys automatically on every push to `main` using GitHub Actions.
+## Target
 
-## Required GitHub secret
-Add this repository secret:
+Production target is **Cloudflare Workers + D1**.
 
-- `CLOUDFLARE_API_TOKEN`
+Node [`server.js`](/home/kyforever/agent-broker/server.js) exists for local development compatibility, but the repo direction is Worker-first and D1-first.
 
-The Worker config lives in `wrangler.jsonc`.
+## Runtime status in this repo
 
-## Manual local deploy
+Current Worker entrypoint: [`worker.js`](/home/kyforever/agent-broker/worker.js)
+
+Current Wrangler config: [`wrangler.jsonc`](/home/kyforever/agent-broker/wrangler.jsonc)
+
+Current D1 binding:
+- `MY_BINDING`
+
+Worker/API surface currently covered in repo:
+- `GET /api/health`
+- `GET /api/ready`
+- `GET /api/version`
+- `GET /api/metrics`
+- `GET /api/schema`
+- `GET /api/snapshot`
+- `GET /api/stats`
+- `GET /api/agents`
+- `GET /api/jobs`
+- `GET /api/jobs/:id`
+- `GET /api/billing-audits`
+- `POST /api/agents`
+- `POST /api/agents/import-manifest`
+- `POST /api/agents/import-url`
+- `POST /api/agents/:id/verify`
+- `POST /api/jobs`
+- `POST /api/jobs/:id/claim`
+- `POST /api/jobs/:id/result`
+- `POST /api/agent-callbacks/jobs`
+- `POST /api/dev/resolve-job`
+- `POST /api/dev/dispatch-retry`
+- `POST /api/dev/timeout-sweep`
+- `POST /api/seed`
+
+Node-only/local-only extras:
+- GitHub OAuth login
+- GitHub repo manifest browsing/import
+
+## Deploy blockers in this environment
+
+Deploy was **not executed here** on April 5, 2026.
+
+Exact blocker:
+- no Cloudflare credentials are available in this environment
+- networked deploy execution is restricted here
+
+The repo is prepared so deploy is the next step once credentials are present.
+
+## Required Cloudflare setup
+
+1. Confirm [`wrangler.jsonc`](/home/kyforever/agent-broker/wrangler.jsonc) points at the correct Worker name, assets directory, and D1 binding.
+2. Confirm the D1 database exists and `database_id` / `database_name` are correct for the target account.
+3. Set GitHub Actions secrets if using CI deploy:
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+
+## Recommended deploy flow
+
 ```bash
-git pull
+npm install
+npm run qa:all
+npm run qa:worker-api
+npm run qa:worker-runs
 npx wrangler deploy
 ```
+
+After deploy, smoke test:
+
+```bash
+curl https://<worker-host>/api/health
+curl https://<worker-host>/api/ready
+curl https://<worker-host>/api/snapshot
+curl https://<worker-host>/api/agents
+curl https://<worker-host>/api/jobs
+```
+
+## D1 schema
+
+Canonical schema files:
+- [`migrations/0001_init.sql`](/home/kyforever/agent-broker/migrations/0001_init.sql)
+- [`lib/storage.js`](/home/kyforever/agent-broker/lib/storage.js)
+
+`GET /api/schema` exposes the runtime schema string for verification.
+
+## Release checklist
+
+- validate [`wrangler.jsonc`](/home/kyforever/agent-broker/wrangler.jsonc)
+- confirm D1 binding exists
+- run `npm run qa:all`
+- deploy Worker
+- smoke test UI asset load plus the API endpoints above

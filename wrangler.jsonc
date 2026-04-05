@@ -1,10 +1,17 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "agent-broker-static",
+  "name": "aiagent2",
   "main": "worker.js",
   "compatibility_date": "2026-04-02",
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "MY_BINDING",
+      "database_name": "aiagent2",
+      "database_id": "6de97816-9a66-4d39-8e89-5bbb741bd360"
+    }
+  ]
 }
