@@ -90,6 +90,7 @@ const els = {
   agentFilterSummary: $('agentFilterSummary'),
   showReadyAgentsBtn: $('showReadyAgentsBtn'),
   showVerifyFailuresBtn: $('showVerifyFailuresBtn'),
+  showStaleVerifyBtn: $('showStaleVerifyBtn'),
   showMissingEndpointBtn: $('showMissingEndpointBtn'),
   showTaskMismatchBtn: $('showTaskMismatchBtn'),
   claimAgentId: $('claimAgentId'),
