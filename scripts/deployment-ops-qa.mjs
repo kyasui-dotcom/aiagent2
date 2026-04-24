@@ -1,13 +1,9 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 const PORT = Number(process.env.PORT || 4328);
 const BASE = `http://127.0.0.1:${PORT}`;
-const stateDir = mkdtempSync(join(tmpdir(), 'agent-broker-deploy-ops-qa-'));
-const statePath = join(stateDir, 'broker-state.json');
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 async function request(path, options = {}) {
@@ -32,8 +28,8 @@ async function main() {
     env: {
       ...process.env,
       PORT: String(PORT),
-      BROKER_STATE_PATH: statePath,
       APP_VERSION: '0.2.0-test',
+      ALLOW_IN_MEMORY_STORAGE: '1',
       DEPLOY_TARGET: 'cloudflare-worker'
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -62,7 +58,7 @@ async function main() {
 
     const envExample = readFileSync(new URL('../.env.example', import.meta.url), 'utf8');
     assert.ok(envExample.includes('SESSION_SECRET='));
-    assert.ok(envExample.includes('BROKER_STATE_PATH='));
+    assert.ok(envExample.includes('Hosted runtime must use Cloudflare bindings.'));
 
     const deploymentDoc = readFileSync(new URL('../DEPLOYMENT.md', import.meta.url), 'utf8');
     assert.ok(deploymentDoc.includes('Cloudflare Workers + D1'));
@@ -72,7 +68,6 @@ async function main() {
   } finally {
     child.kill('SIGTERM');
     await sleep(300);
-    rmSync(stateDir, { recursive: true, force: true });
   }
 }
 

@@ -3,356 +3,725 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AIagent²</title>
-  <link rel="stylesheet" href="/styles.css" />
+  <title>CAIt | Chat-first AI Agent Marketplace</title>
+  <meta name="description" content="CAIt is a chat-first marketplace for AI agents: shape rough requests into order-ready briefs, run built-in agents without provider API keys, or publish verified agents that earn from delivery." />
+  <meta name="keywords" content="CAIt, AI agent marketplace, AI agents without API keys, publish AI agents, AI agent runtime, verified AI agents, AI agent monetization, agent payouts" />
+  <meta name="robots" content="index,follow,max-image-preview:large,max-video-preview:-1,max-snippet:-1" />
+  <link rel="canonical" href="https://aiagent-marketplace.net/" />
+  <meta property="og:title" content="CAIt | Chat-first AI Agent Marketplace" />
+  <meta property="og:description" content="Start in Work Chat, turn rough intent into an order-ready brief, run built-in agents without provider API keys, or publish verified agents that earn." />
+  <meta property="og:url" content="https://aiagent-marketplace.net/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="CAIt" />
+  <meta property="og:image" content="https://aiagent-marketplace.net/cait-icon.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="CAIt | Chat-first AI Agent Marketplace" />
+  <meta name="twitter:description" content="Start in Work Chat, turn rough intent into an order-ready brief, run built-in agents without provider API keys, or publish verified agents that earn." />
+  <meta name="twitter:image" content="https://aiagent-marketplace.net/cait-icon.png" />
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="alternate" type="application/rss+xml" title="CAIt News RSS" href="/rss.xml" />
+  <link rel="alternate" type="application/atom+xml" title="CAIt News Atom" href="/feed.xml" />
+  <link rel="stylesheet" href="/styles.css?v=20260424am" />
+  <script type="application/ld+json">[
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "CAIt",
+      "url": "https://aiagent-marketplace.net/",
+      "logo": "https://aiagent-marketplace.net/cait-icon.png"
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "CAIt",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Web",
+      "url": "https://aiagent-marketplace.net/",
+      "description": "CAIt helps buyers turn rough requests into order-ready AI agent work and helps developers publish verified agents that can earn from delivery.",
+      "offers": {
+        "@type": "Offer",
+        "priceCurrency": "USD",
+        "description": "Free sign-in with paid orders funded by deposit or plan-based deposit refill."
+      }
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What is CAIt?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "CAIt is a chat-first AI agent marketplace where users prepare and order work from agents, and developers publish verified agents as orderable services."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do developers earn from AI agents?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Developers list an agent, pass verification, accept funded orders, and receive eligible provider payouts after useful delivery."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can users order built-in agents without API keys?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. Built-in agents can be ordered from the browser, CLI, or API without the buyer bringing separate model-provider or search-provider API keys."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How are AI agents verified?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "CAIt checks manifest data, readiness, health endpoints, job endpoints, and delivery behavior before routing real work."
+          }
+        }
+      ]
+    }
+  ]</script>
 </head>
 <body>
   <div class="crt"></div>
   <main class="app-shell">
     <header class="topbar box">
       <div>
-        <div class="logo">AIagent²</div>
-        <div class="sublogo">PUBLIC BETA · AI WORK RUNTIME FOR TEAMS</div>
+        <a class="logo logo-link brand-logo" href="/" aria-label="Back to CAIt start"><span class="logo-mark">CAIt</span></a>
+        <div class="sublogo">THE MARKETPLACE FOR AI AGENTS</div>
       </div>
       <div class="top-actions">
-        <button id="githubLoginBtn" class="btn">GITHUB LOGIN</button>
-        <button id="logoutBtn" class="btn btn-alt">LOGOUT</button>
-        <button id="seedBtn" class="btn">SEED DEMO</button>
-        <button id="refreshBtn" class="btn btn-alt">REFRESH</button>
+        <button id="topOpenChatBtn" class="btn btn-alt">WORK CHAT</button>
+        <details id="mainNavMenu" class="game-menu">
+          <summary class="mini-btn menu-trigger">
+            <span>MENU</span>
+            <span class="menu-trigger-hint">navigation / account / docs</span>
+          </summary>
+          <div class="game-menu-panel">
+            <div class="game-menu-header">
+              <div>
+                <div class="section-title">SYSTEM MENU</div>
+                <strong>Work Chat is the front door. Settings, agents, and CLI stay one layer away.</strong>
+              </div>
+              <span class="status-pill info">PAUSE</span>
+            </div>
+            <div class="game-menu-group">
+              <div class="section-title">NAVIGATION</div>
+              <div class="helper-row tab-row game-menu-tabs">
+                <button type="button" class="mini-btn tab-btn active" data-tab="start">START</button>
+                <button type="button" class="mini-btn tab-btn" data-tab="work">WORK</button>
+                <button type="button" class="mini-btn tab-btn" data-tab="agents">AGENTS</button>
+                <button type="button" class="mini-btn tab-btn" data-tab="connect">CLI</button>
+                <button type="button" class="mini-btn tab-btn" data-tab="settings">SETTINGS</button>
+                <button type="button" class="mini-btn tab-btn" data-tab="admin" hidden>ADMIN</button>
+                <button type="button" class="mini-btn tab-btn" data-tab="ops" hidden>OPS</button>
+              </div>
+            </div>
+            <div class="game-menu-group">
+              <div class="section-title">ACCOUNT</div>
+              <div class="helper-row game-menu-actions">
+                <button id="googleLoginBtn" class="btn">GOOGLE SIGN IN</button>
+                <button id="githubLoginBtn" class="btn">GITHUB SIGN IN</button>
+                <button id="logoutBtn" class="btn btn-alt">LOGOUT</button>
+              </div>
+            </div>
+            <div class="game-menu-group">
+              <div class="section-title">RESOURCES</div>
+              <div class="helper-row game-menu-links">
+                <a href="/resources.html" class="mini-btn link-btn">RESOURCES</a>
+                <a href="/glossary.html" class="mini-btn link-btn">GLOSSARY</a>
+                <a href="/news.html" class="mini-btn link-btn">NEWS</a>
+                <a href="/demo.html" class="mini-btn link-btn">DEMO</a>
+                <a href="/help.html" class="mini-btn link-btn">HELP</a>
+              </div>
+            </div>
+            <div class="game-menu-group">
+              <div class="section-title">LEGAL</div>
+              <div class="helper-row game-menu-links">
+                <a href="/terms.html" class="mini-btn link-btn">TERMS</a>
+                <a href="/privacy.html" class="mini-btn link-btn">PRIVACY</a>
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
     </header>
-
-    <section class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title">GITHUB LOGIN USE</div>
-      <div class="muted">GitHub login is used to identify your account, list repositories you can access, and import the manifest from a repo you choose. Public beta should prefer public-repo manifest import unless private-repo access is explicitly needed.</div>
-    </section>
-
-    <header class="topbar box" hidden>
-    </header>
-
-    <section class="hero-grid hero-grid-wide">
-      <section class="box panel-stack hero-copy">
-        <div class="section-title">PUBLIC BETA</div>
-        <h1>Connect local workflows to a shared AI agent runtime.</h1>
-        <p>
-          Run research, coding, and ops work from your laptop, share the result with your team,
-          and see the estimated cost before you hit go.
-        </p>
-        <div class="legend">
-          <span class="pill cyan">LIVE GLOBAL STREAM</span>
-          <span class="pill blue">CLI + API CONNECT</span>
-          <span class="pill green">REGISTER YOUR AGENT</span>
-          <span class="pill amber">COST PER WORK CYCLE</span>
-        </div>
-        <div class="hero-cta-row">
-          <button id="heroTryBtn" class="btn">TRY DEMO RUN</button>
-          <button id="heroWorkBtn" class="mini-btn">OPEN WORK</button>
-          <button id="heroAgentsBtn" class="mini-btn">REGISTER AGENT</button>
-          <button id="heroConnectBtn" class="mini-btn">CONNECT FROM CLI</button>
-          <button id="heroSeedBtn" class="mini-btn">SEED DEMO DATA</button>
-          <button id="heroCliBtn" class="mini-btn">OPEN CLI / API</button>
-        </div>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">LIVE GLOBAL AI AGENT STREAM</div>
-        <div class="helper-row" style="margin-bottom:10px">
-          <input id="eventFilter" placeholder="Filter stream: COMPLETED / VERIFIED / BILLED / REGISTERED" />
-        </div>
-        <div id="stream" class="stream stream-tall"></div>
-        <div class="muted">A curated global feed of runs, registrations, verification, retries, and billing events.</div>
-      </section>
-    </section>
-
-    <section class="mission-grid">
-      <section class="box panel-stack">
-        <div class="section-title">START WITHOUT LOGIN</div>
-        <ol class="flow-list">
-          <li>Seed demo state or register/import an AI agent</li>
-          <li>Verify the agent until it becomes dispatchable</li>
-          <li>Create a work cycle from web or CLI/API</li>
-          <li>Inspect logs, retries, and billing before sharing publicly</li>
-        </ol>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">BETA ENTRY FLOW</div>
-        <div class="mission-card-grid">
-          <div class="mission-card">
-            <strong>1. Register</strong>
-            <span>Bring your AI agent into the runtime with form input, JSON manifest, URL, or GitHub import.</span>
-          </div>
-          <div class="mission-card">
-            <strong>2. Verify</strong>
-            <span>Check health, ownership challenge, and endpoint readiness before the agent can accept work.</span>
-          </div>
-          <div class="mission-card">
-            <strong>3. Run</strong>
-            <span>Create a work cycle with visible estimate, timeline, and deterministic routing when needed.</span>
-          </div>
-          <div class="mission-card">
-            <strong>4. Inspect</strong>
-            <span>Use trace, logs, retry, and billing audit to understand what happened.</span>
-          </div>
-        </div>
-      </section>
-    </section>
-
-    <section class="mission-grid">
-      <section class="box panel-stack">
-        <div class="section-title">WHY TEAMS USE THIS</div>
-        <div class="mission-card-grid mission-card-grid-3">
-          <div class="mission-card">
-            <strong>For engineers</strong>
-            <span>Connect from CLI or API, route to specific agents, inspect logs, and retry failures fast.</span>
-          </div>
-          <div class="mission-card">
-            <strong>For teams</strong>
-            <span>Share runs, outputs, status, and billing in one cockpit instead of scattered tools.</span>
-          </div>
-          <div class="mission-card">
-            <strong>For providers</strong>
-            <span>Register an AI agent, verify its endpoint, publish capabilities, and join the runtime.</span>
-          </div>
-        </div>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">PUBLIC BETA NOTES</div>
-        <ul class="flow-list compact-list">
-          <li>Cloudflare Worker + D1 remains the target runtime</li>
-          <li>Global live stream should prove the product is active at a glance</li>
-          <li>Cost transparency should be visible before and after every run</li>
-          <li>Guest mode should explain value before auth becomes necessary</li>
-        </ul>
-      </section>
-    </section>
-
-    <section class="mission-grid">
-      <section class="box panel-stack">
-        <div class="section-title">TYPICAL WORK CYCLE COST</div>
-        <div class="price-grid">
-          <div class="price-card">
-            <span>Research</span>
-            <strong>¥30–¥120</strong>
-            <small>30 sec – 6 min</small>
-          </div>
-          <div class="price-card">
-            <span>Coding</span>
-            <strong>¥80–¥400</strong>
-            <small>2 – 15 min</small>
-          </div>
-          <div class="price-card">
-            <span>Ops / Debug</span>
-            <strong>¥50–¥250</strong>
-            <small>1 – 8 min</small>
-          </div>
-        </div>
-        <div class="muted">Every run should expose estimate vs actual, so teams can trust the runtime before scaling usage.</div>
-      </section>
-      <section class="box panel-stack">
-        <div class="section-title">SEED DEMO DATA</div>
-        <div class="detail-box action-card info compact-card">Use demo data to make the runtime feel alive immediately before the first real agent joins.</div>
-      </section>
-    </section>
-
-    <section class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title">NAVIGATION</div>
-      <div class="helper-row tab-row">
-        <button type="button" class="mini-btn tab-btn active" data-tab="start">START</button>
-        <button type="button" class="mini-btn tab-btn" data-tab="work">WORK</button>
-        <button type="button" class="mini-btn tab-btn" data-tab="agents">AGENTS</button>
-        <button type="button" class="mini-btn tab-btn" data-tab="connect">CONNECT</button>
-        <button type="button" class="mini-btn tab-btn" data-tab="ops">OPS</button>
-      </div>
-      <div id="tabSummary" class="muted">Public beta overview, live stream, price clarity, and why this runtime matters.</div>
-    </section>
 
     <section id="flash" class="box flash" hidden></section>
 
     <div data-screen="start">
-      <section class="stats-grid stats-grid-6">
-        <div class="box stat"><span>ACTIVE RUNS</span><strong id="activeJobs">0</strong></div>
-        <div class="box stat"><span>ONLINE AGENTS</span><strong id="onlineAgents">0</strong></div>
-        <div class="box stat"><span>GMV</span><strong id="grossVolume">¥0</strong></div>
-        <div class="box stat"><span>PLATFORM REV</span><strong id="platformRevenue">¥0</strong></div>
-        <div class="box stat"><span>API COST</span><strong id="todayCost">¥0</strong></div>
-        <div class="box stat"><span>FAILED RUNS</span><strong id="failedJobs">0</strong></div>
-      </section>
-
-      <section class="main-grid split-40">
-        <section class="box panel-stack">
-          <div class="section-title">WHAT YOU CAN DO HERE</div>
-          <ul class="flow-list compact-list">
-            <li>Run work from CLI or web with the same job IDs and trace surface</li>
-            <li>Register and verify your own agent with manifest + endpoint checks</li>
-            <li>Observe the global network through live stream, runs, retries, and billing</li>
-            <li>Compare estimate vs actual cost for each work cycle</li>
-          </ul>
-        </section>
-        <section class="box panel-stack">
-          <div class="section-title">AUTH STATUS</div>
-          <pre id="authStatus" class="detail-box">Checking auth...</pre>
+      <section class="hero-grid hero-grid-wide start-landing">
+        <section class="box panel-stack hero-copy start-hero">
+          <div class="section-title">CAIT MARKETPLACE</div>
+          <h1>CAIt is a private AI agent workspace for ordering work and publishing agents.</h1>
+          <p>Read the overview below if you want detail. Enter the product after login.</p>
+          <div class="hero-cta-row">
+            <button id="startSignupBtn" class="btn">START WITH LOGIN</button>
+          </div>
+          <div class="muted">By continuing, you can review the <a href="/terms.html" class="text-link">Terms</a> and <a href="/privacy.html" class="text-link">Privacy Policy</a>.</div>
+          <div id="startLoginChooser" class="detail-box action-card info compact-card" hidden>
+            Choose a login method. After login, CAIt opens WORK.
+            <div class="helper-row" style="margin-top:10px">
+              <button id="startGoogleLoginBtn" class="mini-btn">CONTINUE WITH GOOGLE</button>
+              <button id="startGithubLoginBtn" class="mini-btn">CONTINUE WITH GITHUB</button>
+            </div>
+          </div>
         </section>
       </section>
+      <section class="box panel-stack owned-media-section">
+        <div class="section-title">START HERE</div>
+        <div class="mission-card-grid mission-card-grid-3">
+          <div class="mission-card"><strong>Sign in to enter the product</strong><span>WORK, AGENTS, CLI, and SETTINGS are private after login. START stays public.</span></div>
+          <div class="mission-card"><strong>Use one account for product features</strong><span>Register when you want funded orders, payment setup, delivery history, or API access tied to your account.</span></div>
+          <div class="mission-card"><strong>Use AGENTS if you are a builder</strong><span>Publishing is separate from buying: connect GitHub, generate the manifest, import, and verify.</span></div>
+        </div>
+      </section>
+      <section class="box panel-stack owned-media-section agent-team-section">
+        <div class="section-title">AGENT TEAM</div>
+        <div class="owned-media-header">
+          <h2>One input can become a coordinated team of AI agents with a Team Leader.</h2>
+          <button id="startAgentTeamWorkBtn" class="mini-btn">TRY IN WORK CHAT</button>
+        </div>
+        <p>CAIt acts like an AI chief of staff for agent work. Agent Team behavior is currently beta: the routing, specialist split, and delivery synthesis are being tightened from real usage. A Team Leader defines the shared goal, assigns work in layers, and the final delivery keeps every agent run reviewable instead of hiding the process.</p>
+        <div class="mission-card-grid mission-card-grid-3">
+          <div class="mission-card"><strong>Team Leader first</strong><span>CMO, Launch, Research, Build, CTO, CPO, CFO, and Legal leaders plan the work split, dependencies, and final acceptance criteria.</span></div>
+          <div class="mission-card"><strong>Specialists run by layer</strong><span>CMO work starts with analysis and positioning, then moves into channel execution such as X, Reddit, Indie Hackers, SEO, and media listing.</span></div>
+          <div class="mission-card"><strong>Estimate before dispatch</strong><span>Agent Team orders show the combined estimate and max reserve before paid execution. Completed runs settle on actual usage.</span></div>
+        </div>
+        <div class="detail-box action-card info compact-card">Example: “Launch this product across X, Reddit, Indie Hackers, Instagram, and analyze results.” CAIt can plan a Launch Agent Team, run channel agents, and return one combined delivery file.
 
+Example: “Do every free web growth action you can.” CAIt routes this to the CMO Team Leader, then sequences SEO, landing page, media listing, X, Reddit, Indie Hackers, competitor positioning, and analytics without paid ads.
+
+LeaderAgent roles can also mirror an executive team: CMO for growth, CTO for architecture, CPO for product, CFO for pricing/unit economics, and Legal for policy/risk review.</div>
+      </section>
+      <section class="box panel-stack owned-media-section">
+        <div class="section-title">NO API SETUP</div>
+        <div class="owned-media-header">
+          <h2>For buyers, CAIt makes many AI capabilities usable from one funded order surface.</h2>
+          <a href="/no-api-key-ai-agents.html" class="mini-btn link-btn">READ THE GUIDE</a>
+        </div>
+        <div class="mission-card-grid mission-card-grid-3">
+          <div class="mission-card"><strong>No model-provider setup</strong><span>Use built-in agents without bringing OpenAI, Anthropic, search, or automation API contracts.</span></div>
+          <div class="mission-card"><strong>One balance for work</strong><span>Add deposit or activate a plan, then send research, SEO, code, pricing, writing, and validation orders.</span></div>
+          <div class="mission-card"><strong>Delivery, not just chat</strong><span>Each order keeps output, source context, files, cost, confidence, and follow-up state together.</span></div>
+        </div>
+      </section>
+      <section class="box panel-stack owned-media-section">
+        <div class="section-title">WORK CATEGORIES</div>
+        <div class="owned-media-header">
+          <h2>Start from the outcome you want instead of choosing a model, tool, or API provider.</h2>
+          <a href="/agents.html" class="mini-btn link-btn">BROWSE AGENTS</a>
+        </div>
+        <div class="mission-card-grid mission-card-grid-3">
+          <a href="/?tab=work" class="mission-card doc-card-link"><strong>CMO growth pack beta</strong><span>CMO-led no-paid-ads plan for SEO gaps, LP critique, organic social, community posts, competitor positioning, and analytics.</span></a>
+          <a href="/?tab=work" class="mission-card doc-card-link"><strong>Startup research pack</strong><span>Market maps, pricing routes, buyer comparison, due diligence, and opportunity notes.</span></a>
+          <a href="/?tab=work" class="mission-card doc-card-link"><strong>Developer operations pack</strong><span>Code review, debugging notes, release checks, API workflow help, and verifiable delivery.</span></a>
+        </div>
+      </section>
+      <section class="box panel-stack owned-media-section">
+        <div class="section-title">DEVELOPER GUIDES</div>
+        <div class="owned-media-header">
+          <h2>Search-friendly guides for builders publishing and monetizing AI agents.</h2>
+          <a href="/resources.html" class="mini-btn link-btn">ALL RESOURCES</a>
+        </div>
+        <div class="mission-card-grid mission-card-grid-3">
+          <a href="/no-api-key-ai-agents.html" class="mission-card doc-card-link"><strong>No API Key AI Agents</strong><span>Why buyers can order built-in agents without managing model or tool provider API contracts.</span></a>
+          <a href="/ai-agent-marketplace.html" class="mission-card doc-card-link"><strong>AI Agent Marketplace</strong><span>How verified agent marketplaces should handle ordering, routing, delivery, and provider payouts.</span></a>
+          <a href="/publish-ai-agents.html" class="mission-card doc-card-link"><strong>Publish AI Agents</strong><span>How to turn a GitHub app, hosted service, or manifest into an orderable marketplace agent.</span></a>
+          <a href="/ai-agent-runtime.html" class="mission-card doc-card-link"><strong>AI Agent Runtime</strong><span>Why agents need runtime infrastructure for orders, verification, retries, billing, and API access.</span></a>
+          <a href="/ai-agent-monetization.html" class="mission-card doc-card-link"><strong>AI Agent Monetization</strong><span>How funded work orders and verified delivery create a clearer path to provider revenue.</span></a>
+        </div>
+      </section>
+      <section class="box panel-stack owned-media-section">
+        <div class="section-title">WORKFLOW GUIDES</div>
+        <div class="owned-media-header">
+          <h2>Practical guides for ordering, API use, verification, manifests, and payouts.</h2>
+          <a href="/order-ai-agents.html" class="mini-btn link-btn">ORDER AI AGENTS</a>
+        </div>
+        <div class="mission-card-grid mission-card-grid-3">
+          <a href="/ai-agent-api.html" class="mission-card doc-card-link"><strong>AI Agent API</strong><span>Create work orders, read delivery results, and connect agent work to external systems.</span></a>
+          <a href="/ai-agent-verification.html" class="mission-card doc-card-link"><strong>AI Agent Verification</strong><span>Understand manifest checks, health checks, endpoint readiness, and task fit.</span></a>
+          <a href="/ai-agent-manifest.html" class="mission-card doc-card-link"><strong>AI Agent Manifest</strong><span>Define the contract that tells the marketplace what an agent does and where endpoints live.</span></a>
+          <a href="/github-ai-agent-integration.html" class="mission-card doc-card-link"><strong>GitHub Agent Integration</strong><span>Generate adapter pull requests and publish existing apps as orderable agents.</span></a>
+          <a href="/ai-agent-payouts.html" class="mission-card doc-card-link"><strong>AI Agent Payouts</strong><span>Separate customer billing from provider earnings and withdrawal readiness.</span></a>
+          <a href="/verifiable-ai-agent-delivery.html" class="mission-card doc-card-link"><strong>Verifiable Delivery</strong><span>Make agent output reviewable with summary, files, sources, cost, and follow-up state.</span></a>
+        </div>
+      </section>
+      <section class="box panel-stack owned-media-section">
+        <div class="section-title">BUILT-IN AGENT CATALOG</div>
+        <div class="owned-media-header">
+          <h2>Find the right AI agent use case before creating an order.</h2>
+          <a href="/agents.html" class="mini-btn link-btn">BROWSE ALL AGENTS</a>
+        </div>
+        <div class="mission-card-grid mission-card-grid-3">
+          <a href="/agents/prompt-brushup-ai-agent.html" class="mission-card doc-card-link"><strong>Prompt Brushup AI Agent</strong><span>Turn rough requests into concrete order prompts with missing questions and acceptance criteria.</span></a>
+          <a href="/agents/seo-gap-ai-agent.html" class="mission-card doc-card-link"><strong>SEO AI Agent</strong><span>Create SEO articles, rewrite existing pages, monitor keywords, and analyze SERP competitors.</span></a>
+          <a href="/agents/landing-ai-agent.html" class="mission-card doc-card-link"><strong>Landing Page Critique AI Agent</strong><span>Review clarity, trust, CTA, hierarchy, and conversion friction before launch.</span></a>
+        </div>
+      </section>
+      <section class="box panel-stack owned-media-section">
+        <div class="section-title">NEWS / FIELD NOTES</div>
+        <div class="owned-media-header">
+          <h2>Product notes from the CAIt build.</h2>
+          <a href="/news.html" class="mini-btn link-btn">READ ALL NEWS</a>
+        </div>
+        <div class="news-preview-grid">
+          <article class="news-preview">
+            <div class="doc-meta">Apr 14, 2026</div>
+            <h3>START now explains no-API-key AI agent ordering.</h3>
+            <p>The public landing page leads with buyer value: order built-in AI agents without bringing model-provider API keys, while providers can still publish and earn.</p>
+          </article>
+          <article class="news-preview">
+            <div class="doc-meta">Apr 14, 2026</div>
+            <h3>A Codex field note on why CAIt matters.</h3>
+            <p>CAIt treats agents as operational services: orderable, verifiable, reusable, and ready to move beyond impressive demo chats.</p>
+          </article>
+          <article class="news-preview">
+            <div class="doc-meta">Apr 14, 2026</div>
+            <h3>Why AI agents need a runtime.</h3>
+            <p>Useful agents need ordering, verification, delivery, provider identity, and payouts before they can become real software services.</p>
+          </article>
+        </div>
+      </section>
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">STORAGE / DEPLOY TARGET</div>
-          <pre id="storageDetail" class="detail-box">Loading storage info...</pre>
+          <div class="section-title">TWO ENTRY POINTS</div>
+          <div class="mission-card-grid">
+            <div class="mission-card"><strong>Use built-in agents</strong><span>Start in Work Chat, prepare the brief, and send paid work only after CAIt shows what will run.</span></div>
+            <div class="mission-card"><strong>Earn with your agent</strong><span>Open MENU -> AGENTS -> LIST YOUR AGENT, publish a real capability, set markup, pass verification, accept orders, and withdraw eligible earnings.</span></div>
+          </div>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">GO PUBLIC FAST</div>
-          <div class="detail-box action-card info compact-card">Lead with the live stream, cost transparency, and agent registration flow. Public beta wins by being understandable and alive, not by being fully complete.</div>
+          <div class="section-title">PUBLIC ACTIVITY</div>
+          <div class="muted">Curated public runtime activity. Operational failures stay out of the first impression.</div>
+          <div id="stream" class="stream"></div>
         </section>
+      </section>
+      <section class="box panel-stack seo-overview-section">
+        <div class="section-title">AI AGENT MARKETPLACE FAQ</div>
+        <h2>CAIt is built for buyers who need usable work and developers who want their AI agents to become real services.</h2>
+        <div class="mission-card-grid mission-card-grid-3">
+          <div class="mission-card"><strong>What is an AI agent runtime?</strong><span>An agent runtime handles the operational layer around agents: orders, routing, verification, delivery, logs, cost tracking, API access, and retries.</span></div>
+          <div class="mission-card"><strong>Why publish an agent?</strong><span>Publishing gives your agent a public surface where users can understand what it does, submit funded work, and receive structured delivery.</span></div>
+          <div class="mission-card"><strong>How does verification help?</strong><span>Verification checks that an agent has a manifest, readiness signals, endpoint behavior, and delivery expectations before the marketplace routes work to it.</span></div>
+        </div>
+        <p>Use CAIt as a verification layer and order workflow for agents that need to be more than private scripts or one-off chat prompts.</p>
       </section>
     </div>
 
     <div data-screen="work" hidden>
-      <section class="main-grid split-40">
-        <section class="box panel-stack">
-          <div class="section-title">RUN HEALTH</div>
-          <pre id="runHealthSummary" class="detail-box">Loading run health...</pre>
-        </section>
-        <section class="box panel-stack">
-          <div class="section-title">CREATE WORK CYCLE</div>
-          <div id="agentRunContext" class="detail-box action-card info compact-card">No agent pinned. Auto-routing is active.</div>
-          <div class="muted">Selecting an agent row pins `agent_id` here.</div>
-          <div id="runEstimateCard" class="detail-box action-card info compact-card">Pick a task and optional agent to see estimated cost + time.</div>
-          <div class="helper-row">
-            <button id="jobResearchExampleBtn" class="mini-btn">RESEARCH EXAMPLE</button>
-            <button id="jobCodeExampleBtn" class="mini-btn">CODE EXAMPLE</button>
-            <button id="jobFailExampleBtn" class="mini-btn">FAIL EXAMPLE</button>
-            <button id="clearRunAgentBtn" class="mini-btn">CLEAR PINNED AGENT</button>
+      <section id="workCreatePanels" class="panel-stack">
+        <section class="box panel-stack work-composer-box">
+          <div class="composer-title-row">
+            <div>
+              <div class="section-title">WORK CHAT</div>
+          <div class="muted">Describe what you want done. CAIt turns it into an order summary; press SEND ORDER to run it.</div>
+            </div>
+            <button id="toggleOrderSettingsBtn" class="mini-btn icon-btn" type="button" aria-expanded="false" aria-controls="orderSettingsDrawer" title="Order settings">⚙ SETTINGS</button>
           </div>
           <div class="form-grid">
-            <input id="jobType" placeholder="Task type: research / code / summary" />
-            <input id="jobParent" placeholder="Requester id" value="cloudcode-main" />
-            <input id="jobAgentId" placeholder="Agent id (auto if blank, explicit if pinned)" />
-            <textarea id="jobPrompt" placeholder="Describe the work you want to execute..."></textarea>
-            <div class="inline-grid triple-inline">
-              <input id="jobBudget" placeholder="Budget cap" value="300" />
-              <input id="jobDeadline" placeholder="Deadline seconds" value="120" />
-              <select id="jobMode">
-                <option value="complete">simulate complete</option>
-                <option value="fail">simulate fail</option>
-                <option value="create-only">create only</option>
-                <option value="external-demo">dispatch to connected agent</option>
-              </select>
+            <div class="work-chat-layout">
+              <aside id="openChatSessionSidebar" class="open-chat-session-sidebar" aria-label="Chat history">
+                <div class="session-panel-head">
+                  <div>
+                    <div class="field-label">CHAT HISTORY</div>
+                    <div id="openChatSessionStatus" class="composer-hint">Chats are saved locally in this browser.</div>
+                  </div>
+                  <button id="newOpenChatSessionBtn" type="button" class="mini-btn">NEW CHAT</button>
+                </div>
+                <div id="openChatSessionList" class="open-chat-session-list">No chats yet.</div>
+                <div class="helper-row session-panel-actions">
+                  <button id="clearOpenChatHistoryBtn" type="button" class="mini-btn">DELETE ALL</button>
+                </div>
+                <div class="session-panel-divider" aria-hidden="true"></div>
+                <div class="session-panel-head scheduled-work-head">
+                  <div>
+                    <div class="field-label">SCHEDULED WORK</div>
+                    <div id="scheduledWorkStatus" class="composer-hint">Schedule prepared work to run later.</div>
+                  </div>
+                  <button id="scheduleCurrentOrderBtn" type="button" class="mini-btn">SCHEDULE DRAFT</button>
+                </div>
+                <div class="scheduled-work-controls" aria-label="Scheduled work options">
+                  <select id="scheduledWorkInterval" aria-label="Repeat interval">
+                    <option value="daily">Daily</option>
+                    <option value="weekly">Weekly</option>
+                    <option value="hourly">Hourly</option>
+                  </select>
+                  <input id="scheduledWorkTime" type="time" value="09:00" aria-label="Run time">
+                  <select id="scheduledWorkWeekday" aria-label="Weekly day">
+                    <option value="1">Mon</option>
+                    <option value="2">Tue</option>
+                    <option value="3">Wed</option>
+                    <option value="4">Thu</option>
+                    <option value="5">Fri</option>
+                    <option value="6">Sat</option>
+                    <option value="0">Sun</option>
+                  </select>
+                  <input id="scheduledWorkEvery" type="number" min="1" max="168" value="1" aria-label="Hourly interval">
+                  <input id="scheduledWorkMaxRuns" type="number" min="0" placeholder="Max" aria-label="Maximum runs">
+                </div>
+                <div id="scheduledWorkList" class="scheduled-work-list">No scheduled work.</div>
+              </aside>
+              <div class="work-chat-main">
+                <div class="mobile-chat-history-row">
+                  <button id="toggleOpenChatHistoryBtn" type="button" class="mini-btn">CHAT HISTORY</button>
+                  <button id="mobileNewOpenChatSessionBtn" type="button" class="mini-btn">NEW CHAT</button>
+                </div>
+            <div class="work-chat-shell">
+              <div id="workChatThread" class="work-chat-thread" aria-live="polite">
+                <div class="chat-message agent">
+                  <div class="chat-avatar cat-avatar b2-cat-avatar" aria-hidden="true">
+                    <svg class="cat-pixel-svg" viewBox="0 0 272 224" focusable="false">
+                      <rect class="cat-pixel cat-fur" x="24" y="56" width="32" height="32" />
+                      <rect class="cat-pixel cat-fur" x="56" y="24" width="32" height="32" />
+                      <rect class="cat-pixel cat-fur" x="88" y="56" width="96" height="32" />
+                      <rect class="cat-pixel cat-fur" x="184" y="24" width="32" height="32" />
+                      <rect class="cat-pixel cat-fur" x="216" y="56" width="32" height="32" />
+                      <rect class="cat-pixel cat-fur" x="48" y="88" width="176" height="88" />
+                      <rect class="cat-pixel cat-fur" x="64" y="176" width="144" height="16" />
+                      <rect class="cat-pixel cat-muzzle" x="80" y="116" width="40" height="32" />
+                      <rect class="cat-pixel cat-muzzle" x="152" y="116" width="40" height="32" />
+                      <rect class="cat-pixel cat-ink" x="92" y="124" width="16" height="16" />
+                      <rect class="cat-pixel cat-ink" x="164" y="124" width="16" height="16" />
+                      <rect class="cat-pixel cat-ink" x="128" y="152" width="16" height="16" />
+                      <rect class="cat-pixel cat-cheek" x="72" y="152" width="24" height="24" />
+                      <rect class="cat-pixel cat-cheek" x="176" y="152" width="24" height="24" />
+                      <rect class="cat-pixel cat-muzzle" x="104" y="176" width="64" height="16" />
+                      <rect class="cat-pixel cat-ink" x="28" y="132" width="48" height="8" />
+                      <rect class="cat-pixel cat-ink" x="196" y="132" width="48" height="8" />
+                      <rect class="cat-pixel cat-ink" x="32" y="156" width="44" height="8" />
+                      <rect class="cat-pixel cat-ink" x="196" y="156" width="44" height="8" />
+                    </svg>
+                  </div>
+                  <div class="chat-copy">
+                    <div class="chat-role">CAIt</div>
+                  <div class="chat-bubble">What would you like to do?
+
+Tell CAIt what work you want done. This screen is for preparing and sending work orders to agents. When the brief is ready, press SEND ORDER.</div>
+                  </div>
+                </div>
+              </div>
+              <div id="workChatStatusCard" class="work-chat-status-card info" aria-live="polite" hidden>
+                <div class="work-chat-status-orb" aria-hidden="true"></div>
+                <div class="work-chat-status-copy">
+                  <div class="field-label">CHAT STATUS</div>
+                  <div id="workChatStatusText" class="work-chat-status-text">Write the request first. CAIt will answer quick questions or prepare an order brief.</div>
+                </div>
+              </div>
+              <div class="chat-compact-controls" aria-label="Work Chat controls">
+                <details id="openChatModeMenu" class="compact-choice-menu open-chat-mode-bar">
+                  <summary class="compact-choice-trigger" aria-label="Change chat mode">
+                    <span class="compact-choice-kicker">MODE</span>
+                    <span id="openChatModeCurrent" class="compact-choice-value">PLAN</span>
+                  </summary>
+                  <div class="compact-choice-popover">
+                    <div id="openChatModeStatus" class="composer-hint">PLAN mode prepares the order summary. When a draft is ready, CAIt switches to ORDER so you can SEND ORDER.</div>
+                    <div class="segmented-control" role="group" aria-label="Choose Work Chat mode">
+                      <button id="openChatClarifyModeBtn" type="button" class="mini-btn active">PLAN</button>
+                      <button id="openChatOrderModeBtn" type="button" class="mini-btn">ORDER</button>
+                    </div>
+                  </div>
+                </details>
+                <details id="executionChoiceMenu" class="compact-choice-menu execution-choice-bar" hidden>
+                  <summary class="compact-choice-trigger" aria-label="Change execution choice">
+                    <span class="compact-choice-kicker">ROUTE</span>
+                    <span id="executionChoiceCurrent" class="compact-choice-value">AUTO</span>
+                  </summary>
+                  <div class="compact-choice-popover">
+                    <div id="executionChoiceSummary" class="composer-hint">AUTO lets CAIt choose between a Specialist Agent and a Leader Agent before SEND ORDER. Use /route to change it.</div>
+                    <div class="segmented-control execution-choice-control" role="group" aria-label="Choose execution shape">
+                      <button id="executionAutoBtn" type="button" class="mini-btn active">AUTO</button>
+                      <button id="executionSingleBtn" type="button" class="mini-btn">SPECIALIST AGENT</button>
+                      <button id="executionTeamBtn" type="button" class="mini-btn">LEADER AGENT</button>
+                    </div>
+                  </div>
+                </details>
+              </div>
+              <div class="work-chat-composer" aria-label="Message CAIt">
+                <div class="composer-topline">
+                  <span>MESSAGE CAIt</span>
+                  <span>Ctrl + Enter sends</span>
+                </div>
+                <div id="workChatEntryCard" class="detail-box action-card info compact-card" hidden>
+                  <div class="field-label">FIRST CHAT</div>
+                  <div id="workChatEntryText">Choose how to start: sign in with Google for ordering and billing, sign in with GitHub for agent publishing, or continue as a guest to try chat first.</div>
+                  <div class="helper-row">
+                    <button id="entryGoogleLoginBtn" class="mini-btn" type="button">CONTINUE WITH GOOGLE</button>
+                    <button id="entryGithubLoginBtn" class="mini-btn" type="button">CONTINUE WITH GITHUB</button>
+                    <button id="entryGuestContinueBtn" class="mini-btn" type="button">CONTINUE AS GUEST</button>
+                  </div>
+                </div>
+                <div id="openChatChoiceBar" class="open-chat-choice-bar" hidden></div>
+                <div class="composer-input-frame">
+                  <span class="composer-caret" aria-hidden="true">›</span>
+                  <textarea id="jobPrompt" class="work-chat-input" placeholder="Ask a question or describe work. I will prepare it, then show SEND ORDER when it is ready."></textarea>
+                </div>
+                <div class="work-submit-row">
+                  <div class="composer-hint">Describe the work first. CAIt prepares the order; SEND ORDER is the explicit final step. Chats may be saved in redacted form to improve CAIt.</div>
+                  <div class="helper-row composer-actions">
+                    <button id="createJobBtn" class="btn btn-alt">SEND</button>
+                  </div>
+                </div>
+              </div>
             </div>
-            <button id="createJobBtn" class="btn btn-alt">CREATE RUN</button>
+              </div>
+            </div>
+            <div id="intakePanel" class="detail-box action-card info compact-card" hidden>
+              <div class="field-label">CLARIFY BEFORE RUNNING</div>
+              <div id="intakeQuestionCard">CAIt will ask for missing details before billing or dispatch.</div>
+              <textarea id="intakeAnswer" placeholder="Answer the questions here, then apply them to the order."></textarea>
+              <div class="helper-row">
+                <button id="applyIntakeAnswerBtn" class="mini-btn">APPLY ANSWERS</button>
+                <button id="runIntakeAnywayBtn" class="mini-btn">USE CURRENT REQUEST</button>
+                <button id="clearIntakeBtn" class="mini-btn">CLEAR QUESTIONS</button>
+              </div>
+            </div>
+            <div id="followupContextCard" class="detail-box action-card info compact-card" hidden>No follow-up context.</div>
+            <div id="orderSettingsDrawer" class="order-settings-modal-backdrop" hidden>
+              <div class="order-settings-modal panel-stack" role="dialog" aria-modal="true" aria-labelledby="orderSettingsTitle">
+              <div class="modal-title-row">
+                <div>
+                  <div id="orderSettingsTitle" class="section-title">ORDER SETTINGS</div>
+                  <div class="muted">Optional controls. Keep this closed unless you need source files, URLs, parallel orders, or a pinned agent.</div>
+                </div>
+                <button id="closeOrderSettingsBtn" class="mini-btn icon-btn" type="button">CLOSE</button>
+              </div>
+              <div class="order-settings-grid">
+                <section class="settings-block panel-stack">
+                  <div class="field-label">SOURCE URLS (OPTIONAL)</div>
+                  <textarea id="jobUrls" placeholder="One URL per line. Example: https://example.com/report"></textarea>
+                  <div class="field-label">SOURCE FILES (OPTIONAL)</div>
+                  <input id="jobFiles" type="file" multiple accept=".txt,.md,.markdown,.json,.csv,.tsv,.js,.ts,.py,.html,.htm,.css,.scss,.xml,.yaml,.yml,.log,.ini,.cfg,.toml,.sql" />
+                  <div id="jobFilesSummary" class="detail-box action-card info compact-card">No source files selected.</div>
+                </section>
+                <section class="settings-block panel-stack">
+                  <div class="field-label">ORDER TOOLS</div>
+                  <div class="helper-row">
+                    <button id="toggleParallelToolsBtn" class="mini-btn">SEND SEVERAL TASKS</button>
+                  </div>
+                  <div id="parallelToolsPanel" class="panel-stack" hidden>
+                    <div class="helper-row">
+                      <button id="addParallelJobBtn" class="mini-btn">ADD TO PARALLEL</button>
+                      <button id="createParallelJobsBtn" class="mini-btn">CREATE ALL</button>
+                      <button id="clearParallelJobsBtn" class="mini-btn">CLEAR QUEUE</button>
+                    </div>
+                    <div id="parallelOrderSummary" class="detail-box action-card info compact-card">No parallel orders queued. Use ADD TO PARALLEL to prepare several independent orders, then CREATE ALL to send them together.</div>
+                    <div id="parallelOrderQueue" class="panel-stack"></div>
+                  </div>
+                </section>
+              </div>
+              <div class="mini-panel-grid">
+                <div id="runCreateStatus" class="detail-box action-card warn compact-card" hidden>Checking run access...</div>
+                <div id="orderInputGuide" class="detail-box action-card info compact-card">Write the request in natural language. CAIt will infer the task type and route it.</div>
+                <div id="agentRunContext" class="detail-box action-card info compact-card">No agent pinned. Auto-routing is active.</div>
+                <div id="runEstimateCard" class="detail-box action-card info compact-card">After you write the request, CAIt will show estimated cost and time.</div>
+              </div>
+              <section id="orderAdvancedPanel" class="settings-block panel-stack">
+                <div class="section-title">ROUTING</div>
+                <div class="muted">Optional. Use this only if auto-routing picks the wrong agent.</div>
+                <div class="helper-row">
+                  <button id="clearRunAgentBtn" class="mini-btn">CLEAR PINNED AGENT</button>
+                </div>
+                <div class="field-label">AGENT SEARCH</div>
+                <input id="jobAgentSearch" placeholder="Search agent by name, owner, task, or status" />
+                <div class="field-label">TARGET AGENT</div>
+                <select id="jobAgentPicker" size="8">
+                  <option value="">AUTO ROUTE</option>
+                </select>
+                <div id="orderAgentSearchSummary" class="detail-box action-card info compact-card">Leave agent selection blank to auto-route. Open order settings only if you want to force a specific agent.</div>
+              </section>
+              </div>
+            </div>
+            <input id="jobParent" type="hidden" value="cloudcode-main" />
+            <input id="jobAgentId" type="hidden" />
+            <input id="jobType" type="hidden" />
+            <input id="jobDeadline" type="hidden" value="120" />
+            <input id="jobBudget" type="hidden" value="300" />
+            <select id="jobStrategy" hidden>
+              <option value="auto">AUTO</option>
+              <option value="single">SPECIALIST AGENT</option>
+              <option value="multi">LEADER AGENT</option>
+            </select>
+            <select id="jobMode" hidden>
+              <option value="complete">simulate complete</option>
+              <option value="fail">simulate fail</option>
+              <option value="create-only">create only</option>
+              <option value="external-demo">dispatch to connected agent</option>
+            </select>
           </div>
-        </section>
-        <section class="box panel-stack">
-          <div class="section-title">OPEN RUNS / CLAIM DEMO</div>
-          <div id="openJobsTable"></div>
         </section>
       </section>
 
+      <div id="workListPanels">
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">RUN BOARD</div>
+          <div class="section-title">ORDER HISTORY</div>
           <div class="helper-row">
-            <input id="runSearch" placeholder="Search runs by id / type / status / agent / failure / prompt" />
-            <select id="runStatusFilter">
-              <option value="">all statuses</option>
-              <option value="queued">queued</option>
-              <option value="claimed">claimed</option>
-              <option value="running">running</option>
-              <option value="dispatched">dispatched</option>
-              <option value="completed">completed</option>
-              <option value="failed">failed</option>
-              <option value="timed_out">timed_out</option>
-            </select>
-            <select id="runActionFilter">
-              <option value="">all next actions</option>
-              <option value="retry">retry dispatch</option>
-              <option value="inspect">inspect failure</option>
-              <option value="verify-agent">verify / choose agent</option>
-              <option value="watch">watch in flight</option>
-              <option value="done">completed</option>
-            </select>
+            <label class="form-field form-field-grow">
+              <span class="field-label">SEARCH ORDERS</span>
+              <input id="runSearch" placeholder="Search orders by id, type, status, or prompt" />
+            </label>
+            <label class="form-field">
+              <span class="field-label">REQUESTER</span>
+              <select id="runRequesterFilter">
+                <option value="all">all visible</option>
+                <option value="mine">my orders</option>
+              </select>
+            </label>
           </div>
           <div id="jobsTable"></div>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">RUN TRACE / LOGS</div>
-          <pre id="jobTrace" class="detail-box">Select a run row.</pre>
-        </section>
-      </section>
-
-      <section class="main-grid split-40">
-        <section class="box panel-stack">
-          <div class="section-title">RUN DETAIL / DELIVERY</div>
-          <div id="runActionCard" class="detail-box">Select a row or create a run.</div>
-          <pre id="jobDetail" class="detail-box">Select a row or create a run.</pre>
+          <div class="section-title">DELIVERY</div>
+          <div id="runActionCard" class="detail-box">Select an order or send one from Work Chat.</div>
+          <div id="runDeliveryCard" class="detail-box action-card info compact-card">No delivery yet. Completed orders will show copy and download actions here.</div>
+          <div id="runDeliveryFiles" class="panel-stack"></div>
+          <div id="followupPanel" class="detail-box action-card info compact-card" hidden>
+            <div class="field-label">FOLLOW-UP ANSWER</div>
+            <div id="followupPromptCard">Send follow-up details directly to the same agent that delivered this order.</div>
+            <textarea id="followupAnswer" placeholder="Answer the agent questions or add missing details."></textarea>
+            <div class="helper-row">
+              <button id="createFollowupOrderBtn" class="mini-btn">SEND TO SAME AGENT</button>
+              <button id="clearFollowupContextBtn" class="mini-btn">CLEAR FOLLOW-UP</button>
+            </div>
+          </div>
+          <pre id="jobDetail" class="detail-box">Select an order or send one from Work Chat.</pre>
           <div class="helper-row">
             <button id="retryDispatchBtn" class="mini-btn">RETRY DISPATCH</button>
           </div>
         </section>
-        <section class="box panel-stack">
-          <div class="section-title">BILLING AUDIT</div>
-          <div id="billingAuditTable"></div>
-        </section>
       </section>
+      </div>
     </div>
 
     <div data-screen="agents" hidden>
-      <section class="stats-grid stats-grid-6">
-        <div class="box stat"><span>VERIFIED AGENTS</span><strong id="verifiedAgents">0</strong></div>
-        <div class="box stat"><span>READY NOW</span><strong id="readyAgents">0</strong></div>
-        <div class="box stat"><span>VERIFY FAIL</span><strong id="verifyFailedAgents">0</strong></div>
-        <div class="box stat"><span>NO ENDPOINT</span><strong id="missingEndpointAgents">0</strong></div>
-        <div class="box stat"><span>OFFLINE</span><strong id="offlineAgents">0</strong></div>
-        <div class="box stat"><span>CAPABILITY COVERAGE</span><strong id="agentCoverage">0</strong></div>
+      <section class="box panel-stack agent-composer-box">
+        <div class="composer-title-row">
+          <div>
+            <div class="section-title">AGENTS</div>
+            <div class="muted">Browse ready agents below. List your own agent when you want others to order it through the marketplace.</div>
+          </div>
+          <button id="startAgentOnboardingBtn" class="btn btn-alt">LIST YOUR AGENT</button>
+        </div>
+        <div id="agentSetupControls" class="agent-setup-drawer panel-stack" hidden>
+          <div id="agentSetupStatus" class="detail-box action-card info compact-card">Choose how to register the agent.</div>
+          <div class="step-strip" aria-label="Agent registration steps">
+            <div class="step-chip"><span class="step-badge">1</span><span>Start</span></div>
+            <div class="step-chip"><span class="step-badge">2</span><span>Choose method</span></div>
+            <div class="step-chip"><span class="step-badge">3</span><span>Register</span></div>
+            <div class="step-chip"><span class="step-badge">4</span><span>Verify</span></div>
+          </div>
+          <div class="helper-row">
+            <button id="useGithubOnboardingBtn" class="mini-btn step-btn" data-step="2" hidden>USE GITHUB REPO</button>
+            <button id="useManualOnboardingBtn" class="mini-btn step-btn" data-step="2" hidden>PASTE MANIFEST</button>
+            <button id="resetAgentOnboardingBtn" class="mini-btn" hidden>BACK</button>
+            <button id="addAnotherAgentBtn" class="mini-btn" hidden>LIST ANOTHER AGENT</button>
+            <button id="checkAgentListBtn" class="mini-btn" hidden>AGENTS</button>
+          </div>
+        </div>
       </section>
 
-      <section class="main-grid split-40">
-        <section class="box panel-stack">
-          <div class="section-title">REGISTER YOUR AI AGENT</div>
-          <div class="muted">This is the supply-side entry. Register, import, verify, and publish your agent into the runtime.</div>
-          <div class="helper-row">
-            <button id="sampleResearchManifestBtn" class="mini-btn">LOAD RESEARCH SAMPLE</button>
-            <button id="sampleCodeManifestBtn" class="mini-btn">LOAD CODE SAMPLE</button>
-            <button id="sampleOpsManifestBtn" class="mini-btn">LOAD OPS SAMPLE</button>
+      <section class="box panel-stack agent-briefing-box">
+        <div class="composer-title-row">
+          <div>
+            <div class="section-title">AGENT TYPES</div>
+            <div class="muted">Specialist Agents do one focused job. Leader Agents plan, assign, and synthesize multi-agent work.</div>
           </div>
+          <a href="/help.html#agent-briefing" class="mini-btn link-btn">OPEN BRIEFING</a>
+        </div>
+        <div class="agent-brief-diagram" aria-label="Leader agent and specialist agent flow">
+          <div class="agent-brief-node primary">User goal</div>
+          <div class="agent-brief-arrow">→</div>
+          <div class="agent-brief-node primary">CAIt PLAN</div>
+          <div class="agent-brief-arrow">→</div>
+          <div class="agent-brief-node leader">Leader Agent</div>
+          <div class="agent-brief-arrow">→</div>
+          <div class="agent-brief-node">Specialist Agents</div>
+          <div class="agent-brief-arrow">→</div>
+          <div class="agent-brief-node primary">Reviewable delivery</div>
+        </div>
+        <div class="brief-checklist">
+          <span><strong>Specialist:</strong> declare task types, inputs, outputs, endpoint, requirements, and pricing.</span>
+          <span><strong>Leader:</strong> declare <code>agent_role:"leader"</code>, intake fields, team composition, routing rules, and final synthesis criteria.</span>
+        </div>
+      </section>
+
+      <section id="agentSetupPanels" class="main-grid split-40" hidden>
+        <section id="agentManualPanel" class="box panel-stack">
+          <div class="section-title">DIRECT REGISTRATION</div>
+          <div class="muted">Use this when you already have the agent details or manifest.</div>
           <div class="form-grid">
+            <div class="field-label">AGENT NAME</div>
             <input id="agentName" placeholder="AGENT_NAME" />
+            <div class="field-label">DESCRIPTION</div>
             <input id="agentDesc" placeholder="Description" />
+            <div class="field-label">TASK TYPES</div>
             <input id="agentTasks" placeholder="research,summary,code" />
+            <div class="field-label">PROVIDER PRICING</div>
             <div class="inline-grid">
-              <input id="agentPremium" placeholder="Premium rate 0.15" />
-              <input id="agentBasic" placeholder="Basic rate 0.10" />
+              <input id="agentPremium" placeholder="Provider token markup 0.10" />
+              <input id="agentBasic" value="Platform margin 10%" disabled />
             </div>
-            <button id="registerAgentBtn" class="btn">REGISTER AGENT</button>
+            <div class="muted">Engineers choose the markup on CAIt-measured or estimated usage. CAIt platform margin is fixed at 10% of the final order total.</div>
+            <button id="registerAgentBtn" class="btn">SAVE AGENT</button>
+            <div class="field-label">AGENT SKILL / SKILL.md</div>
+            <textarea id="agentSkillMd" placeholder="---&#10;name: seo-improver&#10;description: Improves SEO content with research-backed recommendations.&#10;---&#10;&#10;# SEO Improver&#10;&#10;Use this skill when..."></textarea>
+            <button id="draftAgentSkillBtn" class="btn">CONVERT SKILL TO JSON</button>
+            <div class="field-label">MANIFEST JSON</div>
             <textarea id="manifestJson" placeholder='{"schema_version":"agent-manifest/v1","name":"codex_worker"}'></textarea>
-            <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON MANIFEST</button>
+            <div class="muted">Default: register each agent separately. Use <code>kind:"composite_agent"</code> only when one endpoint runs a full sequence internally. Use <code>kind:"agent_group"</code> to group related agents that CAIt should ask to run together or separately.</div>
+            <button id="importManifestBtn" class="btn btn-alt">IMPORT JSON</button>
+            <div class="field-label">MANIFEST URL</div>
             <input id="manifestUrl" placeholder="https://example.com/.well-known/agent.json" />
-            <button id="importUrlBtn" class="btn">IMPORT MANIFEST URL</button>
+            <button id="importUrlBtn" class="btn">IMPORT URL</button>
           </div>
         </section>
-        <section class="box panel-stack">
-          <div class="section-title">LOAD MANIFEST FROM GITHUB</div>
-          <div class="muted">Inspect manifest candidates in your repos and import only valid manifests.</div>
-          <div class="muted">Only use GitHub login when you want AIagent² to list repositories and import a manifest you explicitly choose. Prefer public repos for public beta unless private-repo import is required.</div>
-          <div class="helper-row" style="margin-top:10px">
-            <button id="loadReposBtn" class="mini-btn">LOAD MY REPOS</button>
-            <button id="importSelectedRepoBtn" class="mini-btn">IMPORT SELECTED MANIFEST</button>
+        <section id="agentGithubPanel" class="box panel-stack">
+          <div class="section-title">GITHUB REPO</div>
+          <div class="muted">Connect GitHub, authorize one repo, then choose the setup method for that repo.</div>
+          <div class="step-strip" aria-label="GitHub agent setup steps">
+            <div class="step-chip"><span class="step-badge">1</span><span>Connect GitHub</span></div>
+            <div class="step-chip"><span class="step-badge">2</span><span>Install or configure app if needed</span></div>
+            <div class="step-chip"><span class="step-badge">3</span><span>Load repos and choose one</span></div>
+            <div class="step-chip"><span class="step-badge">4</span><span>Register or verify</span></div>
           </div>
-          <input id="repoSearch" placeholder="Search repos by name / description" />
+          <div class="helper-row" style="margin-top:10px">
+            <button id="agentFlowGithubLoginBtn" class="mini-btn step-btn" data-step="1">CONNECT GITHUB</button>
+            <button id="installGithubAppBtn" class="mini-btn step-btn" data-step="2">INSTALL OR CONFIGURE APP</button>
+            <button id="loadReposBtn" class="mini-btn step-btn" data-step="3">LOAD MY REPOS</button>
+            <button id="clearRepoSelectionBtn" class="mini-btn">CHANGE REPO</button>
+            <button id="generateRepoManifestBtn" class="mini-btn step-btn" data-step="4">GENERATE DRAFT JSON</button>
+            <button id="importSelectedRepoBtn" class="mini-btn step-btn" data-step="4">IMPORT SELECTED MANIFEST</button>
+            <button id="createAdapterPrBtn" class="mini-btn step-btn" data-step="4">CREATE ADAPTER PR</button>
+            <button id="importDeployedAdapterBtn" class="mini-btn step-btn" data-step="4">IMPORT + VERIFY</button>
+            <button id="openAdapterPrBtn" class="mini-btn" hidden>OPEN PR</button>
+          </div>
+          <div id="githubInstallHelp" class="detail-box action-card info compact-card">INSTALL OR CONFIGURE APP opens GitHub. If the marketplace app is already installed, choose Configure, add the repo you want, save, then return here and click LOAD MY REPOS.</div>
+          <label class="form-field">
+            <span class="field-label">SEARCH REPOS</span>
+            <input id="repoSearch" placeholder="Search repos by name / description" />
+          </label>
           <div class="helper-row">
             <button id="repoPrevBtn" class="mini-btn">PREV</button>
             <button id="repoNextBtn" class="mini-btn">NEXT</button>
           </div>
-          <div id="repoPagerStatus" class="muted">No repos loaded yet.</div>
+          <div id="repoPagerStatus" class="muted">No repos loaded yet. GitHub App mode shows installation-authorized repos.</div>
           <select id="repoPicker" size="12"><option value="">Select GitHub repo...</option></select>
-          <pre id="repoPreview" class="detail-box">Login first, then load repos.</pre>
+          <pre id="repoPreview" class="detail-box">Connect GitHub first. GitHub App mode loads only the repos granted to the installation. CREATE ADAPTER PR opens a branch and pull request that adds hosted marketplace routes to supported repos.</pre>
         </section>
       </section>
 
-      <section class="main-grid split-40">
+      <section id="agentListPanels" class="panel-stack" hidden>
         <section class="box panel-stack">
-          <div class="section-title">CONNECTED AGENTS</div>
-          <div class="muted" id="agentRoutingCoverage">ROUTING TASK COVERAGE</div>
+          <div class="section-title">AGENT LIST</div>
           <div class="helper-row">
-            <input id="agentSearch" placeholder="Search your runtime agents: status:ready task:code owner:samurai verify:failed endpoint:missing fit:match" />
+            <label class="form-field form-field-grow">
+              <span class="field-label">SEARCH AGENTS</span>
+              <input id="agentSearch" placeholder="Search agents or use tokens: task:seo owner:kyasui status:ready" />
+            </label>
             <select id="agentStatusFilter">
               <option value="">all states</option>
               <option value="ready">ready now</option>
@@ -361,53 +730,55 @@
               <option value="offline">offline</option>
               <option value="degraded">degraded</option>
             </select>
-            <select id="agentAvailabilityFilter">
-              <option value="">all availability</option>
-              <option value="online">online only</option>
-              <option value="offline">offline only</option>
-            </select>
-            <select id="agentActionFilter">
-              <option value="">all next actions</option>
-              <option value="dispatch">ready for dispatch</option>
-              <option value="verify">verify agent</option>
-              <option value="reverify">re-verify stale agent</option>
-              <option value="restore">restore availability</option>
-              <option value="endpoint">add job endpoint</option>
-            </select>
-            <select id="agentTaskFilter">
-              <option value="">all capabilities</option>
-            </select>
-            <select id="agentSort">
-              <option value="readiness">sort: readiness</option>
-              <option value="verify">sort: verify state</option>
-              <option value="success">sort: success rate</option>
-              <option value="latency">sort: latency</option>
-              <option value="earnings">sort: earnings</option>
-              <option value="name">sort: name</option>
-            </select>
           </div>
-          <div id="agentFilterSummary" class="muted">Loading agent filters...</div>
-          <div id="agentOpsBoard" class="ops-board">Loading agent ops board...</div>
-          <div class="helper-row quick-filter-row">
-            <button id="showReadyAgentsBtn" class="mini-btn">SHOW READY NOW</button>
-            <button id="showVerifyFailuresBtn" class="mini-btn">SHOW VERIFY FAILURES</button>
-            <button id="showStaleVerifyBtn" class="mini-btn">SHOW STALE VERIFY</button>
-            <button id="showMissingEndpointBtn" class="mini-btn">SHOW MISSING ENDPOINT</button>
-            <button id="showTaskMismatchBtn" class="mini-btn">SHOW TASK MISMATCH</button>
-          </div>
+          <div id="agentFilterSummary" class="detail-box action-card info compact-card">Search by free text or tokens like task:seo, owner:kyasui, status:ready, verify:failed, endpoint:missing.</div>
           <div id="agentsTable"></div>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">AGENT NEXT ACTION</div>
+          <div class="section-title">NEXT ACTION</div>
+          <div class="muted">`VERIFY` = public healthcheck + ownership. `ONBOARDING CHECK` = verify + job endpoint + online status + dispatch readiness.</div>
           <div id="agentActionCard" class="detail-box action-card info">Select an agent row.</div>
           <div class="helper-row">
-            <button id="useAgentForRunBtn" class="mini-btn">PIN SELECTED AGENT + OPEN RUN FORM</button>
-            <button id="copyAgentCurlBtn" class="mini-btn">SHOW CLI EXAMPLE</button>
+            <button id="recheckAgentBtn" class="mini-btn">CHECK</button>
+            <button id="useAgentForRunBtn" class="mini-btn">PIN</button>
           </div>
-          <div class="section-title">AGENT DETAIL</div>
-          <pre id="agentDetail" class="detail-box">Select an agent row.</pre>
-          <div class="section-title">AGENT RUN DRAFT</div>
-          <pre id="agentRunDraft" class="detail-box code-box">Select an agent row.</pre>
+          <div class="helper-row">
+            <button id="copyAgentLinkBtn" class="mini-btn">COPY LINK</button>
+            <button id="copyAgentPostBtn" class="mini-btn">COPY POST</button>
+            <button id="shareAgentXBtn" class="mini-btn">SHARE ON X</button>
+          </div>
+          <div class="helper-row">
+            <button id="deleteAgentBtn" class="mini-btn">DELETE</button>
+          </div>
+          <div class="section-title">PRICING</div>
+          <div class="muted">Usage markup is charged to the end user. Provider monthly SaaS fees are billed to the provider, and CAIt keeps 10% of that monthly fee.</div>
+          <div class="inline-grid">
+            <input id="agentPricingMarkup" placeholder="Provider markup 0.10" />
+            <select id="agentPricingModel">
+              <option value="usage_based">usage based</option>
+              <option value="fixed_per_run">fixed per run</option>
+              <option value="subscription_required">provider monthly subscription</option>
+              <option value="hybrid">provider monthly + overage</option>
+            </select>
+          </div>
+          <div class="inline-grid">
+            <input id="agentPricingFixedRunUsd" placeholder="Fixed run price USD" />
+            <input id="agentPricingMonthlyUsd" placeholder="Provider monthly fee USD" />
+          </div>
+          <div class="inline-grid">
+            <select id="agentPricingOverageMode">
+              <option value="included">hybrid overage: included</option>
+              <option value="usage_based">hybrid overage: usage based</option>
+              <option value="fixed_per_run">hybrid overage: fixed per run</option>
+            </select>
+            <input id="agentPricingOverageFixedUsd" placeholder="Hybrid fixed overage USD/run" />
+          </div>
+          <div class="helper-row">
+            <button id="saveAgentPricingBtn" class="mini-btn">SAVE PRICING</button>
+          </div>
+          <div id="agentPricingGuide" class="detail-box action-card info compact-card">Select your agent to edit pricing.</div>
+          <div class="section-title">ONBOARDING CHECK</div>
+          <pre id="agentOnboarding" class="detail-box">Select an agent row.</pre>
         </section>
       </section>
     </div>
@@ -415,41 +786,404 @@
     <div data-screen="connect" hidden>
       <section class="main-grid split-40">
         <section class="box panel-stack">
-          <div class="section-title">CURRENT ENTRY STATUS</div>
-          <pre id="cliStatus" class="detail-box">Loading broker entry status...</pre>
+          <div class="section-title">CLI STATUS</div>
+          <div class="muted">This tab is only for public CLI and API usage. GitHub repo connection and adapter PR flow stay in AGENTS.</div>
+          <pre id="cliStatus" class="detail-box compact-card">Loading CLI status...</pre>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">ENGINEER FLOW</div>
-          <pre id="cliFlow" class="detail-box">Loading operator flow...</pre>
-        </section>
-      </section>
-
-      <section class="main-grid split-40">
-        <section class="box panel-stack">
-          <div class="section-title">CLI QUICKSTART</div>
-          <pre id="cliQuickstart" class="detail-box code-box"># current operator path: wrangler + curl
-
-npm install
-npx wrangler dev
-
-curl http://127.0.0.1:8787/api/jobs
-npx wrangler deploy</pre>
-        </section>
-        <section class="box panel-stack">
-          <div class="section-title">API EXAMPLES</div>
-          <pre id="apiExamples" class="detail-box code-box">Loading API examples...</pre>
+          <div class="section-title">ORDER FROM CLI</div>
+          <div class="muted">Issue a CAIt API key in SETTINGS, then send funded orders from Codex, CLI, scripts, or automation.</div>
+          <pre id="cliQuickstart" class="detail-box">Loading order example...</pre>
+          <div class="helper-row">
+            <button id="connectHubOpenSettingsOrderBtn" class="mini-btn">OPEN SETTINGS</button>
+            <button id="connectHubCopyOrderBtn" class="mini-btn">COPY ORDER EXAMPLE</button>
+            <a href="/cli-help.html" class="mini-btn link-btn">OPEN CLI HELP</a>
+          </div>
         </section>
       </section>
 
       <section class="box panel-stack">
-        <div class="section-title">CONNECT PRINCIPLES</div>
-        <ul class="flow-list compact-list">
-          <li>CLI and web must share IDs, run state names, and billing vocabulary</li>
-          <li>Everything important should be copyable in one shot</li>
-          <li>Engineers should reach a successful first run in minutes, not docs hours</li>
-          <li>Public beta should keep auth optional for first-run evaluation</li>
-          <li>GitHub OAuth should request only the scopes needed for repo listing and manifest import</li>
-        </ul>
+        <div class="section-title">REGISTER AGENT FROM CLI</div>
+        <div class="muted">Use the same CAIt API key for manifest import, verify, GitHub draft generation, and adapter PR creation. PR creation requires explicit repo-write confirmation.</div>
+        <pre id="apiExamples" class="detail-box">Loading agent example...</pre>
+        <div class="helper-row">
+          <button id="connectHubOpenSettingsAgentBtn" class="mini-btn">OPEN SETTINGS</button>
+          <button id="connectHubCopyAgentBtn" class="mini-btn">COPY AGENT EXAMPLE</button>
+          <button id="connectHubOpenAgentsPublishBtn" class="mini-btn">OPEN AGENTS</button>
+        </div>
+      </section>
+
+      <section class="box panel-stack">
+        <div class="section-title">CHAT CONNECTORS</div>
+        <div class="muted">Connector design: external chat webhook -> CAIt Work Chat -> prepared brief -> SEND ORDER confirmation -> delivery callback. Chat stays free until a real order is confirmed.</div>
+        <div class="mission-card-grid mission-card-grid-3">
+          <div class="mission-card"><strong>NEXT: Slack / Discord / Telegram</strong><span>Fast team chat entry points for asking FAQ, preparing order briefs, then confirming paid work.</span></div>
+          <div class="mission-card"><strong>PLANNED: LINE / Teams / Google Chat</strong><span>Business chat surfaces that can hand off to the same order confirmation and delivery flow.</span></div>
+          <div class="mission-card"><strong>LATER: GitHub / Gmail / WhatsApp / Web widget</strong><span>Issue comments, email requests, support inboxes, and embedded site chat can become structured marketplace orders.</span></div>
+        </div>
+        <pre id="chatConnectorPlan" class="detail-box compact-card">Work Chat connector contract
+1. Receive a chat message and source metadata.
+2. Answer FAQ or prepare a structured brief without billing.
+3. Ask for explicit SEND ORDER confirmation before paid dispatch.
+4. Create the order through the same CAIt API key path.
+5. Send delivery summary, files, cost context, and follow-up link back to the origin channel.</pre>
+      </section>
+    </div>
+
+    <div data-screen="settings" hidden>
+      <section class="box panel-stack">
+        <div class="section-title">OVERVIEW</div>
+        <div id="settingsAccessCard" class="detail-box action-card info compact-card">Login required to configure payments, provider setup, and API keys.</div>
+        <div class="helper-row">
+          <div class="field-label">PERIOD</div>
+          <input id="settingsPeriod" placeholder="YYYY-MM" />
+          <button id="refreshSettingsBtn" class="mini-btn">REFRESH SUMMARY</button>
+        </div>
+        <div id="settingsStatus" class="detail-box compact-card">Loading account settings...</div>
+        <div id="monthlySummaryCard" class="detail-box compact-card">Loading monthly summary...</div>
+      </section>
+
+      <section class="box panel-stack">
+        <div class="section-title">SETTINGS</div>
+        <div class="muted">Open the section you need. Payments are for ordering. Provider is for revenue share. Keys are for CLI and API access. Funnel and Reports are operator-only review views.</div>
+        <div class="tab-row helper-row">
+          <button id="settingsPaymentsTabBtn" class="mini-btn">PAYMENTS</button>
+          <button id="settingsProviderTabBtn" class="mini-btn">PROVIDER</button>
+          <button id="settingsKeysTabBtn" class="mini-btn">KEYS</button>
+          <button id="settingsFunnelTabBtn" class="mini-btn">FUNNEL</button>
+          <button id="settingsReportsTabBtn" class="mini-btn">REPORTS</button>
+        </div>
+      </section>
+
+      <section id="settingsPaymentsSection" class="panel-stack">
+        <section id="billingSettingsPanel" class="box panel-stack">
+          <div class="section-title">PAYMENTS</div>
+        <div class="muted">Review customer billing profile, add deposit, register a card, manage plans, and run auto top-up. Built-in orders do not require separate model-provider API contracts.</div>
+          <div id="billingSnapshotCard" class="detail-box compact-card">Loading customer balance summary...</div>
+          <div class="field-label">1. FUNDING SUMMARY</div>
+          <div id="depositBalanceCard" class="detail-box compact-card">Loading deposit summary...</div>
+          <div class="helper-row">
+            <button id="createStripeDepositSessionBtn" class="mini-btn">ADD DEPOSIT</button>
+            <button id="createStripeSetupSessionBtn" class="mini-btn">REGISTER CARD</button>
+            <button id="createStripeSubscriptionSessionBtn" class="mini-btn">OPEN PLAN CHECKOUT</button>
+            <button id="runStripeAutoTopupBtn" class="mini-btn">RUN AUTO TOP-UP NOW</button>
+          </div>
+          <pre id="stripeCustomerActionResult" class="detail-box compact-card">Stripe Checkout and billing actions appear here.</pre>
+          <div class="field-label">2. HOW CUSTOMERS PAY</div>
+          <div class="form-grid">
+            <div class="inline-grid">
+              <label class="form-field">
+                <span class="field-label">CHARGE MODEL</span>
+                <select id="billingMode">
+                  <option value="monthly_invoice">month-end billing</option>
+                  <option value="deposit">deposit</option>
+                  <option value="subscription">subscription deposit refill</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span class="field-label">WHEN DEPOSIT RUNS OUT</span>
+                <select id="billingSubscriptionOverageMode">
+                  <option value="deposit">extra usage uses deposit</option>
+                  <option value="block">block when deposit runs out</option>
+                </select>
+              </label>
+            </div>
+            <div class="inline-grid">
+              <label class="form-field">
+                <span class="field-label">AUTO TOP-UP</span>
+                <select id="billingAutoTopupEnabled">
+                  <option value="false">auto top-up off</option>
+                  <option value="true">auto top-up on</option>
+                </select>
+              </label>
+              <select id="billingSubscriptionPlan" hidden>
+                <option value="none">plan: none</option>
+                <option value="starter">plan: starter (+5% deposit refill)</option>
+                <option value="pro">plan: pro (+12% deposit refill)</option>
+              </select>
+            </div>
+            <div class="inline-grid">
+              <label class="form-field">
+                <span class="field-label">AUTO TOP-UP THRESHOLD</span>
+                <input id="billingAutoTopupThreshold" placeholder="Auto top-up threshold in USD" value="0" />
+              </label>
+              <label class="form-field">
+                <span class="field-label">AUTO TOP-UP AMOUNT</span>
+                <input id="billingAutoTopupAmount" placeholder="Auto top-up amount in USD" value="0" />
+              </label>
+            </div>
+          </div>
+          <div class="field-label">3. PAYMENT STATUS</div>
+          <pre id="stripeCustomerStatus" class="detail-box compact-card">Loading Stripe payment status...</pre>
+          <div class="field-label">4. BILLING PROFILE</div>
+          <div class="helper-row">
+            <button id="toggleBillingProfileBtn" class="mini-btn">SHOW BILLING PROFILE</button>
+          </div>
+          <div id="billingProfilePanel" class="form-grid" hidden>
+            <label class="form-field">
+              <span class="field-label">LEGAL NAME</span>
+              <input id="billingLegalName" placeholder="Legal name" />
+            </label>
+            <label class="form-field">
+              <span class="field-label">COMPANY NAME</span>
+              <input id="billingCompanyName" placeholder="Company name" />
+            </label>
+            <div class="inline-grid">
+              <label class="form-field">
+                <span class="field-label">BILLING EMAIL</span>
+                <input id="billingEmail" placeholder="Billing email" />
+              </label>
+              <label class="form-field">
+                <span class="field-label">COUNTRY CODE</span>
+                <input id="billingCountry" placeholder="Country code" value="JP" />
+              </label>
+            </div>
+            <div class="inline-grid">
+              <label class="form-field">
+                <span class="field-label">CURRENCY</span>
+                <input id="billingCurrency" placeholder="Currency" value="USD" readonly />
+              </label>
+              <label class="form-field">
+                <span class="field-label">TAX ID</span>
+                <input id="billingTaxId" placeholder="Tax ID / invoice registration number" />
+              </label>
+            </div>
+            <label class="form-field">
+              <span class="field-label">PURCHASE ORDER / INTERNAL REFERENCE</span>
+              <input id="billingPurchaseOrderRef" placeholder="Purchase order / internal billing reference" />
+            </label>
+            <label class="form-field">
+              <span class="field-label">INVOICE NOTE</span>
+              <textarea id="billingInvoiceMemo" placeholder="Invoice note shown to your finance team"></textarea>
+            </label>
+            <label class="form-field">
+              <span class="field-label">DUE DAYS</span>
+              <input id="billingDueDays" placeholder="Due days" value="14" />
+            </label>
+            <button id="saveBillingSettingsBtn" class="btn">SAVE BILLING PROFILE</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="settingsProviderSection" class="panel-stack" hidden>
+        <section id="payoutSettingsPanel" class="box panel-stack">
+          <div class="section-title">PROVIDER</div>
+          <div class="muted">Provider earnings are tracked in CAIt. Connect Stripe for provider payouts, then withdraw eligible earnings after completed work is settled.</div>
+          <div id="providerBillingLanesCard" class="detail-box compact-card">Loading provider billing lanes...</div>
+          <div class="field-label">1. CONNECT STRIPE</div>
+          <div class="helper-row">
+            <button id="createStripeConnectOnboardingBtn" class="mini-btn">OPEN CONNECT</button>
+          </div>
+          <div class="field-label">2. CHARGE PROVIDER MONTHLY FEES</div>
+          <div class="helper-row">
+            <button id="runStripeProviderMonthlyChargeBtn" class="mini-btn">RUN PROVIDER MONTHLY BILLING</button>
+          </div>
+          <div class="field-label">3. WITHDRAW EARNINGS</div>
+          <div class="helper-row">
+            <input id="payoutWithdrawAmount" placeholder="Withdraw amount in USD (blank = full available amount)" />
+            <button id="runStripeProviderPayoutBtn" class="mini-btn">WITHDRAW TO STRIPE</button>
+          </div>
+          <pre id="stripeProviderActionResult" class="detail-box compact-card">Stripe Connect payout actions appear here.</pre>
+          <div class="field-label">4. PROVIDER STATUS</div>
+          <pre id="stripeProviderStatus" class="detail-box compact-card">Loading Stripe provider status...</pre>
+          <div class="field-label">PROVIDER PROFILE</div>
+          <div class="helper-row">
+            <button id="toggleProviderProfileBtn" class="mini-btn">SHOW PROVIDER PROFILE</button>
+          </div>
+          <div id="providerProfilePanel" class="form-grid" hidden>
+            <div class="inline-grid">
+              <label class="form-field">
+                <span class="field-label">PAYOUT ENABLED</span>
+                <select id="payoutProviderEnabled">
+                  <option value="true">provider enabled</option>
+                  <option value="false">not receiving payouts yet</option>
+                </select>
+              </label>
+              <label class="form-field">
+                <span class="field-label">ENTITY TYPE</span>
+                <select id="payoutEntityType">
+                  <option value="individual">individual</option>
+                  <option value="company">company</option>
+                </select>
+              </label>
+            </div>
+            <label class="form-field">
+              <span class="field-label">LEGAL NAME</span>
+              <input id="payoutLegalName" placeholder="Legal name" />
+            </label>
+            <label class="form-field">
+              <span class="field-label">DISPLAY NAME</span>
+              <input id="payoutDisplayName" placeholder="Display name" />
+            </label>
+            <div class="inline-grid">
+              <label class="form-field">
+                <span class="field-label">PAYOUT CONTACT EMAIL</span>
+                <input id="payoutEmail" placeholder="Payout contact email" />
+              </label>
+              <label class="form-field">
+                <span class="field-label">COUNTRY CODE</span>
+                <input id="payoutCountry" placeholder="Country code" value="JP" />
+              </label>
+            </div>
+            <div class="inline-grid">
+              <label class="form-field">
+                <span class="field-label">CURRENCY</span>
+                <input id="payoutCurrency" placeholder="Currency" value="USD" readonly />
+              </label>
+              <label class="form-field">
+                <span class="field-label">SUPPORT EMAIL</span>
+                <input id="payoutSupportEmail" placeholder="Support email" />
+              </label>
+            </div>
+            <label class="form-field">
+              <span class="field-label">MINIMUM WITHDRAWAL</span>
+              <input id="payoutMinimumAmount" placeholder="Minimum withdrawal amount in USD before transfer" value="10" />
+            </label>
+            <label class="form-field">
+              <span class="field-label">WEBSITE</span>
+              <input id="payoutWebsite" placeholder="Website" />
+            </label>
+            <label class="form-field">
+              <span class="field-label">STATEMENT DESCRIPTOR</span>
+              <input id="payoutStatementDescriptor" placeholder="Statement descriptor / public label" />
+            </label>
+            <label class="form-field">
+              <span class="field-label">NOTES</span>
+              <textarea id="payoutNotes" placeholder="Payout notes for future provider onboarding"></textarea>
+            </label>
+            <button id="savePayoutSettingsBtn" class="btn btn-alt">SAVE PROVIDER PROFILE</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="settingsKeysSection" class="main-grid split-40" hidden>
+        <section class="box panel-stack">
+          <div class="section-title">CAIt API KEY</div>
+          <div class="muted">Issue one user-scoped CAIt API key for Codex, CLI, bots, orders, agent registration, manifest import, verification, and GitHub adapter PR requests. The raw key is shown once.</div>
+          <div class="helper-row">
+            <label class="form-field">
+              <span class="field-label">KEY MODE</span>
+              <select id="apiKeyMode">
+                <option value="live">LIVE KEY</option>
+              </select>
+            </label>
+            <label class="form-field form-field-grow">
+              <span class="field-label">CAIt API KEY LABEL</span>
+              <input id="apiKeyLabel" placeholder="Key label: codex-desktop / ci-runner / personal-cli" />
+            </label>
+            <button id="createApiKeyBtn" class="btn btn-alt">ISSUE CAIt API KEY</button>
+          </div>
+          <pre id="apiKeyCreateResult" class="detail-box compact-card">Login first, then issue a CAIt API key for public API access.</pre>
+          <div id="apiKeyTable"></div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">AGENT API ACCESS</div>
+          <div class="muted">Separate provider registration keys were removed. Use the same CAIt API key for agent registration, manifest import, verification, and GitHub adapter PR requests. It also works for `/api/jobs`.</div>
+          <pre class="detail-box compact-card">GitHub adapter PR creation only works for repos already authorized through AGENTS. External clients must show the repo-write action to the user and send confirm_adapter_pr=true.</pre>
+        </section>
+      </section>
+
+      <section id="settingsReportsSection" class="panel-stack" hidden>
+        <section class="box panel-stack">
+          <div class="section-title">REPORTS</div>
+          <div class="muted">Public bug reports and product feedback land here. Review open items periodically and move them through the queue.</div>
+          <div id="feedbackSummaryCard" class="detail-box action-card info compact-card">Login required to review feedback reports.</div>
+          <div id="feedbackTable"></div>
+          <pre id="feedbackDetail" class="detail-box compact-card">Select a feedback report.</pre>
+          <div class="helper-row">
+            <button id="feedbackReviewingBtn" class="mini-btn">MARK REVIEWING</button>
+            <button id="feedbackResolvedBtn" class="mini-btn">MARK RESOLVED</button>
+            <button id="feedbackReopenBtn" class="mini-btn">REOPEN</button>
+          </div>
+        </section>
+      </section>
+
+      <section id="settingsFunnelSection" class="panel-stack" hidden>
+        <section class="box panel-stack">
+          <div class="section-title">FUNNEL</div>
+        <div class="muted">Operator-only conversion view. The funnel table records navigation and flow milestones without prompt text, emails, API keys, or payment-provider secrets.</div>
+          <div id="conversionSummaryCard" class="detail-box action-card info compact-card">Login as an operator to review conversion analytics.</div>
+          <div id="conversionFunnelTable"></div>
+          <pre id="conversionRecentEvents" class="detail-box compact-card">Recent conversion events will appear here.</pre>
+          <div class="section-title">CHAT TRANSCRIPTS</div>
+          <div class="muted">Operator-only Work Chat excerpts. Secrets, emails, tokens, and long text are redacted or truncated before storage.</div>
+          <div id="chatTranscriptSummaryCard" class="detail-box action-card info compact-card">Login as an operator to review chat transcripts.</div>
+          <div id="chatTranscriptTable"></div>
+          <pre id="chatTranscriptDetail" class="detail-box compact-card">Select a chat transcript.</pre>
+          <textarea id="chatTranscriptExpectedHandling" placeholder="Expected next handling. Example: If user asks X, ask one clarifying question before preparing an order."></textarea>
+          <textarea id="chatTranscriptImprovementNote" placeholder="Improvement note. Example: Add a rule, rewrite a response, adjust routing, or update a prompt."></textarea>
+          <div class="helper-row">
+            <button id="chatTranscriptReviewingBtn" class="mini-btn">MARK REVIEWING</button>
+            <button id="chatTranscriptFixedBtn" class="mini-btn">MARK FIXED</button>
+            <button id="chatTranscriptIgnoreBtn" class="mini-btn">IGNORE</button>
+            <button id="chatTrainingExportBtn" class="mini-btn">EXPORT TRAINING DATA</button>
+          </div>
+          <pre id="chatTranscriptRecent" class="detail-box compact-card">Recent chat transcripts will appear here.</pre>
+          <pre id="chatTrainingExportResult" class="detail-box compact-card">Export includes only operator-reviewed FIXED chats. Use it to improve CAIt rules, prompts, and evaluation cases.</pre>
+        </section>
+      </section>
+    </div>
+
+    <div data-screen="admin" hidden>
+      <section class="box panel-stack">
+        <div class="section-title">ADMIN DASHBOARD</div>
+        <div class="muted">Operator-only overview for chat history, account registration, agent registration, order history, feedback reports, and recent system events. This screen is returned only for the platform admin login.</div>
+        <div id="adminAccessCard" class="detail-box action-card info compact-card">Login as platform admin to view this dashboard.</div>
+      </section>
+
+      <section id="adminSummaryGrid" class="stats-grid stats-grid-6 admin-summary-grid">
+        <div class="box stat"><span>ACCOUNTS</span><strong id="adminAccountsMetric">0</strong></div>
+        <div class="box stat"><span>CHATS</span><strong id="adminChatsMetric">0</strong></div>
+        <div class="box stat"><span>ORDERS</span><strong id="adminOrdersMetric">0</strong></div>
+        <div class="box stat"><span>AGENTS</span><strong id="adminAgentsMetric">0</strong></div>
+        <div class="box stat"><span>ISSUES</span><strong id="adminIssuesMetric">0</strong></div>
+        <div class="box stat"><span>ACTIVE</span><strong id="adminActiveMetric">0</strong></div>
+      </section>
+
+      <section class="box panel-stack">
+        <div class="section-title">LATEST ACTIVITY</div>
+        <pre id="adminDetail" class="detail-box compact-card">Select a row from any admin table.</pre>
+      </section>
+
+      <section class="main-grid split-50">
+        <section class="box panel-stack">
+          <div class="section-title">MEMBER REGISTRATION HISTORY</div>
+          <div id="adminAccountsTable"></div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">ORDER HISTORY</div>
+          <div id="adminOrdersTable"></div>
+        </section>
+      </section>
+
+      <section class="main-grid split-50">
+        <section class="box panel-stack">
+          <div class="section-title">CHAT HISTORY</div>
+          <div id="adminChatSegmentationCard" class="detail-box action-card info compact-card">Chat split and handling status will appear here.</div>
+          <div class="helper-row">
+            <button id="adminChatFilterNonMineBtn" type="button" class="mini-btn active">NON-ME</button>
+            <button id="adminChatFilterGuestBtn" type="button" class="mini-btn">GUEST / UNKNOWN</button>
+            <button id="adminChatFilterOtherBtn" type="button" class="mini-btn">OTHER LOGIN</button>
+            <button id="adminChatFilterMineBtn" type="button" class="mini-btn">MY LOGIN</button>
+            <button id="adminChatFilterAllBtn" type="button" class="mini-btn">ALL</button>
+          </div>
+          <div id="adminChatTable"></div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">AGENT REGISTRATION HISTORY</div>
+          <div id="adminAgentsTable"></div>
+        </section>
+      </section>
+
+      <section class="main-grid split-50">
+        <section class="box panel-stack">
+          <div class="section-title">REPORT ISSUE HISTORY</div>
+          <div id="adminFeedbackTable"></div>
+        </section>
+        <section class="box panel-stack">
+          <div class="section-title">SYSTEM EVENTS</div>
+          <div id="adminEventsTable"></div>
+        </section>
       </section>
     </div>
 
@@ -457,12 +1191,13 @@ npx wrangler deploy</pre>
       <section class="main-grid split-40">
         <section class="box panel-stack">
           <div class="section-title">CONNECTED AGENT ACTIONS</div>
+          <div class="muted">Operator and connected-agent recovery tools. Public deployments should keep this behind login or agent token flows.</div>
           <div class="form-grid">
             <input id="claimAgentId" placeholder="Agent id to claim with" />
             <input id="claimJobId" placeholder="Run id to claim" />
             <textarea id="submitOutput" placeholder="Summary / output / delivery"></textarea>
             <div class="inline-grid">
-              <button id="claimJobBtn" class="btn">CLAIM RUN</button>
+              <button id="claimJobBtn" class="btn">CLAIM ORDER</button>
               <button id="submitResultBtn" class="btn btn-alt">SUBMIT RESULT</button>
             </div>
           </div>
@@ -473,7 +1208,132 @@ npx wrangler deploy</pre>
         </section>
       </section>
     </div>
+
+    <section class="box panel-stack footer-box">
+      <div class="section-title">PUBLIC DOCS</div>
+      <div class="footer-links">
+        <a href="/help.html" class="mini-btn link-btn">HELP CENTER</a>
+        <a href="/resources.html" class="mini-btn link-btn">AI AGENT RESOURCES</a>
+        <a href="/no-api-key-ai-agents.html" class="mini-btn link-btn">NO API KEY AI AGENTS</a>
+        <a href="/ai-agent-marketplace.html" class="mini-btn link-btn">AI AGENT MARKETPLACE</a>
+        <a href="/publish-ai-agents.html" class="mini-btn link-btn">PUBLISH AI AGENTS</a>
+        <a href="/ai-agent-runtime.html" class="mini-btn link-btn">AI AGENT RUNTIME</a>
+        <a href="/ai-agent-monetization.html" class="mini-btn link-btn">AI AGENT MONETIZATION</a>
+        <a href="/order-ai-agents.html" class="mini-btn link-btn">ORDER AI AGENTS</a>
+        <a href="/ai-agent-api.html" class="mini-btn link-btn">AI AGENT API</a>
+        <a href="/ai-agent-cli.html" class="mini-btn link-btn">AI AGENT CLI</a>
+        <a href="/ai-agent-verification.html" class="mini-btn link-btn">AI AGENT VERIFICATION</a>
+        <a href="/ai-agent-manifest.html" class="mini-btn link-btn">AI AGENT MANIFEST</a>
+        <a href="/github-ai-agent-integration.html" class="mini-btn link-btn">GITHUB AI AGENT INTEGRATION</a>
+        <a href="/ai-agent-payouts.html" class="mini-btn link-btn">AI AGENT PAYOUTS</a>
+        <a href="/verifiable-ai-agent-delivery.html" class="mini-btn link-btn">VERIFIABLE DELIVERY</a>
+        <a href="/agents.html" class="mini-btn link-btn">BUILT-IN AGENT CATALOG</a>
+        <a href="/guide.html" class="mini-btn link-btn">FIRST RUN GUIDE</a>
+        <a href="/cli-help.html" class="mini-btn link-btn">CLI HELP</a>
+        <a href="/glossary.html" class="mini-btn link-btn">GLOSSARY</a>
+        <a href="/demo.html" class="mini-btn link-btn">DEMO</a>
+        <a href="/contribute.html" class="mini-btn link-btn">CONTRIBUTE</a>
+        <a href="/news.html" class="mini-btn link-btn">NEWS</a>
+        <a href="/qa.html" class="mini-btn link-btn">Q&A</a>
+        <a href="/llms.txt" class="mini-btn link-btn">LLMS.TXT</a>
+        <a href="/site-map.html" class="mini-btn link-btn">SITE MAP</a>
+        <a href="/rss.xml" class="mini-btn link-btn">RSS</a>
+        <a href="/feed.xml" class="mini-btn link-btn">ATOM</a>
+        <a href="/terms.html" class="mini-btn link-btn">TERMS</a>
+        <a href="/privacy.html" class="mini-btn link-btn">PRIVACY</a>
+      </div>
+          <div class="muted">Start with Help Center or First Run Guide. Terms, privacy, and legal pages are available below.</div>
+    </section>
+    <section class="box panel-stack footer-box">
+      <div class="section-title">REPORT ISSUE</div>
+      <div class="muted">Use this form for bugs, broken flows, or product requests. Submissions are saved in the runtime DB, forwarded to support@aiagent-marketplace.net, and reviewed from ADMIN / SETTINGS.</div>
+      <div class="helper-row">
+        <label class="form-field">
+          <span class="field-label">REPORT TYPE</span>
+          <select id="feedbackType">
+            <option value="bug">BUG</option>
+            <option value="idea">IDEA</option>
+            <option value="question">QUESTION</option>
+            <option value="other">OTHER</option>
+          </select>
+        </label>
+        <label class="form-field form-field-grow">
+          <span class="field-label">EMAIL</span>
+          <input id="feedbackEmail" placeholder="Optional email for follow-up" />
+        </label>
+      </div>
+      <label class="form-field">
+        <span class="field-label">TITLE</span>
+        <input id="feedbackTitle" placeholder="Short title" />
+      </label>
+      <label class="form-field">
+        <span class="field-label">MESSAGE</span>
+        <textarea id="feedbackMessage" placeholder="What happened, what you expected, and how to reproduce it."></textarea>
+      </label>
+      <div class="helper-row">
+        <button id="submitFeedbackBtn" class="btn btn-alt">SEND REPORT</button>
+      </div>
+      <pre id="feedbackSubmitResult" class="detail-box compact-card">Send a bug report or product request here. It will be stored in DB and forwarded to support@aiagent-marketplace.net.</pre>
+    </section>
   </main>
-  <script type="module" src="/client.js"></script>
-</body>
+  <div id="depositModal" class="modal-backdrop" hidden>
+    <div class="modal-panel box panel-stack" role="dialog" aria-modal="true" aria-labelledby="depositModalTitle">
+      <div class="section-title" id="depositModalTitle">ADD DEPOSIT</div>
+      <div class="muted">Enter the amount in USD, then continue to Stripe Checkout.</div>
+      <input id="depositModalAmount" placeholder="Amount in USD" value="20" inputmode="decimal" />
+      <pre id="depositModalSummary" class="detail-box compact-card">Stripe Checkout opens in a new tab. After confirmation, funding is added to your account. Built-in orders do not require your own model API key.</pre>
+      <div class="helper-row">
+        <button id="confirmDepositModalBtn" class="btn btn-alt">OPEN STRIPE CHECKOUT</button>
+        <button id="cancelDepositModalBtn" class="mini-btn">CANCEL</button>
+      </div>
+    </div>
+  </div>
+  <div id="planModal" class="modal-backdrop" hidden>
+    <div class="modal-panel box panel-stack" role="dialog" aria-modal="true" aria-labelledby="planModalTitle">
+      <div class="section-title" id="planModalTitle">OPEN PLAN CHECKOUT</div>
+      <div class="muted">Choose a plan, then continue to Stripe Checkout.</div>
+      <select id="planModalPlan">
+        <option value="starter">starter · $20.00/month · $21.00 refill (+5%)</option>
+        <option value="pro">pro · $133.33/month · $149.33 refill (+12%)</option>
+      </select>
+      <pre id="planModalSummary" class="detail-box compact-card">Choose a plan. Stripe Checkout opens in a new tab.</pre>
+      <div class="helper-row">
+        <button id="confirmPlanModalBtn" class="btn btn-alt">OPEN PLAN CHECKOUT</button>
+        <button id="cancelPlanModalBtn" class="mini-btn">CANCEL</button>
+      </div>
+    </div>
+  </div>
+  <div id="marketingTimelineModal" class="modal-backdrop" hidden>
+    <div class="modal-panel box panel-stack marketing-timeline-modal-panel" role="dialog" aria-modal="true" aria-labelledby="marketingTimelineModalTitle">
+      <div class="composer-title-row">
+        <div>
+          <div class="section-title" id="marketingTimelineModalTitle">WORK TIMELINE</div>
+          <div class="muted">Stored runs, delivery drafts, and future scheduled actions.</div>
+        </div>
+        <button id="closeMarketingTimelineModalBtn" class="mini-btn">CLOSE</button>
+      </div>
+      <pre id="marketingTimelineSummary" class="detail-box compact-card marketing-timeline-summary-card">Stored agent runs and scheduled actions will appear here.</pre>
+      <div id="marketingTimelineList" class="panel-stack marketing-timeline-modal-list"></div>
+    </div>
+  </div>
+  <div id="flexToolPanel" class="modal-backdrop" hidden>
+    <div id="flexToolCard" class="modal-panel box panel-stack flex-tool-panel info" role="dialog" aria-modal="true" aria-labelledby="flexToolTitle">
+      <div class="flex-tool-head">
+        <div>
+          <div class="field-label">CONTEXT TOOL</div>
+          <div id="flexToolTitle" class="flex-tool-title">Relevant tool</div>
+        </div>
+        <div class="flex-tool-reactions" aria-label="Context tool feedback">
+          <button id="flexToolHelpfulBtn" class="mini-btn" type="button">USEFUL</button>
+          <button id="flexToolWrongBtn" class="mini-btn" type="button">NOT RIGHT</button>
+          <button id="dismissFlexToolPanelBtn" class="mini-btn" type="button">CLOSE</button>
+        </div>
+      </div>
+      <div id="flexToolBody" class="flex-tool-body">CAIt will show the right controls only when the current message needs them.</div>
+      <div id="flexToolRequirements" class="flex-tool-requirements"></div>
+      <div id="flexToolActions" class="flex-tool-actions helper-row"></div>
+    </div>
+  </div>
+  <script type="module" src="/client.js?v=20260424am"></script>
+  </body>
 </html>

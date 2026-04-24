@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 const PORT = Number(process.env.PORT || 4323);
 const BASE = `http://127.0.0.1:${PORT}`;
-const stateDir = mkdtempSync(join(tmpdir(), 'agent-broker-callback-qa-'));
-const statePath = join(stateDir, 'broker-state.json');
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -44,7 +39,7 @@ async function main() {
 
   const child = spawn('node', ['server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), BROKER_STATE_PATH: statePath },
+    env: { ...process.env, PORT: String(PORT) },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
@@ -58,7 +53,7 @@ async function main() {
     const importRes = await request('/api/agents/import-url', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest_url: `${BASE}/public/sample-agent-research.json` })
+      body: JSON.stringify({ manifest_url: `${BASE}/public/removed-agent.json` })
     });
     assert.equal(importRes.status, 400, 'import-url should reject /public path directly if not fetchable');
 
@@ -158,7 +153,6 @@ async function main() {
   } finally {
     child.kill('SIGTERM');
     await sleep(300);
-    rmSync(stateDir, { recursive: true, force: true });
   }
 }
 

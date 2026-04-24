@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createD1LikeStorage } from '../lib/storage.js';
 
-const storage = createD1LikeStorage(null);
+const storage = createD1LikeStorage(null, { allowInMemory: true });
 
 await storage.replaceState({
   agents: [

@@ -4,13 +4,13 @@
 
 Production target is **Cloudflare Workers + D1**.
 
-Node [`server.js`](/home/kyforever/agent-broker/server.js) exists for local development compatibility, but the repo direction is Worker-first and D1-first.
+Node [`server.js`](./server.js) exists only as an ephemeral local compatibility server. It does not persist runtime state to local JSON.
 
 ## Runtime status in this repo
 
-Current Worker entrypoint: [`worker.js`](/home/kyforever/agent-broker/worker.js)
+Current Worker entrypoint: [`worker.js`](./worker.js)
 
-Current Wrangler config: [`wrangler.jsonc`](/home/kyforever/agent-broker/wrangler.jsonc)
+Current Wrangler config: [`wrangler.jsonc`](./wrangler.jsonc)
 
 Current D1 binding:
 - `MY_BINDING`
@@ -35,6 +35,10 @@ Worker/API surface currently covered in repo:
 - `POST /api/jobs/:id/claim`
 - `POST /api/jobs/:id/result`
 - `POST /api/agent-callbacks/jobs`
+- `GET /auth/x`
+- `GET /auth/x/callback`
+- `GET /api/connectors/x/status`
+- `POST /api/connectors/x/post`
 - `POST /api/dev/resolve-job`
 - `POST /api/dev/dispatch-retry`
 - `POST /api/dev/timeout-sweep`
@@ -56,11 +60,28 @@ The repo is prepared so deploy is the next step once credentials are present.
 
 ## Required Cloudflare setup
 
-1. Confirm [`wrangler.jsonc`](/home/kyforever/agent-broker/wrangler.jsonc) points at the correct Worker name, assets directory, and D1 binding.
+1. Confirm [`wrangler.jsonc`](./wrangler.jsonc) points at the correct Worker name, assets directory, and D1 binding.
 2. Confirm the D1 database exists and `database_id` / `database_name` are correct for the target account.
 3. Set GitHub Actions secrets if using CI deploy:
    - `CLOUDFLARE_API_TOKEN`
    - `CLOUDFLARE_ACCOUNT_ID`
+
+## Required X connector setup
+
+If the X Ops Connector should publish posts, configure an X OAuth 2.0 app before deploy:
+
+- callback URL: `https://<production-host>/auth/x/callback`
+- scopes: `tweet.read tweet.write users.read offline.access`
+
+Set Worker secrets:
+
+```bash
+npx wrangler secret put X_CLIENT_ID
+npx wrangler secret put X_CLIENT_SECRET
+npx wrangler secret put X_TOKEN_ENCRYPTION_KEY
+```
+
+`X_TOKEN_ENCRYPTION_KEY` must be base64 for exactly 32 bytes. `X_CALLBACK_URL` is optional when `PRIMARY_BASE_URL` already resolves to the production host.
 
 ## Recommended deploy flow
 
@@ -85,14 +106,14 @@ curl https://<worker-host>/api/jobs
 ## D1 schema
 
 Canonical schema files:
-- [`migrations/0001_init.sql`](/home/kyforever/agent-broker/migrations/0001_init.sql)
-- [`lib/storage.js`](/home/kyforever/agent-broker/lib/storage.js)
+- [`migrations/0001_init.sql`](./migrations/0001_init.sql)
+- [`lib/storage.js`](./lib/storage.js)
 
 `GET /api/schema` exposes the runtime schema string for verification.
 
 ## Release checklist
 
-- validate [`wrangler.jsonc`](/home/kyforever/agent-broker/wrangler.jsonc)
+- validate [`wrangler.jsonc`](./wrangler.jsonc)
 - confirm D1 binding exists
 - run `npm run qa:all`
 - deploy Worker

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAIt Privacy Policy</title>
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="crt"></div>
+  <main class="app-shell doc-shell">
+    <header class="topbar box">
+      <div>
+        <a class="logo logo-link" href="/" aria-label="Back to CAIt start">CAIt</a>
+        <div class="sublogo">PRIVACY POLICY</div>
+        <div class="doc-meta">Last updated: 2026-04-17</div>
+      </div>
+      <nav class="doc-nav">
+        <a href="/" class="mini-btn link-btn">COCKPIT</a>
+        <a href="/help.html" class="mini-btn link-btn">HELP</a>
+        <a href="/terms.html" class="mini-btn link-btn">TERMS</a>
+      </nav>
+    </header>
+
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">PRIVACY POLICY</div>
+      <p>
+        This policy explains what data CAIt processes to operate the runtime, manifest import flow, verification,
+        routing, and billing audit features.
+      </p>
+    </section>
+
+    <section class="doc-grid">
+      <section class="box panel-stack">
+        <div class="section-title">1. DATA WE COLLECT</div>
+        <ul class="doc-list">
+          <li>Account and session data such as login state, GitHub account identifiers, and session cookies.</li>
+          <li>Repository and manifest metadata, plus selected repository file contents and extracted signals needed to import, generate, validate, and verify AI agents.</li>
+          <li>Run, job, output, billing, and operator log data needed to route work and audit outcomes.</li>
+          <li>Work Chat messages, CAIt replies, and AI-assisted pre-order classifier outputs may be saved in redacted, truncated form to improve onboarding, routing, and order-prep quality.</li>
+          <li>Technical telemetry such as timestamps, request identifiers, verification results, and deploy target details.</li>
+        </ul>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">2. HOW WE USE DATA</div>
+        <ul class="doc-list">
+          <li>To authenticate users and manage sessions.</li>
+          <li>To import manifests from GitHub, generate draft manifests from selected repositories, and verify agent ownership and health.</li>
+          <li>To route jobs, retry failed dispatches, calculate billing, and expose operator audit trails.</li>
+          <li>To review redacted chat transcripts and create reviewed training or evaluation datasets for CAIt prompts, rules, clarification flows, and agent routing quality.</li>
+          <li>To secure, debug, and improve the runtime and marketplace workflow.</li>
+        </ul>
+      </section>
+    </section>
+
+    <section class="doc-grid">
+      <section class="box panel-stack">
+        <div class="section-title">3. GITHUB AND THIRD-PARTY SERVICES</div>
+        <p>When you connect GitHub, CAIt processes the minimum metadata and repository access required by the configured integration mode. For draft manifest generation, CAIt may read a limited allowlist of repository files such as <code>README.md</code>, <code>package.json</code>, <code>pyproject.toml</code>, <code>requirements.txt</code>, and <code>Dockerfile</code>. GitHub App is preferred for repo-scoped permissions. OAuth fallback stays intentionally limited. CAIt may also rely on Cloudflare for hosting and storage.</p>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">4. SHARING</div>
+        <p>Data may be shared with infrastructure and integration providers such as Cloudflare and GitHub, and with connected agent providers when needed to execute a run or return results. CAIt does not need to sell personal data to operate the service.</p>
+      </section>
+    </section>
+
+    <section class="doc-grid">
+      <section class="box panel-stack">
+        <div class="section-title">5. RETENTION</div>
+        <p>Session, manifest, run, billing, redacted chat transcript, reviewed training/evaluation export, and log data is retained only as long as needed for service operation, troubleshooting, security, legal compliance, marketplace accounting, or product improvement, subject to the operator's retention policy.</p>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">6. SECURITY</div>
+        <p>CAIt uses access controls, short-lived integration tokens where supported, session protections, and platform security controls. No system is perfectly secure, so users should avoid submitting secrets or sensitive data unless the deployment is specifically configured for that use.</p>
+      </section>
+    </section>
+
+    <section class="doc-grid">
+      <section class="box panel-stack">
+        <div class="section-title">7. YOUR CHOICES</div>
+        <p>You can disconnect integrations, avoid private repository imports, avoid submitting secrets in Work Chat, avoid logging in for guest-mode evaluation, and request account or data handling support through the operator contact channel.</p>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">8. CHANGES AND CONTACT</div>
+        <p>This policy may change as the service evolves. Material changes should be reflected by updating the published date. Questions should be directed through the operator support channel, repository issue tracker, or contact method published with the deployed service.</p>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,49 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" shape-rendering="crispEdges">
+  <defs>
+    <g id="glyph-a">
+      <rect x="24" y="0" width="72" height="24"/>
+      <rect x="0" y="24" width="24" height="216"/>
+      <rect x="96" y="24" width="24" height="216"/>
+      <rect x="0" y="96" width="120" height="24"/>
+    </g>
+    <g id="glyph-i">
+      <rect x="0" y="0" width="72" height="24"/>
+      <rect x="24" y="24" width="24" height="192"/>
+      <rect x="0" y="216" width="72" height="24"/>
+    </g>
+    <g id="glyph-m">
+      <rect x="0" y="0" width="24" height="240"/>
+      <rect x="120" y="0" width="24" height="240"/>
+      <rect x="24" y="24" width="24" height="72"/>
+      <rect x="48" y="72" width="24" height="72"/>
+      <rect x="72" y="72" width="24" height="72"/>
+      <rect x="96" y="24" width="24" height="72"/>
+    </g>
+  </defs>
+
+  <rect x="32" y="32" width="448" height="448" fill="#07101D"/>
+  <rect x="48" y="48" width="416" height="416" fill="#0C1527"/>
+
+  <rect x="48" y="48" width="416" height="16" fill="#35507F"/>
+  <rect x="48" y="64" width="16" height="384" fill="#35507F"/>
+  <rect x="448" y="64" width="16" height="384" fill="#1F2E49"/>
+  <rect x="48" y="448" width="416" height="16" fill="#1F2E49"/>
+
+  <g fill="#14263E">
+    <use xlink:href="#glyph-a" href="#glyph-a" x="64" y="144"/>
+    <use xlink:href="#glyph-i" href="#glyph-i" x="216" y="144"/>
+    <use xlink:href="#glyph-m" href="#glyph-m" x="320" y="144"/>
+  </g>
+
+  <g fill="#53E2FF">
+    <use xlink:href="#glyph-a" href="#glyph-a" x="56" y="136"/>
+    <use xlink:href="#glyph-i" href="#glyph-i" x="208" y="136"/>
+  </g>
+
+  <g fill="#FFD36A">
+    <use xlink:href="#glyph-m" href="#glyph-m" x="312" y="136"/>
+  </g>
+
+  <rect x="88" y="400" width="336" height="16" fill="#14263E"/>
+  <rect x="80" y="392" width="336" height="16" fill="#53E2FF"/>
+</svg>

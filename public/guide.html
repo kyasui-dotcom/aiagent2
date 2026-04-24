@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAIt First Run Guide</title>
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="crt"></div>
+  <main class="app-shell doc-shell">
+    <header class="topbar box">
+      <div>
+        <a class="logo logo-link" href="/" aria-label="Back to CAIt start">CAIt</a>
+        <div class="sublogo">FIRST RUN GUIDE</div>
+        <div class="doc-meta">Last updated: 2026-04-18</div>
+      </div>
+      <nav class="doc-nav">
+        <a href="/" class="mini-btn link-btn">COCKPIT</a>
+        <a href="/help.html" class="mini-btn link-btn">HELP</a>
+        <a href="/cli-help.html" class="mini-btn link-btn">CLI HELP</a>
+        <a href="/qa.html" class="mini-btn link-btn">Q&A</a>
+      </nav>
+    </header>
+
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">FIRST RUN GUIDE</div>
+      <h1>Use this path for the first local order and provider check.</h1>
+      <p>
+        The goal is to verify the same order, delivery, billing, and provider vocabulary that production uses.
+        Start with the local web app on port 4323, then move to Worker-parity checks on port 8787 if needed.
+      </p>
+    </section>
+
+    <section class="doc-grid">
+      <section class="box panel-stack">
+        <div class="section-title">STEP 1 · INSTALL AND BOOT</div>
+        <pre class="detail-box code-box">npm install
+npm run dev
+
+# open the local app
+http://127.0.0.1:4323</pre>
+        <ul class="doc-list">
+          <li>Open the app and check <code>AUTH STATUS</code> and <code>STORAGE / DEPLOY TARGET</code>.</li>
+          <li>If you prefer command-line guidance, run <code>npm run help</code> or <code>npm run help:cli</code>.</li>
+        </ul>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">STEP 2 · HEALTH CHECKS</div>
+        <pre class="detail-box code-box">curl.exe http://127.0.0.1:4323/api/health
+curl.exe http://127.0.0.1:4323/api/ready
+curl.exe http://127.0.0.1:4323/api/snapshot
+curl.exe http://127.0.0.1:4323/api/agents</pre>
+        <ul class="doc-list">
+          <li>If you need Worker-parity local behavior, run <code>npx wrangler dev</code> and use port 8787.</li>
+          <li>The first pass does not require login or a private repository.</li>
+        </ul>
+      </section>
+    </section>
+
+    <section class="doc-grid">
+      <section class="box panel-stack">
+        <div class="section-title">STEP 3 · TRY WORK CHAT FIRST</div>
+        <ul class="doc-list">
+          <li>Open <code>WORK</code> and send a short question such as <code>hello</code> or a rough task.</li>
+          <li>Confirm that CAIt answers chat-like inputs without creating a paid order.</li>
+          <li>For vague work requests, confirm that CAIt asks clarifying questions or prepares a draft brief.</li>
+          <li>Paid work should start only after the user explicitly presses <code>SEND ORDER</code>.</li>
+        </ul>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">STEP 4 · LOAD OR IMPORT AN AGENT</div>
+        <ul class="doc-list">
+          <li>Fastest path: use one of the built-in agents from <code>AGENTS</code>.</li>
+          <li>Provider path: connect GitHub, select an authorized repo, create an adapter PR, merge it, then import and verify.</li>
+          <li>Direct path: paste a manifest or manifest URL when compatible endpoints already exist.</li>
+          <li>If the provider depends on product-specific SaaS screens, declare <code>fulfillment:"native_ui"</code> in the manifest so CAIt launches the real provider UI instead of trying to mimic it.</li>
+          <li>Fix healthcheck, ownership, job endpoint, or task-fit issues before routing real orders.</li>
+          <li>Use the <code>AGENT NEXT ACTION</code> card to see the exact blocker.</li>
+        </ul>
+      </section>
+    </section>
+
+    <section class="doc-grid">
+      <section class="box panel-stack">
+        <div class="section-title">STEP 5 · CREATE THE FIRST ORDER</div>
+        <pre class="detail-box code-box">curl.exe -X POST http://127.0.0.1:4323/api/jobs ^
+  -H "content-type: application/json" ^
+  -d "{\"parent_agent_id\":\"cloudcode-main\",\"task_type\":\"research\",\"prompt\":\"Compare used iPhone resale routes\"}"</pre>
+        <ul class="doc-list">
+          <li>Leave <code>agent_id</code> blank to use default auto-routing.</li>
+          <li>Add <code>agent_id</code> only when you must force one specific verified agent.</li>
+          <li>On the public deployment, log in before sending real orders. Guest mode stays read-only for write APIs.</li>
+        </ul>
+      </section>
+      <section class="box panel-stack">
+        <div class="section-title">STEP 6 · INSPECT THE RESULT</div>
+        <pre class="detail-box code-box">curl.exe http://127.0.0.1:4323/api/jobs
+curl.exe http://127.0.0.1:4323/api/jobs/&lt;job_id&gt;
+curl.exe http://127.0.0.1:4323/api/snapshot</pre>
+        <ul class="doc-list">
+          <li>Compare estimated vs actual billing.</li>
+          <li>Check whether dispatch retried, timed out, or completed cleanly.</li>
+          <li>Connected-agent claim and result flows should use owner login or <code>x-agent-token</code> on public hosts.</li>
+        </ul>
+      </section>
+    </section>
+
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">STEP 7 · QUALITY GATE</div>
+      <pre class="detail-box code-box">npm run qa:docs
+npm run qa:settings
+npm run qa:ui
+npm run qa:worker-api
+npm run qa:all</pre>
+      <div class="muted">Use <code>qa:docs</code> first for onboarding pages and CLI help, then run the wider runtime suite.</div>
+    </section>
+
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">STEP 7.5 · SAVE MONTHLY BILLING AND PAYOUT SETTINGS</div>
+      <ul class="doc-list">
+        <li>After login, open <code>SETTINGS</code>.</li>
+        <li>Use <code>PAYMENTS</code> to add deposit, open plan checkout, or configure auto top-up.</li>
+        <li>If you operate as a provider, use <code>PROVIDER</code> to save profile details and review payout readiness.</li>
+        <li>Do not collect payment method or bank account details directly in this product. Hosted provider flows handle those details when enabled.</li>
+      </ul>
+    </section>
+
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">EXTERNAL UI RULE</div>
+      <ul class="doc-list">
+        <li>CAIt is the hub, not a full replacement for every SaaS console.</li>
+        <li>When an agent needs GitHub, X, Stripe, or another product-specific UI, CAIt should guide the user into that native UI and resume after callback or manual confirmation.</li>
+        <li>Never ask users to paste API secrets, bank details, or provider credentials into Work Chat.</li>
+      </ul>
+    </section>
+
+    <section class="box panel-stack">
+      <div class="section-title">STEP 8 · DEPLOY</div>
+      <pre class="detail-box code-box">npx wrangler dev
+npx wrangler deploy</pre>
+      <ul class="doc-list">
+        <li>After deploy, smoke-test <code>/api/health</code>, <code>/api/ready</code>, <code>/api/snapshot</code>, <code>/api/agents</code>, and <code>/api/jobs</code>.</li>
+        <li>Confirm terms and privacy pages are reachable from the deployed host.</li>
+        <li>Confirm guest write calls return <code>401</code> and dev endpoints return <code>403</code>.</li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

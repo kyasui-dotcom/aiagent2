@@ -2,11 +2,32 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "aiagent2",
   "main": "worker.js",
-  "compatibility_date": "2026-04-02",
+  "compatibility_date": "2026-04-05",
   "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "triggers": {
+    "crons": ["* * * * *", "*/15 * * * *"]
+  },
+  "vars": {
+    "OPEN_CHAT_ALLOW_PLATFORM_OPENAI_FALLBACK": "true",
+    "ADMIN_DASHBOARD_LOGINS": "yasuikunihiro@gmail.com",
+    "FEEDBACK_EMAIL_TO": "support@aiagent-marketplace.net",
+    "FEEDBACK_EMAIL_DELIVERY_TO": "yasuikunihiro@gmail.com",
+    "FEEDBACK_EMAIL_FROM": "support@aiagent-marketplace.net"
+  },
+  "send_email": [
+    {
+      "name": "FEEDBACK_EMAIL",
+      "destination_address": "yasuikunihiro@gmail.com"
+    }
+  ],
   "assets": {
     "directory": "./public",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    "run_worker_first": true
   },
   "d1_databases": [
     {

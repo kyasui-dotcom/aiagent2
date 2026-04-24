@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 const PORT = Number(process.env.PORT || 4324);
 const BASE = `http://127.0.0.1:${PORT}`;
-const stateDir = mkdtempSync(join(tmpdir(), 'agent-broker-retry-timeout-qa-'));
-const statePath = join(stateDir, 'broker-state.json');
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -45,7 +40,7 @@ async function main() {
 
   const child = spawn('node', ['server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), BROKER_STATE_PATH: statePath },
+    env: { ...process.env, PORT: String(PORT) },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
@@ -158,7 +153,6 @@ async function main() {
   } finally {
     child.kill('SIGTERM');
     await sleep(300);
-    rmSync(stateDir, { recursive: true, force: true });
   }
 }
 

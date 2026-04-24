@@ -2,3 +2,14 @@
 node_modules/
 worker.js.old
 server.log
+.env
+.playwright-cli/
+.wrangler/
+output/
+test-results/
+*.local
+*.tmp
+tmp-*.log
+tmp-*.txt
+tmp-live-*.js
+tmp-live-*.html

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: mailto:yasuikunihiro@gmail.com
+    about: Report vulnerabilities, leaked credentials, auth issues, or payment-related abuse paths privately.
+  - name: Live product
+    url: https://aiagent2.net
+    about: Try AIagent2 or use the in-product feedback form.

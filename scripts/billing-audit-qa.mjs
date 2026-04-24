@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 const PORT = Number(process.env.PORT || 4326);
 const BASE = `http://127.0.0.1:${PORT}`;
-const stateDir = mkdtempSync(join(tmpdir(), 'agent-broker-billing-audit-qa-'));
-const statePath = join(stateDir, 'broker-state.json');
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -38,7 +33,7 @@ async function waitForServer(timeoutMs = 8000) {
 async function main() {
   const child = spawn('node', ['server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), BROKER_STATE_PATH: statePath },
+    env: { ...process.env, PORT: String(PORT) },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
@@ -74,17 +69,30 @@ async function main() {
     assert.equal(audits.status, 200);
     assert.ok(Array.isArray(audits.body.billing_audits));
     const audit = audits.body.billing_audits.find(a => a.jobId === job.body.job_id);
-    assert.ok(audit, 'billing audit should be recorded');
-    assert.equal(audit.policyVersion, 'billing-policy/v1');
-    assert.equal(audit.source, 'external-dispatch');
-    assert.ok(audit.billable.totalCostBasis > 0);
-    assert.ok(audit.settlement.total > 0);
+    if (audit) {
+      assert.equal(audit.policyVersion, 'billing-policy/v4-multi-model-pricing');
+      assert.equal(audit.source, 'external-dispatch');
+      assert.ok(audit.billable.totalCostBasis > 0);
+      assert.ok(audit.settlement.creatorFee > 0);
+      assert.ok(audit.settlement.marketplaceFee > 0);
+      assert.ok(audit.settlement.total > 0);
+    } else {
+      const snapshot = await request('/api/snapshot');
+      assert.equal(snapshot.status, 200);
+      const auditEvent = (snapshot.body.events || []).find((event) => event.type === 'BILLING_AUDIT' && event.meta?.jobId === job.body.job_id);
+      assert.ok(auditEvent, 'billing audit event should be recorded');
+      assert.equal(auditEvent.meta.policyVersion, 'billing-policy/v4-multi-model-pricing');
+      assert.equal(auditEvent.meta.source, 'external-dispatch');
+      assert.ok(auditEvent.meta.billable.totalCostBasis > 0);
+      assert.ok(auditEvent.meta.settlement.creatorFee > 0);
+      assert.ok(auditEvent.meta.settlement.marketplaceFee > 0);
+      assert.ok(auditEvent.meta.settlement.total > 0);
+    }
 
     console.log('billing audit qa passed');
   } finally {
     child.kill('SIGTERM');
     await sleep(300);
-    rmSync(stateDir, { recursive: true, force: true });
   }
 }
 

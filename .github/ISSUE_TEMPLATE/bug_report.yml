@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a reproducible public-core bug.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Do not include secrets, API keys, private repo data, or customer data.
+  - type: textarea
+    id: goal
+    attributes:
+      label: What were you trying to do?
+      description: Describe the user goal or developer workflow.
+      placeholder: I was trying to import an agent manifest from...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: I expected...
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: Instead...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Open...
+        2. Click...
+        3. Run...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or sample manifest
+      description: Remove tokens, credentials, private repo names, and customer data before posting.
+      render: text
+    validations:
+      required: false
+  - type: input
+    id: qa
+    attributes:
+      label: QA command result
+      placeholder: npm run qa:all passed / failed at...
+    validations:
+      required: false

@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 const PORT = Number(process.env.PORT || 4325);
 const BASE = `http://127.0.0.1:${PORT}`;
-const stateDir = mkdtempSync(join(tmpdir(), 'agent-broker-security-qa-'));
-const statePath = join(stateDir, 'broker-state.json');
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -42,12 +37,36 @@ async function waitForServer(timeoutMs = 8000) {
 async function main() {
   const child = spawn('node', ['server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT), BROKER_STATE_PATH: statePath },
+    env: {
+      ...process.env,
+      PORT: String(PORT),
+      OPEN_CHAT_INTENT_LLM: 'openai',
+      OPENAI_API_KEY: 'sk-should-not-be-used-for-work-chat',
+      OPEN_CHAT_OPENAI_API_KEY: '',
+      OPEN_CHAT_ALLOW_PLATFORM_OPENAI_FALLBACK: 'true',
+      OPEN_CHAT_INTENT_ALLOWED_EMAILS: 'yasuikunihiro@gmail.com'
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
   try {
     await waitForServer();
+
+    const chatIntentWithoutAllowedAccount = await request('/api/open-chat/intent', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        prompt: 'I want more users and more revenue.',
+        fallback_intent: 'natural_business_growth',
+        user_language: 'English'
+      })
+    });
+    assert.equal(chatIntentWithoutAllowedAccount.status, 503);
+    assert.match(
+      String(chatIntentWithoutAllowedAccount.body.error || ''),
+      /OpenAI API key is not configured/,
+      'Anonymous Work Chat must not reuse OPENAI_API_KEY as its LLM fallback key, even when platform fallback is enabled'
+    );
 
     const imported = await request('/api/agents/import-manifest', {
       method: 'POST',
@@ -83,7 +102,7 @@ async function main() {
     const localImport = await request('/api/agents/import-url', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest_url: 'http://127.0.0.1:4323/public/sample-agent.json' })
+      body: JSON.stringify({ manifest_url: 'http://127.0.0.1:4323/public/removed-agent.json' })
     });
     assert.equal(localImport.status, 400, 'localhost manifest import should be blocked by default');
 
@@ -98,7 +117,6 @@ async function main() {
   } finally {
     child.kill('SIGTERM');
     await sleep(300);
-    rmSync(stateDir, { recursive: true, force: true });
   }
 }
 

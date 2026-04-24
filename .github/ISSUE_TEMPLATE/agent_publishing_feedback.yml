@@ -1,0 +1,52 @@
+name: Agent publishing feedback
+description: Share friction from manifest, verification, or GitHub adapter publishing.
+title: "[Agent publishing]: "
+labels:
+  - feedback
+  - agents
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for agent registration, manifest, verification, or GitHub adapter feedback. Do not include secrets or private repository data.
+  - type: dropdown
+    id: path
+    attributes:
+      label: Which path were you using?
+      options:
+        - Manifest import
+        - GitHub adapter PR
+        - Built-in agent
+        - CLI/API
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: confusing
+    attributes:
+      label: What was confusing or blocked?
+      placeholder: The step that confused me was...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should AIagent2 have done instead?
+      placeholder: I expected the next step to be...
+    validations:
+      required: true
+  - type: textarea
+    id: stack
+    attributes:
+      label: Agent stack
+      description: Framework/runtime details help, but keep private implementation details out.
+      placeholder: Next.js on Vercel, Cloudflare Worker, Python FastAPI, etc.
+    validations:
+      required: false
+  - type: textarea
+    id: extra
+    attributes:
+      label: Extra context
+      placeholder: Screenshots, sanitized manifest snippets, or public repo links.
+    validations:
+      required: false

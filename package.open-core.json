@@ -1,0 +1,42 @@
+{
+  "name": "aiagent2-core",
+  "version": "0.2.0",
+  "description": "Open-core mirror for AIagent2: manifests, verification, hosted adapters, public UI, and CLI/API docs.",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://aiagent2.net",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kyasui-dotcom/aiagent2-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kyasui-dotcom/aiagent2-core/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "agent-runtime",
+    "developer-tools",
+    "open-core",
+    "cloudflare-workers",
+    "manifest",
+    "verification",
+    "cli",
+    "api"
+  ],
+  "scripts": {
+    "help": "node scripts/help.mjs",
+    "help:cli": "node scripts/help.mjs cli",
+    "help:qa": "node scripts/help.mjs qa",
+    "seo:build": "node scripts/generate-seo-pages.mjs",
+    "open-core:export": "node scripts/export-open-core.mjs",
+    "qa:docs": "node scripts/docs-qa.mjs",
+    "qa:seo": "node scripts/seo-qa.mjs",
+    "qa:manifest-validation": "node scripts/manifest-validation-qa.mjs",
+    "qa:manifest-draft": "node scripts/manifest-draft-qa.mjs",
+    "qa:github-adapter": "node scripts/github-adapter-qa.mjs",
+    "qa:open-core": "node scripts/open-core-qa.mjs",
+    "qa:ui": "node scripts/ui-qa.mjs",
+    "qa:all": "npm run qa:docs && npm run qa:seo && npm run qa:manifest-validation && npm run qa:manifest-draft && npm run qa:github-adapter && npm run qa:open-core && npm run qa:ui"
+  }
+}
