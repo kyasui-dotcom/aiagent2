@@ -56,6 +56,9 @@ const WORK_CHAT_INTERNAL_STATUS_VISIBLE = false;
 const TEMPORARY_INVOICE_BILLING_ENABLED = false;
 const STRIPE_CARD_SETUP_DURING_TEMPORARY_BILLING_ENABLED = true;
 const TEMPORARY_INVOICE_SUPPORT_EMAIL = 'support@aiagent-marketplace.net';
+const ORDER_HISTORY_BACKFILL_RETRY_MS = 30 * 1000;
+const orderHistoryBackfillInFlight = new Set();
+const orderHistoryBackfillFailedAt = new Map();
 
 function appSettingValue(key = '', fallback = '') {
   const safeKey = String(key || '').trim();
@@ -1602,6 +1605,69 @@ function mergeProgressJobIntoSnapshot(job = {}) {
 
 function isTerminalOrderStatus(status = '') {
   return ['completed', 'failed', 'timed_out'].includes(normalizeOrderProgressStatus(status));
+}
+
+function trackedOrderIdsForHistory() {
+  const ids = new Set();
+  const remember = (value = '') => {
+    const safeValue = String(value || '').trim();
+    if (safeValue) ids.add(safeValue);
+  };
+  const rememberMessages = (messages = []) => {
+    (Array.isArray(messages) ? messages : []).forEach((message) => {
+      remember(message?.orderProgressId || '');
+    });
+  };
+  rememberMessages(state.orderChatMessages);
+  readOpenChatSessions().forEach((session) => {
+    remember(session?.linkedOrderId || '');
+    (Array.isArray(session?.activeJobIds) ? session.activeJobIds : []).forEach((jobId) => remember(jobId));
+    rememberMessages(session?.messages || []);
+  });
+  return [...ids];
+}
+
+function shouldRetryOrderHistoryBackfill(orderId = '') {
+  const safeOrderId = String(orderId || '').trim();
+  if (!safeOrderId || orderHistoryBackfillInFlight.has(safeOrderId)) return false;
+  const failedAt = Number(orderHistoryBackfillFailedAt.get(safeOrderId) || 0);
+  return !failedAt || (Date.now() - failedAt) >= ORDER_HISTORY_BACKFILL_RETRY_MS;
+}
+
+async function backfillTrackedJobsIntoSnapshot(snapshot = state.snapshot || {}) {
+  if (!state.snapshot) return 0;
+  const knownJobIds = new Set(
+    (Array.isArray(snapshot?.jobs) ? snapshot.jobs : [])
+      .map((job) => String(job?.id || '').trim())
+      .filter(Boolean)
+  );
+  const missingTrackedIds = trackedOrderIdsForHistory()
+    .filter((jobId) => !knownJobIds.has(jobId))
+    .filter((jobId) => shouldRetryOrderHistoryBackfill(jobId));
+  if (!missingTrackedIds.length) return 0;
+  let restored = 0;
+  await Promise.all(missingTrackedIds.map(async (jobId) => {
+    orderHistoryBackfillInFlight.add(jobId);
+    try {
+      const response = await api(`/api/jobs/${encodeURIComponent(jobId)}?visitor_id=${encodeURIComponent(visitorId())}`, {
+        preserveAuthOn401: true
+      });
+      const job = response?.job && typeof response.job === 'object'
+        ? { ...response.job, id: response.job.id || jobId }
+        : { ...(response || {}), id: response?.id || jobId };
+      if (job?.id) {
+        orderHistoryBackfillFailedAt.delete(jobId);
+        mergeProgressJobIntoSnapshot(job);
+        restored += 1;
+      }
+    } catch {
+      orderHistoryBackfillFailedAt.set(jobId, Date.now());
+    } finally {
+      orderHistoryBackfillInFlight.delete(jobId);
+    }
+  }));
+  if (restored) syncOpenChatTrackedJobsFromSnapshot(state.snapshot || snapshot);
+  return restored;
 }
 
 function syncOpenChatTrackedJobsFromSnapshot(snapshot = state.snapshot || {}) {
@@ -3544,6 +3610,7 @@ function loadOpenChatSession(sessionId = '') {
   renderOrderComposer();
   const statusParts = String(state.openChatLastStatus || '').split(/\n\n+/);
   updateWorkChatStatusCard(statusParts.shift() || 'Chat session loaded.', statusParts.join('\n\n') || 'Continue from the restored context.', state.openChatLastStatusTone);
+  void backfillTrackedJobsIntoSnapshot(state.snapshot || {});
   scheduleLiveSnapshotRefresh(state.snapshot || {});
   flash('Chat session loaded.', 'ok');
 }
@@ -22028,6 +22095,7 @@ async function refresh() {
   }
   render(snapshot);
   syncOpenChatTrackedJobsFromSnapshot(snapshot);
+  await backfillTrackedJobsIntoSnapshot(snapshot);
   scheduleLiveSnapshotRefresh(snapshot);
   await maybeAutoLoadRepos(snapshot.auth);
 }
