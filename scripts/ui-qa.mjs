@@ -1,24 +1,29 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const htmlPath = new URL('../public/index.html', import.meta.url);
 const loginHtmlPath = new URL('../public/login.html', import.meta.url);
 const jsPath = new URL('../public/client.js', import.meta.url);
 const loginJsPath = new URL('../public/login.js', import.meta.url);
+const analyticsLoaderPath = new URL('../public/analytics-loader.js', import.meta.url);
 const cssPath = new URL('../public/styles.css', import.meta.url);
 const headersPath = new URL('../public/_headers', import.meta.url);
 
 execFileSync(process.execPath, ['--check', fileURLToPath(jsPath)], { stdio: 'pipe' });
 execFileSync(process.execPath, ['--check', fileURLToPath(loginJsPath)], { stdio: 'pipe' });
+execFileSync(process.execPath, ['--check', fileURLToPath(analyticsLoaderPath)], { stdio: 'pipe' });
 
 const html = readFileSync(htmlPath, 'utf8');
 const js = readFileSync(jsPath, 'utf8');
 const loginHtml = readFileSync(loginHtmlPath, 'utf8');
 const loginJs = readFileSync(loginJsPath, 'utf8');
+const analyticsLoader = readFileSync(analyticsLoaderPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
 const headers = readFileSync(headersPath, 'utf8');
+const htmlFiles = readdirSync(fileURLToPath(new URL('../public/', import.meta.url)))
+  .filter((name) => name.endsWith('.html'));
 
 assert.ok(html.includes('START HERE'));
 assert.ok(!html.includes('Connect GitHub, register an agent, then run work.'));
@@ -54,6 +59,15 @@ assert.ok(loginHtml.includes('<div class="section-title">LOGIN</div>'));
 assert.ok(loginHtml.includes('id="loginGoogleBtn"'));
 assert.ok(loginHtml.includes('id="loginGithubBtn"'));
 assert.ok(loginHtml.includes('email magic link is the low-risk next step'));
+assert.ok(html.includes('/analytics-loader.js?v=20260425a'));
+assert.ok(loginHtml.includes('/analytics-loader.js?v=20260425a'));
+assert.equal(htmlFiles.length, 29);
+for (const file of htmlFiles) {
+  const source = readFileSync(fileURLToPath(new URL(`../public/${file}`, import.meta.url)), 'utf8');
+  assert.ok(source.includes('/analytics-loader.js?v=20260425a'), `${file} should include analytics loader`);
+}
+assert.ok(analyticsLoader.includes("const ANALYTICS_ID = 'G-CDHM437KEX';"));
+assert.ok(analyticsLoader.includes('window.__aiagent2AnalyticsLoaded'));
 assert.ok(loginJs.includes("const base = provider === 'github' ? '/auth/github' : '/auth/google';"));
 assert.ok(loginJs.includes("url.searchParams.set('visitor_id', visitorId());"));
 assert.ok(loginJs.includes("await track('sign_in_required_shown'"));

@@ -11952,6 +11952,7 @@ export default {
         '/styles.css',
         '/client.js',
         '/login.js',
+        '/analytics-loader.js',
         '/delivery-action-contract.js',
         '/work-action-registry.js',
         '/work-intent-resolver.js'

@@ -1558,6 +1558,8 @@ const runtimeCompletedLogins = new Set();
 
 function initAnalytics() {
   if (!ANALYTICS_ID || !/^https?:$/.test(window.location.protocol)) return;
+  if (window.__aiagent2AnalyticsLoaded) return;
+  window.__aiagent2AnalyticsLoaded = true;
   window.dataLayer = window.dataLayer || [];
   window.gtag = window.gtag || function gtag() { window.dataLayer.push(arguments); };
   const script = document.createElement('script');
