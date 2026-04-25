@@ -463,6 +463,12 @@ const els = {
   adminAgentsTable: $('adminAgentsTable'),
   adminFeedbackTable: $('adminFeedbackTable'),
   adminEventsTable: $('adminEventsTable'),
+  adminAccountsPager: $('adminAccountsPager'),
+  adminOrdersPager: $('adminOrdersPager'),
+  adminChatPager: $('adminChatPager'),
+  adminAgentsPager: $('adminAgentsPager'),
+  adminFeedbackPager: $('adminFeedbackPager'),
+  adminEventsPager: $('adminEventsPager'),
   depositModal: $('depositModal'),
   depositModalAmount: $('depositModalAmount'),
   depositModalSummary: $('depositModalSummary'),
@@ -629,6 +635,14 @@ const state = {
   agentTaskFilter: '',
   agentSort: 'readiness',
   adminChatFilter: 'all',
+  adminPages: {
+    accounts: 0,
+    orders: 0,
+    chats: 0,
+    agents: 0,
+    reports: 0,
+    events: 0
+  },
   agentOnboarding: {},
   onboardingLoading: {},
   routeAgentId: '',
@@ -14964,6 +14978,71 @@ function renderAdminRows(container, gridClass, headers = [], rows = [], emptyTex
   });
 }
 
+const ADMIN_PAGE_SIZES = {
+  accounts: 80,
+  orders: 80,
+  chats: 80,
+  agents: 80,
+  reports: 80,
+  events: 100
+};
+
+function adminPageSize(kind = '') {
+  return Number(ADMIN_PAGE_SIZES[kind] || 80);
+}
+
+function adminPageIndex(kind = '') {
+  const raw = Number(state.adminPages?.[kind] || 0);
+  return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 0;
+}
+
+function paginateAdminItems(kind = '', items = []) {
+  const source = Array.isArray(items) ? items : [];
+  const pageSize = adminPageSize(kind);
+  const totalItems = source.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const currentPage = Math.min(adminPageIndex(kind), Math.max(0, totalPages - 1));
+  if (!state.adminPages || typeof state.adminPages !== 'object') state.adminPages = {};
+  state.adminPages[kind] = currentPage;
+  const start = currentPage * pageSize;
+  const visibleItems = source.slice(start, start + pageSize);
+  return {
+    items: visibleItems,
+    start,
+    end: start + visibleItems.length,
+    pageSize,
+    currentPage,
+    totalItems,
+    totalPages
+  };
+}
+
+function renderAdminPager(container, kind = '', page = null) {
+  if (!container) return;
+  const data = page && typeof page === 'object' ? page : paginateAdminItems(kind, []);
+  if (!data.totalItems) {
+    container.hidden = true;
+    container.innerHTML = '';
+    return;
+  }
+  container.hidden = false;
+  container.innerHTML = [
+    `<span class="admin-pager-summary">${escapeHtml(`${data.start + 1}-${data.end} of ${data.totalItems} · page ${data.currentPage + 1}/${data.totalPages}`)}</span>`,
+    '<div class="helper-row">',
+    `<button type="button" class="mini-btn" data-admin-page-kind="${escapeHtml(kind)}" data-admin-page-direction="prev"${data.currentPage <= 0 ? ' disabled' : ''}>PREV</button>`,
+    `<button type="button" class="mini-btn" data-admin-page-kind="${escapeHtml(kind)}" data-admin-page-direction="next"${data.currentPage >= data.totalPages - 1 ? ' disabled' : ''}>NEXT</button>`,
+    '</div>'
+  ].join('');
+  [...container.querySelectorAll('[data-admin-page-kind]')].forEach((button) => {
+    button.onclick = () => {
+      const direction = button.dataset.adminPageDirection || 'next';
+      const delta = direction === 'prev' ? -1 : 1;
+      state.adminPages[kind] = Math.max(0, adminPageIndex(kind) + delta);
+      renderAdminDashboard(state.snapshot?.adminDashboard || null, state.snapshot?.auth || {});
+    };
+  });
+}
+
 const ADMIN_CHAT_FILTERS = {
   needsReview: (chat) => chat?.adminSegment !== 'mine' && chat?.handlingStatus === 'needs_review',
   handled: (chat) => chat?.adminSegment !== 'mine' && chat?.handlingStatus !== 'needs_review',
@@ -15018,6 +15097,7 @@ function adminChatHandlingClass(chat = {}) {
 
 function setAdminChatFilter(filter = 'all') {
   state.adminChatFilter = ADMIN_CHAT_FILTERS[filter] ? filter : 'all';
+  state.adminPages.chats = 0;
   renderAdminDashboard(state.snapshot?.adminDashboard || null, state.snapshot?.auth || {});
 }
 
@@ -15030,6 +15110,11 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
     safeText(els.adminChatSegmentationCard, 'Admin access required.');
     [els.adminAccountsTable, els.adminOrdersTable, els.adminChatTable, els.adminAgentsTable, els.adminFeedbackTable, els.adminEventsTable].forEach((node) => {
       if (node) node.innerHTML = '<div class="empty">Admin access required.</div>';
+    });
+    [els.adminAccountsPager, els.adminOrdersPager, els.adminChatPager, els.adminAgentsPager, els.adminFeedbackPager, els.adminEventsPager].forEach((node) => {
+      if (!node) return;
+      node.hidden = true;
+      node.innerHTML = '';
     });
     safeText(els.adminAccountsMetric, '0');
     safeText(els.adminChatsMetric, '0');
@@ -15075,7 +15160,8 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
   renderAdminChatFilterButtons(dashboard);
 
   const accounts = dashboard.accounts || [];
-  renderAdminRows(els.adminAccountsTable, 'admin-accounts-grid', ['LOGIN', 'AUTH', 'BALANCE', 'UPDATED'], accounts.slice(0, 80).map((account, index) => ({
+  const pagedAccounts = paginateAdminItems('accounts', accounts.map((account, index) => ({ account, index })));
+  renderAdminRows(els.adminAccountsTable, 'admin-accounts-grid', ['LOGIN', 'AUTH', 'BALANCE', 'UPDATED'], pagedAccounts.items.map(({ account, index }) => ({
     kind: 'accounts',
     index,
     cells: [
@@ -15085,9 +15171,11 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
       `${sinceLabel(account.updatedAt || account.createdAt)}<div class="row-muted">${escapeHtml(formatTime(account.createdAt))} · provider retry ${escapeHtml(String(account.providerMonthlyRetryCount || 0))}${account.providerMonthlyLastNotificationPeriod ? ` · notified ${escapeHtml(account.providerMonthlyLastNotificationPeriod)}` : ''}</div>`
     ]
   })), 'No member registrations yet.');
+  renderAdminPager(els.adminAccountsPager, 'accounts', pagedAccounts);
 
   const orders = dashboard.orders || [];
-  renderAdminRows(els.adminOrdersTable, 'admin-orders-grid', ['ORDER', 'REQUESTER', 'STATUS', 'COST'], orders.slice(0, 80).map((job, index) => ({
+  const pagedOrders = paginateAdminItems('orders', orders.map((job, index) => ({ job, index })));
+  renderAdminRows(els.adminOrdersTable, 'admin-orders-grid', ['ORDER', 'REQUESTER', 'STATUS', 'COST'], pagedOrders.items.map(({ job, index }) => ({
     kind: 'orders',
     index,
     cells: [
@@ -15097,14 +15185,15 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
       `${job.actualBilling ? yen(job.actualBilling.total || 0) : '-'}<div class="row-muted">platform ${job.actualBilling ? yen(job.actualBilling.platformRevenue || 0) : '-'}</div>`
     ]
   })), 'No orders yet.');
+  renderAdminPager(els.adminOrdersPager, 'orders', pagedOrders);
 
   const chats = dashboard.chats || [];
   const chatFilter = activeAdminChatFilter();
-  const chatRows = chats
+  const allChatRows = chats
     .map((chat, index) => ({ chat, index }))
-    .filter(({ chat }) => ADMIN_CHAT_FILTERS[chatFilter](chat))
-    .slice(0, 80);
-  renderAdminRows(els.adminChatTable, 'admin-chat-grid', ['TIME', 'USER INPUT', 'ANSWER', 'HANDLING'], chatRows.map(({ chat, index }) => ({
+    .filter(({ chat }) => ADMIN_CHAT_FILTERS[chatFilter](chat));
+  const pagedChats = paginateAdminItems('chats', allChatRows);
+  renderAdminRows(els.adminChatTable, 'admin-chat-grid', ['TIME', 'USER INPUT', 'ANSWER', 'HANDLING'], pagedChats.items.map(({ chat, index }) => ({
     kind: 'chats',
     index,
     cells: [
@@ -15114,9 +15203,11 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
       `<span class="status-pill ${adminChatHandlingClass(chat)}">${escapeHtml(String(chat.handlingLabel || chat.handlingStatus || 'needs_review').toUpperCase())}</span><div class="row-muted">review ${escapeHtml(chat.latestReviewStatus || chat.reviewStatus || 'new')} · ${chat.redacted ? 'redacted' : 'plain'}</div>`
     ]
   })), chatFilter === 'needsReview' ? 'No chats currently need review.' : `No chat history for ${chatFilter}.`);
+  renderAdminPager(els.adminChatPager, 'chats', pagedChats);
 
   const agents = dashboard.agents || [];
-  renderAdminRows(els.adminAgentsTable, 'admin-agents-grid', ['AGENT', 'OWNER', 'STATUS', 'PRICING'], agents.slice(0, 80).map((agent, index) => ({
+  const pagedAgents = paginateAdminItems('agents', agents.map((agent, index) => ({ agent, index })));
+  renderAdminRows(els.adminAgentsTable, 'admin-agents-grid', ['AGENT', 'OWNER', 'STATUS', 'PRICING'], pagedAgents.items.map(({ agent, index }) => ({
     kind: 'agents',
     index,
     cells: [
@@ -15126,9 +15217,11 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
       `${formatPercent(agent.providerMarkupRate || 0)}<div class="row-muted">margin ${formatPercent(agent.platformMarginRate || 0)}</div>`
     ]
   })), 'No agents yet.');
+  renderAdminPager(els.adminAgentsPager, 'agents', pagedAgents);
 
   const reports = dashboard.reports || [];
-  renderAdminRows(els.adminFeedbackTable, 'admin-feedback-grid', ['REPORT', 'REPORTER', 'STATUS', 'TIME'], reports.slice(0, 80).map((report, index) => ({
+  const pagedReports = paginateAdminItems('reports', reports.map((report, index) => ({ report, index })));
+  renderAdminRows(els.adminFeedbackTable, 'admin-feedback-grid', ['REPORT', 'REPORTER', 'STATUS', 'TIME'], pagedReports.items.map(({ report, index }) => ({
     kind: 'reports',
     index,
     cells: [
@@ -15138,9 +15231,11 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
       `${sinceLabel(report.createdAt)}<div class="row-muted">${escapeHtml(formatTime(report.createdAt))}</div>`
     ]
   })), 'No report issues yet.');
+  renderAdminPager(els.adminFeedbackPager, 'reports', pagedReports);
 
   const events = dashboard.events || [];
-  renderAdminRows(els.adminEventsTable, 'admin-events-grid', ['TIME', 'TYPE', 'MESSAGE'], events.slice(0, 100).map((event, index) => ({
+  const pagedEvents = paginateAdminItems('events', events.map((event, index) => ({ event, index })));
+  renderAdminRows(els.adminEventsTable, 'admin-events-grid', ['TIME', 'TYPE', 'MESSAGE'], pagedEvents.items.map(({ event, index }) => ({
     kind: 'events',
     index,
     cells: [
@@ -15149,6 +15244,7 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
       `${escapeHtml(event.message || '-')}<div class="row-muted">${escapeHtml(JSON.stringify(event.meta || {}).slice(0, 90))}</div>`
     ]
   })), 'No system events yet.');
+  renderAdminPager(els.adminEventsPager, 'events', pagedEvents);
 
   if (!String(els.adminDetail?.textContent || '').trim() || els.adminDetail.textContent === 'Admin access required.') {
     setAdminDetail('ADMIN SUMMARY', {

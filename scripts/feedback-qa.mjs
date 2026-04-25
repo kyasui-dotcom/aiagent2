@@ -145,7 +145,7 @@ try {
   assert.equal(adminDashboard.summary.chats.guestUnknown, 621);
   assert.equal(adminDashboard.chatHandling.handledNonMine, 1);
   assert.equal(adminDashboard.chatHandling.needsReviewNonMine, 620);
-  assert.equal(adminDashboard.chats.length, 300);
+  assert.equal(adminDashboard.chats.length, 622);
   assert.equal(adminDashboard.chats[0].sessionId, 'member_session_1');
   assert.equal(adminDashboard.chats[0].turnCount, 2);
   assert.equal(adminDashboard.chats[1].sessionId, 'guest_session_1');
@@ -217,10 +217,10 @@ try {
   assert.equal(dashboardCountSummary.summary.reports.open, 10);
   assert.equal(dashboardCountSummary.summary.reports.reviewing, 10);
   assert.equal(dashboardCountSummary.summary.reports.resolved, 500);
-  assert.equal(dashboardCountSummary.accounts.length, 200);
-  assert.equal(dashboardCountSummary.agents.length, 300);
-  assert.equal(dashboardCountSummary.orders.length, 300);
-  assert.equal(dashboardCountSummary.reports.length, 300);
+  assert.equal(dashboardCountSummary.accounts.length, 240);
+  assert.equal(dashboardCountSummary.agents.length, 360);
+  assert.equal(dashboardCountSummary.orders.length, 410);
+  assert.equal(dashboardCountSummary.reports.length, 520);
 
   console.log('feedback qa passed');
 } finally {
