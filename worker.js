@@ -9588,8 +9588,8 @@ async function dispatchExistingJobToAssignedAgent(storage, env, jobId, agentId) 
     }
     if (job.workflowParentId) {
       await reconcileWorkflowParent(storage, job.workflowParentId);
-      const completedLeader = final.mode === 'completed' && isWorkflowLeaderTask(workflowTaskName(final.job || job));
-      if (completedLeader) {
+      if (final.mode === 'completed') {
+        await refreshWorkflowLeaderHandoffForJobId(storage, job.workflowParentId);
         await scheduleProgressDispatchesForJobId(storage, env, null, job.workflowParentId, 'leader workflow handoff', {
           maxTargets: 8,
           awaitDispatch: true
@@ -9606,7 +9606,7 @@ async function dispatchExistingJobToAssignedAgent(storage, env, jobId, agentId) 
   }
 }
 
-function canAutoScheduleBuiltInDispatch(job, agent) {
+function canAutoScheduleAsyncDispatch(job, agent) {
   if (!job || !agent) return false;
   const status = String(job.status || '').toLowerCase();
   if (status !== 'queued') {
@@ -9618,7 +9618,7 @@ function canAutoScheduleBuiltInDispatch(job, agent) {
   }
   if (!job.assignedAgentId || job.assignedAgentId !== agent.id) return false;
   if (!resolveAgentJobEndpoint(agent)) return false;
-  return Boolean(sampleKindFromAgent(agent));
+  return true;
 }
 
 function workflowTaskName(job = {}) {
@@ -9905,7 +9905,7 @@ function pickProgressDispatchTargets(state, jobId, options = {}) {
     const pendingLeader = leaderChildren.find((child) => !workflowChildIsTerminal(child) && String(child.status || '').toLowerCase() !== 'blocked');
     if (pendingLeader) {
       const agent = state.agents.find((item) => item.id === pendingLeader.assignedAgentId);
-      if (canAutoScheduleBuiltInDispatch(pendingLeader, agent)) {
+      if (canAutoScheduleAsyncDispatch(pendingLeader, agent)) {
         return [{ job: pendingLeader, agent, parentJobId: parentOrJob.id, workflowLeaderHandoff: null }];
       }
       return [];
@@ -9924,7 +9924,7 @@ function pickProgressDispatchTargets(state, jobId, options = {}) {
       const targetLayer = workflowDispatchLayer(parentOrJob, child);
       if (nextLayer !== null && targetLayer !== nextLayer) continue;
       const agent = state.agents.find((item) => item.id === child.assignedAgentId);
-      if (canAutoScheduleBuiltInDispatch(child, agent)) {
+      if (canAutoScheduleAsyncDispatch(child, agent)) {
         const handoff = workflowLeaderHandoff(parentOrJob, leader, children, targetLayer);
         targets.push({ job: child, agent, parentJobId: parentOrJob.id, workflowLeaderHandoff: handoff });
         if (targets.length >= maxTargets) break;
@@ -9933,7 +9933,7 @@ function pickProgressDispatchTargets(state, jobId, options = {}) {
     return targets;
   }
   const agent = state.agents.find((item) => item.id === parentOrJob.assignedAgentId);
-  if (!canAutoScheduleBuiltInDispatch(parentOrJob, agent)) return [];
+  if (!canAutoScheduleAsyncDispatch(parentOrJob, agent)) return [];
   if (dispatchScheduleIsFresh(parentOrJob, now)) return [];
   return [{ job: parentOrJob, agent, parentJobId: parentOrJob.workflowParentId || null, workflowLeaderHandoff: null }];
 }
@@ -10158,7 +10158,7 @@ async function markDispatchScheduled(storage, jobId, agentId, reason = 'dispatch
   return storage.mutate(async (state) => {
     const job = state.jobs.find((item) => item.id === jobId);
     const agent = state.agents.find((item) => item.id === agentId);
-    if (!canAutoScheduleBuiltInDispatch(job, agent)) {
+    if (!canAutoScheduleAsyncDispatch(job, agent)) {
       return { scheduled: false, reason: 'not_eligible', job: cloneJob(job), agent: agent ? publicAgent(agent) : null };
     }
     if (dispatchScheduleIsFresh(job)) {
@@ -11821,6 +11821,7 @@ async function handleGetJob(storage, request, env, jobId, ctx = null) {
   let job = state.jobs.find((item) => item.id === jobId);
   if (!job || !canViewJobFromRequest(state, current, env, job, request)) return json({ error: 'Job not found' }, 404);
   if (job.jobKind === 'workflow') {
+    await refreshWorkflowLeaderHandoffForJobId(storage, job.id);
     await reconcileWorkflowParent(storage, job.id);
     state = await storage.getState();
     job = state.jobs.find((item) => item.id === jobId) || job;

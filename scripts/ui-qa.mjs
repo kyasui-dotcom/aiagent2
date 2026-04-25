@@ -173,6 +173,10 @@ assert.ok(js.includes("handled: (chat) => chat?.adminSegment !== 'mine' && chat?
 assert.ok(js.includes('Chat sessions 24h / 7d / total'));
 assert.ok(js.includes('Chat turns total'));
 assert.ok(js.includes("setTabVisible('admin', Boolean(auth.isPlatformAdmin))"));
+assert.ok(js.includes('Order accepted. Execution has not started yet.'));
+assert.ok(js.includes('This status changes to running after the first agent actually starts.'));
+assert.ok(js.includes('Progress check stopped. This session could not verify the order.'));
+assert.ok(js.includes('Reload WORK. If it still fails, sign in again and recheck the order.'));
 assert.ok(js.includes('function setOrderStrategyChoice'));
 assert.ok(js.includes('function renderOrderStrategyControls'));
 assert.ok(js.includes("els.executionAutoBtn.onclick = () => setOrderStrategyChoice('auto')"));

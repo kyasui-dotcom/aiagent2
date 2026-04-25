@@ -1317,6 +1317,7 @@ try {
   assert.equal(providerSoftX.body.agent.verificationStatus, 'verified');
   const providerSoftXId = providerSoftX.body.agent.id;
 
+  const providerWorkflowWaits = [];
   const providerWorkflow = await request('/api/jobs', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -1328,13 +1329,19 @@ try {
       skip_intake: true,
       budget_cap: 500
     })
-  });
+  }, { waitUntilPromises: providerWorkflowWaits });
   assert.equal(providerWorkflow.status, 201);
   assert.equal(providerWorkflow.body.mode, 'workflow');
-  const providerWorkflowState = await request(`/api/jobs/${providerWorkflow.body.workflow_job_id}`);
+  await Promise.allSettled(providerWorkflowWaits);
+  const providerWorkflowPollWaits = [];
+  const providerWorkflowState = await request(`/api/jobs/${providerWorkflow.body.workflow_job_id}`, {}, { waitUntilPromises: providerWorkflowPollWaits });
+  await Promise.allSettled(providerWorkflowPollWaits);
+  const providerWorkflowSettled = await request(`/api/jobs/${providerWorkflow.body.workflow_job_id}`);
   assert.equal(providerWorkflowState.status, 200);
-  const providerChildRuns = Array.isArray(providerWorkflowState.body.job.workflow?.childRuns)
-    ? providerWorkflowState.body.job.workflow.childRuns
+  assert.equal(providerWorkflowSettled.status, 200);
+  assert.equal(providerWorkflowSettled.body.job.status, 'completed', 'provider-backed workflow parent should finish after phase handoffs and async dispatch');
+  const providerChildRuns = Array.isArray(providerWorkflowSettled.body.job.workflow?.childRuns)
+    ? providerWorkflowSettled.body.job.workflow.childRuns
     : [];
   assert.ok(
     providerChildRuns.some((run) => run.taskType === 'cmo_leader' && run.agentId === providerSoftLeaderId && run.dispatchTaskType === 'cmo'),

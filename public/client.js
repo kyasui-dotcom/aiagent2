@@ -1231,6 +1231,21 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
       ja ? '原因を確認してから再送してください。' : 'Review the cause before retrying.'
     ].filter(Boolean).join('\n');
   }
+  if (status === 'queued' || status === 'created') {
+    return [
+      ja
+        ? 'オーダーは受付済みです。まだ実行は始まっていません。'
+        : 'Order accepted. Execution has not started yet.',
+      '',
+      `Order ID: ${job.id || 'unknown'}`,
+      ja ? `状態: ${status}` : `Status: ${status}`,
+      ja ? `接続先: ${route}` : `Route: ${route}`,
+      childLine,
+      ja
+        ? '最初のエージェントが動き出したら、この表示を実行中に更新します。'
+        : 'This status changes to running after the first agent actually starts.'
+    ].filter(Boolean).join('\n');
+  }
   return [
     ja ? 'オーダーは進行中です。' : 'Order is in progress.',
     '',
@@ -1513,8 +1528,30 @@ async function pollOpenChatOrderProgress(orderId = '', options = {}) {
       state.openChatProgressOrderId = '';
       return;
     }
-  } catch {
-    if (state.openChatProgressPollCount >= 3) {
+  } catch (error) {
+    const status = Number(error?.status || 0);
+    if (status === 401 || status === 404 || state.openChatProgressPollCount >= 3) {
+      const stalledBody = [
+        options.ja
+          ? '進捗確認を中断しました。現在のセッションではこのオーダーを確認できません。'
+          : 'Progress check stopped. This session could not verify the order.',
+        '',
+        `Order ID: ${safeOrderId}`,
+        options.ja ? '状態: attention' : 'Status: attention',
+        error?.message
+          ? (options.ja ? `理由: ${String(error.message).slice(0, 240)}` : `Reason: ${String(error.message).slice(0, 240)}`)
+          : '',
+        options.ja
+          ? 'WORK を再読込してください。直らなければログインし直して再確認してください。'
+          : 'Reload WORK. If it still fails, sign in again and recheck the order.'
+      ].filter(Boolean).join('\n');
+      upsertOpenChatOrderProgressMessage(safeOrderId, stalledBody, {
+        status: 'attention',
+        tone: 'warn',
+        ja: options.ja,
+        progressMeta: null,
+        label: PRODUCT_SHORT_NAME
+      });
       state.openChatProgressOrderId = '';
       return;
     }
