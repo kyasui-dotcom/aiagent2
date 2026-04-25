@@ -236,7 +236,7 @@ assert.ok(asyncWorkflowTaskOrder.indexOf('teardown') < asyncWorkflowTaskOrder.in
 assert.ok(asyncWorkflowTaskOrder.indexOf('data_analysis') < asyncWorkflowTaskOrder.indexOf('growth'), 'CMO data layer should precede growth layer');
 assert.ok(asyncWorkflowFirstState.body.job.workflow.statusCounts.completed >= 2, 'leader handoff should release eligible built-in specialists after the leader completes');
 
-const qaStorage = createD1LikeStorage(env.MY_BINDING, { allowInMemory: true });
+const qaStorage = createD1LikeStorage(env.MY_BINDING, { allowInMemory: true, stateCacheTtlMs: 0 });
 const asyncRawState = await qaStorage.getState();
 const asyncCheckpointLeader = asyncRawState.jobs.find((job) => (
   job.workflowParentId === asyncWorkflow.body.workflow_job_id
