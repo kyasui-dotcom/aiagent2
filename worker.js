@@ -52,7 +52,10 @@ function runtimeStorage(env) {
   const appVersion = String(env?.APP_VERSION || '').trim().toLowerCase();
   const isExplicitTestRuntime = appVersion.includes('test') || String(env?.NODE_ENV || '').trim().toLowerCase() === 'test';
   const allowInMemory = isExplicitTestRuntime && String(env?.ALLOW_IN_MEMORY_STORAGE || '').trim() === '1';
-  return createD1LikeStorage(env.MY_BINDING || env.DB || null, { allowInMemory });
+  return createD1LikeStorage(env.MY_BINDING || env.DB || null, {
+    allowInMemory,
+    stateCacheTtlMs: isExplicitTestRuntime ? 0 : undefined
+  });
 }
 
 const SECURITY_HEADERS = {

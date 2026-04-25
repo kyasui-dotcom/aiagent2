@@ -19,7 +19,7 @@ const env = {
   }
 };
 
-const storage = createD1LikeStorage(env.MY_BINDING, { allowInMemory: true });
+const storage = createD1LikeStorage(env.MY_BINDING, { allowInMemory: true, stateCacheTtlMs: 0 });
 const user = { login: 'recurring-user', name: 'Recurring User', email: 'recurring@example.com' };
 let orderToken = '';
 
