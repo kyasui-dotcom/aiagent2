@@ -628,7 +628,7 @@ const state = {
   agentActionFilter: '',
   agentTaskFilter: '',
   agentSort: 'readiness',
-  adminChatFilter: 'needsReview',
+  adminChatFilter: 'all',
   agentOnboarding: {},
   onboardingLoading: {},
   routeAgentId: '',
@@ -14957,7 +14957,7 @@ const ADMIN_CHAT_FILTERS = {
 };
 
 function activeAdminChatFilter() {
-  return ADMIN_CHAT_FILTERS[state.adminChatFilter] ? state.adminChatFilter : 'needsReview';
+  return ADMIN_CHAT_FILTERS[state.adminChatFilter] ? state.adminChatFilter : 'all';
 }
 
 function adminChatFilterCounts(dashboard = state.snapshot?.adminDashboard || null) {
@@ -14998,8 +14998,8 @@ function adminChatHandlingClass(chat = {}) {
   return 'info';
 }
 
-function setAdminChatFilter(filter = 'needsReview') {
-  state.adminChatFilter = ADMIN_CHAT_FILTERS[filter] ? filter : 'needsReview';
+function setAdminChatFilter(filter = 'all') {
+  state.adminChatFilter = ADMIN_CHAT_FILTERS[filter] ? filter : 'all';
   renderAdminDashboard(state.snapshot?.adminDashboard || null, state.snapshot?.auth || {});
 }
 
