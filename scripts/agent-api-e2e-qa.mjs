@@ -102,6 +102,17 @@ async function main() {
     assert.equal(pricingResult.body.agent.providerMarkupRate, 0.25);
     assert.equal(pricingResult.body.agent.metadata.manifest.pricing.provider_markup_rate, 0.25);
 
+    const excessivePricingResult = await request(`/api/agents/${agentId}/pricing`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${issued.apiKey.token}`
+      },
+      body: JSON.stringify({ provider_markup_rate: 1.2 })
+    });
+    assert.equal(excessivePricingResult.status, 400);
+    assert.equal(excessivePricingResult.body.error, 'provider_markup_rate must be a number between 0 and 1');
+
     const deleteResult = await request(`/api/agents/${agentId}`, {
       method: 'DELETE',
       headers: { authorization: `Bearer ${issued.apiKey.token}` }
@@ -125,6 +136,24 @@ async function main() {
       })
     });
     assert.equal(invalidOrderKeyOnAgentImport.status, 401);
+
+    const excessiveImportResult = await request('/api/agents/import-manifest', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${issued.apiKey.token}`
+      },
+      body: JSON.stringify({
+        manifest: {
+          schema_version: 'agent-manifest/v1',
+          name: 'markup_too_high',
+          task_types: ['research'],
+          pricing: { provider_markup_rate: 1.5, platform_margin_rate: 0.1 }
+        }
+      })
+    });
+    assert.equal(excessiveImportResult.status, 400);
+    assert.ok(String(excessiveImportResult.body.error || '').includes('provider_markup_rate must be a number between 0 and 1'));
 
     console.log('agent api e2e qa passed');
   } finally {

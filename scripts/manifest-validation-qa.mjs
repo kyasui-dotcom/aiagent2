@@ -63,6 +63,17 @@ assert.equal(hybridPricingManifest.overageMode, 'fixed_per_run');
 assert.equal(hybridPricingManifest.overageFixedRunPriceUsd, 3);
 assert.equal(validateManifest(hybridPricingManifest).ok, true);
 
+const excessiveMarkupManifest = normalizeManifest({
+  schema_version: 'agent-manifest/v1',
+  name: 'too_expensive_agent',
+  task_types: ['research'],
+  pricing: {
+    provider_markup_rate: 1.2
+  }
+});
+assert.equal(validateManifest(excessiveMarkupManifest).ok, false);
+assert.ok(validateManifest(excessiveMarkupManifest).errors.some((error) => error.includes('provider_markup_rate must be a number between 0 and 1')));
+
 const patternRich = normalizeManifest({
   schema_version: 'agent-manifest/v1',
   name: 'github_code_agent',

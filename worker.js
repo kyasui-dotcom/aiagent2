@@ -41,6 +41,7 @@ const SESSION_REFRESH_WINDOW_SEC = 7 * 24 * 60 * 60;
 const SESSION_REFRESH_MIN_INTERVAL_SEC = 6 * 60 * 60;
 const OAUTH_STATE_MAX_AGE_SEC = 10 * 60;
 const EMAIL_AUTH_MAX_AGE_SEC = 20 * 60;
+const MAX_PROVIDER_MARKUP_RATE = 1;
 const MAX_PENDING_OAUTH_STATES = 8;
 const SESSION_VERSION = 2;
 const APP_SHELL_ASSET_VERSION = '20260424c';
@@ -11036,8 +11037,8 @@ async function handleUpdateAgentPricing(storage, request, env, agentId) {
   const subscriptionMonthlyPriceUsd = nonNegativeUsdFromInput(body.subscription_monthly_price_usd, body.subscriptionMonthlyPriceUsd, body.monthly_price_usd, body.monthlyPriceUsd);
   const overageMode = overageModeFromInput(body);
   const overageFixedRunPriceUsd = nonNegativeUsdFromInput(body.overage_fixed_run_price_usd, body.overageFixedRunPriceUsd);
-  if (!Number.isFinite(providerMarkupRate) || providerMarkupRate < 0 || providerMarkupRate > 10) {
-    return json({ error: 'provider_markup_rate must be a number between 0 and 10' }, 400);
+  if (!Number.isFinite(providerMarkupRate) || providerMarkupRate < 0 || providerMarkupRate > MAX_PROVIDER_MARKUP_RATE) {
+    return json({ error: 'provider_markup_rate must be a number between 0 and 1' }, 400);
   }
   if (pricingModel === 'fixed_per_run' && fixedRunPriceUsd <= 0) {
     return json({ error: 'fixed_run_price_usd is required when pricing_model=fixed_per_run' }, 400);
