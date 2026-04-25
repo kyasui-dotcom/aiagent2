@@ -8965,6 +8965,7 @@ function workflowChildSnapshot(children = []) {
     taskType: job.workflowTask || job.taskType,
     agentId: job.assignedAgentId || null,
     agentName: job.workflowAgentName || null,
+    sequencePhase: workflowSequencePhaseForJob(job) || null,
     status: job.status,
     createdAt: job.createdAt,
     completedAt: job.completedAt || null,
@@ -9045,6 +9046,9 @@ async function reconcileWorkflowParent(storage, parentJobId) {
       const checkpointJobId = String(leaderSequence.checkpointJobId || '').trim();
       const checkpointJob = checkpointJobId ? children.find((item) => item.id === checkpointJobId) || null : null;
       const checkpointStatus = String(checkpointJob?.status || '').trim().toLowerCase();
+      const finalSummaryJobId = String(leaderSequence.finalSummaryJobId || '').trim();
+      const finalSummaryJob = finalSummaryJobId ? children.find((item) => item.id === finalSummaryJobId) || null : null;
+      const finalSummaryStatus = String(finalSummaryJob?.status || '').trim().toLowerCase();
       const leaderRuns = children.filter((item) => isWorkflowLeaderTask(workflowTaskName(item)));
       const anyLeaderCompleted = leaderRuns.some((item) => item.status === 'completed');
       const anyLeaderActive = leaderRuns.some((item) => ['queued', 'claimed', 'running', 'dispatched'].includes(String(item.status || '').toLowerCase()));
@@ -9073,6 +9077,22 @@ async function reconcileWorkflowParent(storage, parentJobId) {
         parent.completedAt = null;
         parent.failedAt = nowIso();
         parent.failureReason = 'Leader run failed before research checkpoint';
+        parent.output = buildAgentTeamDeliveryOutput(parent, children);
+        return cloneJob(parent);
+      }
+      if (['failed', 'timed_out'].includes(finalSummaryStatus)) {
+        parent.workflow = {
+          ...(parent.workflow || {}),
+          leaderSequence: {
+            ...leaderSequence,
+            finalSummaryStatus: 'failed',
+            finalSummaryFailedAt: finalSummaryJob?.failedAt || finalSummaryJob?.timedOutAt || nowIso()
+          }
+        };
+        parent.status = 'failed';
+        parent.completedAt = null;
+        parent.failedAt = finalSummaryJob?.failedAt || finalSummaryJob?.timedOutAt || nowIso();
+        parent.failureReason = 'Leader final summary failed after specialist execution';
         parent.output = buildAgentTeamDeliveryOutput(parent, children);
         return cloneJob(parent);
       }
@@ -9112,6 +9132,14 @@ async function reconcileWorkflowParent(storage, parentJobId) {
         parent.failedAt = checkpointJob?.failedAt || checkpointJob?.timedOutAt || nowIso();
         parent.failureReason = 'Leader checkpoint failed before action execution';
         parent.output = buildAgentTeamDeliveryOutput(parent, children);
+        return cloneJob(parent);
+      }
+      if (finalSummaryJobId && finalSummaryStatus !== 'completed') {
+        parent.output = buildAgentTeamDeliveryOutput(parent, children);
+        parent.status = children.some((item) => active.has(item.status)) ? 'running' : 'queued';
+        parent.completedAt = null;
+        parent.failedAt = null;
+        parent.failureReason = null;
         return cloneJob(parent);
       }
     }
@@ -9423,6 +9451,7 @@ function isWorkflowLeaderTask(taskType = '') {
 
 function workflowChildPlanIndex(parent = {}, child = {}) {
   const task = workflowTaskName(child);
+  const sequencePhase = workflowSequencePhaseForJob(child);
   const plannedTasks = Array.isArray(parent.workflow?.plannedTasks)
     ? parent.workflow.plannedTasks.map((item) => String(item || '').trim().toLowerCase())
     : [];
@@ -9432,7 +9461,10 @@ function workflowChildPlanIndex(parent = {}, child = {}) {
   const runIndex = plannedRuns.findIndex((run) => {
     const runTask = String(run?.taskType || run?.task_type || '').trim().toLowerCase();
     const runAgentId = String(run?.agentId || run?.agent_id || '').trim();
-    return runTask === task && (!runAgentId || runAgentId === child.assignedAgentId);
+    const runPhase = String(run?.sequencePhase || run?.sequence_phase || '').trim().toLowerCase();
+    return runTask === task
+      && (!runAgentId || runAgentId === child.assignedAgentId)
+      && (!runPhase || runPhase === sequencePhase);
   });
   return runIndex >= 0 ? runIndex : Number.MAX_SAFE_INTEGER;
 }
@@ -9450,6 +9482,10 @@ function sortWorkflowChildren(parent = {}, children = []) {
 
 function workflowChildIsTerminal(child = {}) {
   return ['completed', 'failed', 'timed_out'].includes(String(child.status || '').toLowerCase());
+}
+
+function workflowSequencePhaseForJob(job = {}) {
+  return String(job?.input?._broker?.workflow?.sequencePhase || '').trim().toLowerCase();
 }
 
 function completedWorkflowLeader(parent = {}, children = []) {
@@ -9589,7 +9625,8 @@ function workflowLeaderActionProtocol(parent = {}) {
     rules: [...commonRules, ...primaryExtras],
     phaseGuidance: {
       initial: 'Establish evidence questions and decision criteria before assigning action-layer specialists.',
-      checkpoint: 'After layer-1 completion, choose the next executable lane and emit approval-ready action packets.'
+      checkpoint: 'After layer-1 completion, choose the next executable lane and emit approval-ready action packets.',
+      final_summary: 'After specialist execution, synthesize the evidence, final recommendation, open risks, and immediate next actions into one delivery.'
     }
   };
 }
@@ -9739,6 +9776,10 @@ async function refreshWorkflowLeaderHandoffForJobId(storage, jobId) {
     const checkpointJob = checkpointJobId
       ? children.find((child) => child.id === checkpointJobId) || null
       : null;
+    const finalSummaryJobId = String(leaderSequence?.finalSummaryJobId || '').trim();
+    const finalSummaryJob = finalSummaryJobId
+      ? children.find((child) => child.id === finalSummaryJobId) || null
+      : null;
     if (leaderSequence?.enabled && checkpointJob) {
       const checkpointStatus = String(checkpointJob.status || '').trim().toLowerCase();
       if (leaderSequence.status === 'pending' && checkpointStatus === 'blocked') {
@@ -9815,6 +9856,86 @@ async function refreshWorkflowLeaderHandoffForJobId(storage, jobId) {
             ...leaderSequence,
             status: 'failed',
             failedAt: checkpointJob.failedAt || checkpointJob.timedOutAt || nowIso()
+          }
+        };
+        updated += 1;
+      }
+    }
+    if (leaderSequence?.enabled && finalSummaryJob) {
+      const finalSummaryStatus = String(finalSummaryJob.status || '').trim().toLowerCase();
+      if (String(leaderSequence?.finalSummaryStatus || '').trim().toLowerCase() === 'pending' && finalSummaryStatus === 'blocked') {
+        const specialistChildren = children.filter((child) => !isWorkflowLeaderTask(workflowTaskName(child)));
+        const specialistPending = specialistChildren.some((child) => !workflowChildIsTerminal(child));
+        if (!specialistPending) {
+          const sourceLeader = completedWorkflowLeader(parent, children.filter((child) => child.id !== finalSummaryJob.id));
+          if (sourceLeader) {
+            const handoff = workflowLeaderHandoff(parent, sourceLeader, children, Number.MAX_SAFE_INTEGER);
+            const input = finalSummaryJob.input && typeof finalSummaryJob.input === 'object' ? { ...finalSummaryJob.input } : {};
+            const broker = input._broker && typeof input._broker === 'object' ? { ...input._broker } : {};
+            const workflow = broker.workflow && typeof broker.workflow === 'object' ? { ...broker.workflow } : {};
+            workflow.leaderHandoff = handoff;
+            workflow.sequencePhase = 'final_summary';
+            if (!workflow.leaderActionProtocol && handoff?.actionProtocol) workflow.leaderActionProtocol = handoff.actionProtocol;
+            broker.workflow = workflow;
+            input._broker = broker;
+            finalSummaryJob.input = input;
+            finalSummaryJob.status = 'queued';
+            finalSummaryJob.startedAt = null;
+            finalSummaryJob.completedAt = null;
+            finalSummaryJob.failedAt = null;
+            finalSummaryJob.timedOutAt = null;
+            finalSummaryJob.failureReason = null;
+            finalSummaryJob.failureCategory = null;
+            finalSummaryJob.dispatch = {
+              ...(finalSummaryJob.dispatch || {}),
+              completionStatus: 'leader_final_summary_queued',
+              retryable: true,
+              nextRetryAt: null,
+              dispatchRequestedAt: null,
+              maxRetries: maxDispatchRetriesForJob(finalSummaryJob)
+            };
+            finalSummaryJob.logs = [
+              ...(finalSummaryJob.logs || []),
+              `leader final summary queued after specialist completion from ${sourceLeader.id.slice(0, 6)}`
+            ];
+            parent.workflow = {
+              ...(parent.workflow || {}),
+              leaderSequence: {
+                ...leaderSequence,
+                finalSummaryStatus: 'queued',
+                finalSummaryQueuedAt: nowIso(),
+                finalSummarySourceLeaderJobId: sourceLeader.id,
+                specialistCompleted: specialistChildren.filter((child) => child.status === 'completed').length,
+                specialistTotal: specialistChildren.length
+              }
+            };
+            leaderSequence = workflowLeaderSequence(parent);
+            updated += 1;
+          }
+        }
+      }
+      if (String(leaderSequence?.finalSummaryStatus || '').trim().toLowerCase() === 'queued' && finalSummaryStatus === 'completed') {
+        parent.workflow = {
+          ...(parent.workflow || {}),
+          leaderSequence: {
+            ...leaderSequence,
+            finalSummaryStatus: 'completed',
+            finalSummaryCompletedAt: finalSummaryJob.completedAt || nowIso()
+          }
+        };
+        leaderSequence = workflowLeaderSequence(parent);
+        updated += 1;
+      }
+      if (
+        !['failed', 'completed'].includes(String(leaderSequence?.finalSummaryStatus || '').trim().toLowerCase())
+        && ['failed', 'timed_out'].includes(finalSummaryStatus)
+      ) {
+        parent.workflow = {
+          ...(parent.workflow || {}),
+          leaderSequence: {
+            ...leaderSequence,
+            finalSummaryStatus: 'failed',
+            finalSummaryFailedAt: finalSummaryJob.failedAt || finalSummaryJob.timedOutAt || nowIso()
           }
         };
         updated += 1;
@@ -10513,6 +10634,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       task_type: selection.taskType,
       agent_id: selection.agent.id,
       agent_name: selection.agent.name,
+      sequence_phase: workflowSequencePhaseForJob({ input: workflowInputForTask(selection.taskType) }) || null,
       status: childResult.status || 'failed',
       failure_reason: childResult.failure_reason || childResult.error || null
     });
@@ -10589,6 +10711,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
         task_type: leaderSelection.taskType,
         agent_id: leaderSelection.agent.id,
         agent_name: leaderSelection.agent.name,
+        sequence_phase: 'checkpoint',
         status: 'blocked',
         failure_reason: null
       });
@@ -10598,8 +10721,92 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
         task_type: leaderSelection.taskType,
         agent_id: leaderSelection.agent.id,
         agent_name: leaderSelection.agent.name,
+        sequence_phase: 'checkpoint',
         status: checkpointResult?.status || 'failed',
         failure_reason: checkpointResult?.failure_reason || checkpointResult?.error || null
+      });
+    }
+    const finalSummaryResult = await performSingleJobCreate(storage, env, current, {
+      ...body,
+      input: workflowInputForTask(leaderSelection.taskType, { sequencePhase: 'final_summary' }),
+      order_strategy: 'single',
+      task_type: leaderSelection.taskType,
+      agent_id: leaderSelection.agent.id,
+      workflow_parent_id: parentJob.id,
+      workflow_task: leaderSelection.taskType,
+      workflow_tag_hints: leaderSelection.tagHints || []
+    }, {
+      ...options,
+      request,
+      skipIntake: true,
+      asyncDispatch: false,
+      deferDispatch: true
+    });
+    const finalSummaryJobId = String(finalSummaryResult?.job_id || '').trim();
+    if (finalSummaryJobId) {
+      const finalSummaryAt = nowIso();
+      await storage.mutate(async (draft) => {
+        const finalSummaryJob = draft.jobs.find((job) => job.id === finalSummaryJobId);
+        if (finalSummaryJob) {
+          const input = finalSummaryJob.input && typeof finalSummaryJob.input === 'object' ? { ...finalSummaryJob.input } : {};
+          const broker = input._broker && typeof input._broker === 'object' ? { ...input._broker } : {};
+          const workflow = broker.workflow && typeof broker.workflow === 'object' ? { ...broker.workflow } : {};
+          workflow.sequencePhase = 'final_summary';
+          if (!workflow.leaderActionProtocol && workflowLeaderProtocol) workflow.leaderActionProtocol = workflowLeaderProtocol;
+          broker.workflow = workflow;
+          input._broker = broker;
+          finalSummaryJob.input = input;
+          finalSummaryJob.status = 'blocked';
+          finalSummaryJob.startedAt = null;
+          finalSummaryJob.completedAt = null;
+          finalSummaryJob.failedAt = null;
+          finalSummaryJob.timedOutAt = null;
+          finalSummaryJob.failureReason = null;
+          finalSummaryJob.failureCategory = null;
+          finalSummaryJob.dispatch = {
+            ...(finalSummaryJob.dispatch || {}),
+            completionStatus: 'leader_final_summary_blocked',
+            retryable: false,
+            nextRetryAt: null
+          };
+          finalSummaryJob.logs = [
+            ...(finalSummaryJob.logs || []),
+            `leader final summary created and blocked until specialist execution completes (${finalSummaryAt})`
+          ];
+        }
+        const parentDraft = draft.jobs.find((job) => job.id === parentJob.id && job.jobKind === 'workflow');
+        if (parentDraft) {
+          parentDraft.workflow = {
+            ...(parentDraft.workflow || {}),
+            ...(workflowLeaderProtocol ? { leaderActionProtocol: workflowLeaderProtocol } : {}),
+            leaderSequence: {
+              ...(parentDraft.workflow?.leaderSequence || {}),
+              enabled: true,
+              finalSummaryJobId,
+              finalSummaryStatus: 'pending',
+              finalSummaryCreatedAt: finalSummaryAt
+            }
+          };
+        }
+      });
+      childRuns.push({
+        job_id: finalSummaryJobId,
+        task_type: leaderSelection.taskType,
+        agent_id: leaderSelection.agent.id,
+        agent_name: leaderSelection.agent.name,
+        sequence_phase: 'final_summary',
+        status: 'blocked',
+        failure_reason: null
+      });
+    } else {
+      childRuns.push({
+        job_id: null,
+        task_type: leaderSelection.taskType,
+        agent_id: leaderSelection.agent.id,
+        agent_name: leaderSelection.agent.name,
+        sequence_phase: 'final_summary',
+        status: finalSummaryResult?.status || 'failed',
+        failure_reason: finalSummaryResult?.failure_reason || finalSummaryResult?.error || null
       });
     }
   }

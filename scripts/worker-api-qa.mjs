@@ -238,6 +238,18 @@ assert.ok(asyncWorkflowFirstState.body.job.workflow.statusCounts.completed >= 2,
 
 const qaStorage = createD1LikeStorage(env.MY_BINDING, { allowInMemory: true });
 const asyncRawState = await qaStorage.getState();
+const asyncCheckpointLeader = asyncRawState.jobs.find((job) => (
+  job.workflowParentId === asyncWorkflow.body.workflow_job_id
+  && job.taskType === 'cmo_leader'
+  && job.input?._broker?.workflow?.sequencePhase === 'checkpoint'
+));
+assert.equal(asyncCheckpointLeader?.status, 'blocked', 'checkpoint leader should wait until research completes');
+const asyncFinalSummaryLeader = asyncRawState.jobs.find((job) => (
+  job.workflowParentId === asyncWorkflow.body.workflow_job_id
+  && job.taskType === 'cmo_leader'
+  && job.input?._broker?.workflow?.sequencePhase === 'final_summary'
+));
+assert.equal(asyncFinalSummaryLeader?.status, 'blocked', 'final summary leader should wait until specialist execution completes');
 const asyncSpecialistWithHandoff = asyncRawState.jobs.find((job) => (
   job.workflowParentId === asyncWorkflow.body.workflow_job_id
   && job.taskType !== 'cmo_leader'
@@ -248,7 +260,8 @@ await qaStorage.mutate(async (draft) => {
   for (const job of draft.jobs) {
     if (
       job.workflowParentId === asyncWorkflow.body.workflow_job_id
-      && ['teardown', 'data_analysis', 'seo_gap', 'landing'].includes(job.taskType)
+      && job.taskType !== 'cmo_leader'
+      && job.input?._broker?.workflow?.sequencePhase === 'research'
     ) {
       job.status = 'completed';
       job.completedAt = job.completedAt || nowIso();
@@ -270,6 +283,12 @@ const asyncNextLayerPoll = await request(`/api/jobs/${asyncWorkflow.body.workflo
 assert.equal(asyncNextLayerPoll.status, 200);
 await Promise.allSettled(asyncNextLayerWaits);
 const asyncAfterNextLayerState = await qaStorage.getState();
+const checkpointLeaderAfterResearch = asyncAfterNextLayerState.jobs.find((job) => (
+  job.workflowParentId === asyncWorkflow.body.workflow_job_id
+  && job.taskType === 'cmo_leader'
+  && job.input?._broker?.workflow?.sequencePhase === 'checkpoint'
+));
+assert.equal(checkpointLeaderAfterResearch?.status, 'completed', 'checkpoint leader should complete before specialist dispatch');
 const executionWithPriorAnalysis = asyncAfterNextLayerState.jobs.find((job) => (
   job.workflowParentId === asyncWorkflow.body.workflow_job_id
   && ['growth', 'directory_submission', 'acquisition_automation'].includes(job.taskType)
@@ -277,6 +296,39 @@ const executionWithPriorAnalysis = asyncAfterNextLayerState.jobs.find((job) => (
   && job.input._broker.workflow.leaderHandoff.priorRuns.some((run) => ['teardown', 'data_analysis', 'seo_gap', 'landing'].includes(run.taskType))
 ));
 assert.ok(executionWithPriorAnalysis, 'execution-layer children should receive completed research/analysis handoff before dispatch');
+await qaStorage.mutate(async (draft) => {
+  for (const job of draft.jobs) {
+    if (
+      job.workflowParentId === asyncWorkflow.body.workflow_job_id
+      && job.input?._broker?.workflow?.sequencePhase === 'action'
+      && job.taskType !== 'cmo_leader'
+    ) {
+      job.status = 'completed';
+      job.completedAt = job.completedAt || nowIso();
+      job.output = job.output || {
+        report: {
+          summary: `qa specialist completed for ${job.taskType}`,
+          bullets: [`${job.taskType} execution evidence`],
+          nextAction: 'Return this to the CMO leader for synthesis.'
+        },
+        files: []
+      };
+      job.dispatch = { ...(job.dispatch || {}), completionStatus: 'completed' };
+    }
+  }
+});
+const asyncFinalSummaryWaits = [];
+const asyncFinalSummaryPoll = await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`, {}, { waitUntilPromises: asyncFinalSummaryWaits });
+assert.equal(asyncFinalSummaryPoll.status, 200);
+await Promise.allSettled(asyncFinalSummaryWaits);
+const asyncFinalSummaryState = await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`);
+assert.equal(asyncFinalSummaryState.status, 200);
+const finalSummaryChildRun = asyncFinalSummaryState.body.job.workflow.childRuns.find((run) => (
+  run.taskType === 'cmo_leader'
+  && run.sequencePhase === 'final_summary'
+));
+assert.equal(finalSummaryChildRun?.status, 'completed', 'final summary leader should complete after specialists finish');
+assert.equal(asyncFinalSummaryState.body.job.output?.report?.leaderPhase, 'final_summary', 'workflow output should promote the final leader summary');
 const manualParentId = 'qa-progress-parent';
 const manualChildAId = 'qa-progress-child-a';
 const manualChildBId = 'qa-progress-child-b';
