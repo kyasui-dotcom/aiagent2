@@ -2811,7 +2811,19 @@ async function handleGithubCreateAdapterPr(req, res) {
 function serveStatic(res, path) {
   const file = join(process.cwd(), 'public', path === '/' ? 'index.html' : path.slice(1));
   if (!existsSync(file)) return false;
-  res.writeHead(200, securityHeaders({ 'Content-Type': mime[extname(file)] || 'text/plain; charset=utf-8' }));
+  const noCache = new Set([
+    '/index.html',
+    '/styles.css',
+    '/client.js',
+    '/delivery-action-contract.js',
+    '/work-action-registry.js',
+    '/work-intent-resolver.js'
+  ]);
+  const normalizedPath = path === '/' ? '/index.html' : path;
+  res.writeHead(200, securityHeaders({
+    'Content-Type': mime[extname(file)] || 'text/plain; charset=utf-8',
+    ...(noCache.has(normalizedPath) ? { 'Cache-Control': 'no-cache, max-age=0, must-revalidate' } : {})
+  }));
   res.end(readFileSync(file));
   return true;
 }
@@ -2831,6 +2843,46 @@ async function touchEvent(type, message, meta = {}) {
   }
   broadcast(event);
   return event;
+}
+
+function authAnalyticsProviderName(authProvider = 'guest') {
+  const value = String(authProvider || '').trim().toLowerCase();
+  if (value.includes('google')) return 'google';
+  if (value.includes('github')) return 'github';
+  return '';
+}
+
+async function trackAuthConversionEvent(eventName, context = {}, meta = {}) {
+  const payload = createConversionEventPayload({
+    event: eventName,
+    meta
+  }, {
+    loggedIn: Boolean(context?.loggedIn),
+    authProvider: context?.authProvider || 'guest',
+    login: context?.login || ''
+  });
+  if (payload?.error) return null;
+  return touchEvent('TRACK', payload.message, payload.meta);
+}
+
+async function trackAuthLoginCompletion(authProvider, account = null, meta = {}) {
+  const provider = authAnalyticsProviderName(authProvider);
+  if (!provider) return null;
+  return trackAuthConversionEvent(`${provider}_login_completed`, {
+    loggedIn: true,
+    authProvider,
+    login: account?.login || ''
+  }, meta);
+}
+
+async function trackAuthLoginFailure(authProvider, meta = {}) {
+  const provider = authAnalyticsProviderName(authProvider);
+  if (!provider) return null;
+  return trackAuthConversionEvent(`${provider}_login_failed`, {
+    loggedIn: false,
+    authProvider,
+    login: meta?.login || ''
+  }, meta);
 }
 async function appendEmailDelivery(delivery) {
   if (typeof storage.appendEmailDelivery === 'function') {
@@ -4263,7 +4315,19 @@ async function persistAccountForIdentity(user, authProvider) {
   });
   if (signupCredits?.status === 'granted') {
     await touchEvent('CREDIT', `${account.login} earned ${signupCredits.amount} signup welcome credits`);
+    await trackAuthConversionEvent('signup_completed', {
+      loggedIn: true,
+      authProvider,
+      login: account?.login || ''
+    }, {
+      source: 'auth_callback',
+      status: 'created'
+    });
   }
+  await trackAuthLoginCompletion(authProvider, account, {
+    source: 'auth_callback',
+    status: signupCredits?.status === 'granted' ? 'created' : 'existing'
+  });
   return account;
 }
 async function linkSessionIdentityToAccount(targetLogin, user, authProvider) {
@@ -7223,7 +7287,13 @@ const server = http.createServer(async (req, res) => {
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
     const installationId = url.searchParams.get('installation_id') || '';
-    if (!code || !state || !oauthStates.has(state)) return redirect(res, '/?auth_error=invalid_github_app_state');
+    if (!code || !state || !oauthStates.has(state)) {
+      await trackAuthLoginFailure('github-app', {
+        source: 'auth_callback',
+        status: 'invalid_state'
+      });
+      return redirect(res, '/?auth_error=invalid_github_app_state');
+    }
     const oauthState = oauthStates.get(state);
     oauthStates.delete(state);
     try {
@@ -7301,6 +7371,10 @@ const server = http.createServer(async (req, res) => {
         sessions.set(sessionId, session);
         return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId, req) });
       } catch (error) {
+        await trackAuthLoginFailure('github-app', {
+          source: 'auth_callback',
+          status: 'callback_error'
+        });
         return redirect(res, `/?auth_error=${encodeURIComponent(error.message)}`);
       }
     }
@@ -7308,13 +7382,15 @@ const server = http.createServer(async (req, res) => {
     return redirect(res, '/?auth_error=github_app_setup_requires_reconnect');
   }
   if (req.method === 'GET' && url.pathname === '/auth/github') {
-    if (githubAppConfigured()) {
-      const state = randomBytes(16).toString('hex');
-      const { action } = oauthStartContext(req, url);
-      oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action });
-      return redirect(res, githubAppConnectUrl(req, state));
+    if (!(githubClientId && githubClientSecret)) {
+      if (githubAppConfigured()) {
+        const state = randomBytes(16).toString('hex');
+        const { action } = oauthStartContext(req, url);
+        oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action });
+        return redirect(res, githubAppConnectUrl(req, state));
+      }
+      return json(res, 503, { error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' });
     }
-    if (!(githubClientId && githubClientSecret)) return json(res, 503, { error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' });
     const { existingSession, action } = oauthStartContext(req, url);
     if (existingSession?.user && action !== 'link') return redirect(res, '/');
     const state = randomBytes(16).toString('hex');
@@ -7332,7 +7408,13 @@ const server = http.createServer(async (req, res) => {
     if (!(githubClientId && githubClientSecret)) return redirect(res, '/?auth_error=github_not_configured');
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
-    if (!code || !state || !oauthStates.has(state)) return redirect(res, '/?auth_error=invalid_oauth_state');
+    if (!code || !state || !oauthStates.has(state)) {
+      await trackAuthLoginFailure('github-oauth', {
+        source: 'auth_callback',
+        status: 'invalid_state'
+      });
+      return redirect(res, '/?auth_error=invalid_oauth_state');
+    }
     const oauthState = oauthStates.get(state);
     oauthStates.delete(state);
     try {
@@ -7404,6 +7486,10 @@ const server = http.createServer(async (req, res) => {
       sessions.set(sessionId, session);
       return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId, req) });
     } catch (error) {
+      await trackAuthLoginFailure('github-oauth', {
+        source: 'auth_callback',
+        status: 'callback_error'
+      });
       return redirect(res, `/?auth_error=${encodeURIComponent(error.message)}`);
     }
   }
@@ -7429,7 +7515,13 @@ const server = http.createServer(async (req, res) => {
     if (!googleConfigured()) return redirect(res, '/?auth_error=google_not_configured');
     const code = url.searchParams.get('code');
     const state = url.searchParams.get('state');
-    if (!code || !state || !oauthStates.has(state)) return redirect(res, '/?auth_error=invalid_google_oauth_state');
+    if (!code || !state || !oauthStates.has(state)) {
+      await trackAuthLoginFailure('google-oauth', {
+        source: 'auth_callback',
+        status: 'invalid_state'
+      });
+      return redirect(res, '/?auth_error=invalid_google_oauth_state');
+    }
     const oauthState = oauthStates.get(state);
     oauthStates.delete(state);
     try {
@@ -7505,6 +7597,10 @@ const server = http.createServer(async (req, res) => {
       sessions.set(sessionId, session);
       return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId, req) });
     } catch (error) {
+      await trackAuthLoginFailure('google-oauth', {
+        source: 'auth_callback',
+        status: 'callback_error'
+      });
       return redirect(res, `/?auth_error=${encodeURIComponent(error.message)}`);
     }
   }

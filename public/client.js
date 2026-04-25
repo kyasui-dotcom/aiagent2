@@ -525,12 +525,6 @@ const els = {
   agentRoutingCoverage: $('agentRoutingCoverage')
 };
 
-const OPEN_CHAT_MODE_STORAGE_KEY = 'cait.openChatMode';
-const OPEN_CHAT_MODE_STORAGE_VERSION_KEY = 'cait.openChatMode.version';
-const OPEN_CHAT_MODE_DEFAULT_VERSION = '20260420-plan-default';
-const OPEN_CHAT_SESSIONS_STORAGE_KEY = 'cait.openChatSessions.v1';
-const OPEN_CHAT_LEGACY_SESSION_STORAGE_KEY = 'cait.openChatSession.v1';
-const OPEN_CHAT_DELETED_SERVER_SESSIONS_STORAGE_KEY = 'cait.openChatDeletedServerSessions.v1';
 const OPEN_CHAT_SESSION_MAX_MESSAGES = 16;
 const OPEN_CHAT_SESSION_MAX_SESSIONS = 30;
 const OPEN_CHAT_ORDER_PROGRESS_POLL_MS = 4000;

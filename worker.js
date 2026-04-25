@@ -2927,8 +2927,20 @@ async function persistAccountForIdentity(storage, env, user, authProvider) {
   });
   if (signupCredits?.status === 'granted') {
     await touchEvent(storage, 'CREDIT', `${account.login} earned ${signupCredits.amount} signup welcome credits`);
+    await trackAuthConversionEvent(storage, 'signup_completed', {
+      loggedIn: true,
+      authProvider,
+      login: account?.login || ''
+    }, {
+      source: 'auth_callback',
+      status: 'created'
+    });
     await maybeSendSignupWelcomeEmail(storage, env, account, user, authProvider);
   }
+  await trackAuthLoginCompletion(storage, authProvider, account, {
+    source: 'auth_callback',
+    status: signupCredits?.status === 'granted' ? 'created' : 'existing'
+  });
   return account;
 }
 
@@ -5672,6 +5684,46 @@ async function touchEvent(storage, type, message, meta = {}) {
   return event;
 }
 
+function authAnalyticsProviderName(authProvider = 'guest') {
+  const value = String(authProvider || '').trim().toLowerCase();
+  if (value.includes('google')) return 'google';
+  if (value.includes('github')) return 'github';
+  return '';
+}
+
+async function trackAuthConversionEvent(storage, eventName, context = {}, meta = {}) {
+  const payload = createConversionEventPayload({
+    event: eventName,
+    meta
+  }, {
+    loggedIn: Boolean(context?.loggedIn),
+    authProvider: context?.authProvider || 'guest',
+    login: context?.login || ''
+  });
+  if (payload?.error) return null;
+  return touchEvent(storage, 'TRACK', payload.message, payload.meta);
+}
+
+async function trackAuthLoginCompletion(storage, authProvider, account = null, meta = {}) {
+  const provider = authAnalyticsProviderName(authProvider);
+  if (!provider) return null;
+  return trackAuthConversionEvent(storage, `${provider}_login_completed`, {
+    loggedIn: true,
+    authProvider,
+    login: account?.login || ''
+  }, meta);
+}
+
+async function trackAuthLoginFailure(storage, authProvider, meta = {}) {
+  const provider = authAnalyticsProviderName(authProvider);
+  if (!provider) return null;
+  return trackAuthConversionEvent(storage, `${provider}_login_failed`, {
+    loggedIn: false,
+    authProvider,
+    login: meta?.login || ''
+  }, meta);
+}
+
 async function maybeSendSignupWelcomeEmail(storage, env, account, user = null, authProvider = 'guest') {
   const recipientEmail = accountEmailCandidates(account, user)[0] || '';
   const content = welcomeEmailContent(account?.profile?.displayName || user?.name || account?.login || '');
@@ -6517,11 +6569,21 @@ async function handleGithubAppCallback(request, env) {
   const state = url.searchParams.get('state');
   const installationId = url.searchParams.get('installation_id') || '';
   if (!code || !state) {
+    await trackAuthLoginFailure(storage, 'github-app', {
+      source: 'auth_callback',
+      status: 'invalid_state'
+    });
     return redirect('/?auth_error=invalid_github_app_state');
   }
   const oauthState = await consumeOAuthState(request, env, state);
   const cookieState = oauthState.entry;
-  if (!cookieState) return redirect('/?auth_error=invalid_github_app_state');
+  if (!cookieState) {
+    await trackAuthLoginFailure(storage, 'github-app', {
+      source: 'auth_callback',
+      status: 'missing_oauth_cookie'
+    });
+    return redirect('/?auth_error=invalid_github_app_state');
+  }
   try {
     const existingSession = await getSession(request, env);
     const linkedSession = await buildGithubAppSession(request, env, code, installationId);
@@ -6566,6 +6628,10 @@ async function handleGithubAppCallback(request, env) {
       oauthState.cookie
     ]);
   } catch (error) {
+    await trackAuthLoginFailure(storage, 'github-app', {
+      source: 'auth_callback',
+      status: 'callback_error'
+    });
     return redirectWithCookies(`/?auth_error=${encodeURIComponent(error.message)}`, [oauthState.cookie]);
   }
 }
@@ -6581,8 +6647,8 @@ async function handleGithubAppSetup(request, env) {
 }
 
 async function handleAuthStart(request, env) {
-  if (githubAppConfigured(env)) return handleGithubAppConnectStart(request, env);
   if (!(githubClientId(env) && githubClientSecret(env))) {
+    if (githubAppConfigured(env)) return handleGithubAppConnectStart(request, env);
     return json({ error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' }, 503);
   }
   const { existingSession, action } = await oauthStartContext(request, env);
@@ -6604,11 +6670,21 @@ async function handleAuthCallback(request, env) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   if (!code || !state) {
+    await trackAuthLoginFailure(storage, 'github-oauth', {
+      source: 'auth_callback',
+      status: 'invalid_state'
+    });
     return redirect('/?auth_error=invalid_oauth_state');
   }
   const oauthState = await consumeOAuthState(request, env, state);
   const cookieState = oauthState.entry;
-  if (!cookieState) return redirect('/?auth_error=invalid_oauth_state');
+  if (!cookieState) {
+    await trackAuthLoginFailure(storage, 'github-oauth', {
+      source: 'auth_callback',
+      status: 'missing_oauth_cookie'
+    });
+    return redirect('/?auth_error=invalid_oauth_state');
+  }
   try {
     const existingSession = await getSession(request, env);
     const callback = `${baseUrl(request, env)}/auth/github/callback`;
@@ -6686,6 +6762,10 @@ async function handleAuthCallback(request, env) {
       oauthState.cookie
     ]);
   } catch (error) {
+    await trackAuthLoginFailure(storage, 'github-oauth', {
+      source: 'auth_callback',
+      status: 'callback_error'
+    });
     return redirectWithCookies(`/?auth_error=${encodeURIComponent(error.message)}`, [oauthState.cookie]);
   }
 }
@@ -6717,11 +6797,21 @@ async function handleGoogleAuthCallback(request, env) {
   const code = url.searchParams.get('code');
   const state = url.searchParams.get('state');
   if (!code || !state) {
+    await trackAuthLoginFailure(storage, 'google-oauth', {
+      source: 'auth_callback',
+      status: 'invalid_state'
+    });
     return redirect('/?auth_error=invalid_google_oauth_state');
   }
   const oauthState = await consumeOAuthState(request, env, state);
   const cookieState = oauthState.entry;
-  if (!cookieState) return redirect('/?auth_error=invalid_google_oauth_state');
+  if (!cookieState) {
+    await trackAuthLoginFailure(storage, 'google-oauth', {
+      source: 'auth_callback',
+      status: 'missing_oauth_cookie'
+    });
+    return redirect('/?auth_error=invalid_google_oauth_state');
+  }
   try {
     const existingSession = await getSession(request, env);
     const callback = `${baseUrl(request, env)}/auth/google/callback`;
@@ -6797,6 +6887,10 @@ async function handleGoogleAuthCallback(request, env) {
       oauthState.cookie
     ]);
   } catch (error) {
+    await trackAuthLoginFailure(storage, 'google-oauth', {
+      source: 'auth_callback',
+      status: 'callback_error'
+    });
     return redirectWithCookies(`/?auth_error=${encodeURIComponent(error.message)}`, [oauthState.cookie]);
   }
 }
@@ -11753,13 +11847,22 @@ export default {
 
     if (env.ASSETS) {
       const assetUrl = new URL(request.url);
-      const isAppShell = request.method === 'GET' && (assetUrl.pathname === '/' || assetUrl.pathname === '/index.html');
+      const noCacheAssetPaths = new Set([
+        '/',
+        '/index.html',
+        '/styles.css',
+        '/client.js',
+        '/delivery-action-contract.js',
+        '/work-action-registry.js',
+        '/work-intent-resolver.js'
+      ]);
+      const isNoCacheAsset = request.method === 'GET' && noCacheAssetPaths.has(assetUrl.pathname);
       const response = await env.ASSETS.fetch(request);
       if (response.status !== 404) {
         return responseWithCookies(
           response,
           [],
-          isAppShell ? { 'cache-control': 'no-cache, max-age=0, must-revalidate' } : {}
+          isNoCacheAsset ? { 'cache-control': 'no-cache, max-age=0, must-revalidate' } : {}
         );
       }
     }
