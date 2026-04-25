@@ -7333,7 +7333,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/auth/github-app/connect') {
     if (!githubAppConfigured()) return json(res, 503, { error: 'GitHub App is not configured yet.', setup: githubAppRecommendedSettings(req) });
     const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
-    if (existingSession?.user && action !== 'link' && sessionHasGithubApp(existingSession)) return redirect(res, '/');
+    if (existingSession?.user && action !== 'link' && sessionHasGithubApp(existingSession)) return redirect(res, returnTo || '/');
     const state = randomBytes(16).toString('hex');
     oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action, returnTo, loginSource, visitorId });
     return redirect(res, githubAppConnectUrl(req, state));
@@ -7448,7 +7448,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 503, { error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' });
     }
     const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
-    if (existingSession?.user && action !== 'link') return redirect(res, '/');
+    if (existingSession?.user && action !== 'link') return redirect(res, returnTo || '/');
     const state = randomBytes(16).toString('hex');
     oauthStates.set(state, { createdAt: Date.now(), provider: 'github-oauth', action, returnTo, loginSource, visitorId });
     const callback = `${baseUrl(req)}/auth/github/callback`;
@@ -7552,7 +7552,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/auth/google') {
     if (!googleConfigured()) return json(res, 503, { error: 'Google OAuth is not configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.' });
     const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
-    if (existingSession?.user && action !== 'link') return redirect(res, '/');
+    if (existingSession?.user && action !== 'link') return redirect(res, returnTo || '/');
     const state = randomBytes(16).toString('hex');
     oauthStates.set(state, { createdAt: Date.now(), provider: 'google-oauth', action, returnTo, loginSource, visitorId });
     const callback = `${baseUrl(req)}/auth/google/callback`;

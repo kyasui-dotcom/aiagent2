@@ -5,10 +5,12 @@ const els = {
   hint: $('loginHint'),
   status: $('loginStatus'),
   google: $('loginGoogleBtn'),
-  github: $('loginGithubBtn')
+  github: $('loginGithubBtn'),
+  continueBtn: $('loginContinueBtn')
 };
 
 let runtimeVisitorId = '';
+let authStatusChecked = false;
 
 function safeString(value = '', max = 100) {
   return String(value ?? '')
@@ -102,11 +104,14 @@ function applyProviderAvailability(status = {}) {
   const githubAvailable = Boolean(status?.githubConfigured || status?.githubAppConfigured);
   if (els.google) {
     els.google.hidden = !googleAvailable;
-    els.google.disabled = !googleAvailable;
+    els.google.disabled = !googleAvailable || !authStatusChecked || Boolean(status?.loggedIn);
   }
   if (els.github) {
     els.github.hidden = !githubAvailable;
-    els.github.disabled = !githubAvailable;
+    els.github.disabled = !githubAvailable || !authStatusChecked || Boolean(status?.loggedIn);
+  }
+  if (els.continueBtn) {
+    els.continueBtn.hidden = !status?.loggedIn;
   }
   if (!googleAvailable && !githubAvailable && els.status) {
     els.status.textContent = 'No login provider is configured on this deployment yet.';
@@ -114,15 +119,32 @@ function applyProviderAvailability(status = {}) {
 }
 
 async function loadAuthStatus(route = currentRoute()) {
+  authStatusChecked = false;
+  applyProviderAvailability({});
   try {
     const response = await fetch('/auth/status', { credentials: 'same-origin' });
     const status = await response.json().catch(() => ({}));
-    if (status?.loggedIn) {
-      window.location.replace(route.next);
-      return;
+    authStatusChecked = true;
+    if (status?.loggedIn && els.status) {
+      els.status.textContent = 'You are already signed in. Continue when ready. Session checking does not auto-navigate.';
+    } else if (els.status) {
+      els.status.textContent = 'Choose one account provider. After login, CAIt opens the requested product area.';
+    }
+    if (els.continueBtn) {
+      els.continueBtn.hidden = !status?.loggedIn;
+      els.continueBtn.onclick = () => { window.location.href = route.next; };
     }
     applyProviderAvailability(status);
   } catch {
+    authStatusChecked = true;
+    if (els.google) {
+      els.google.hidden = false;
+      els.google.disabled = false;
+    }
+    if (els.github) {
+      els.github.hidden = false;
+      els.github.disabled = false;
+    }
     if (els.status) els.status.textContent = 'Could not verify login provider status. You can still try a provider below.';
   }
 }

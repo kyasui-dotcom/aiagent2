@@ -6649,7 +6649,7 @@ async function handleGithubAppConnectStart(request, env) {
     setup: githubAppRecommendedSettings(request, env)
   }, 503);
   const { existingSession, action, returnTo, loginSource, visitorId } = await oauthStartContext(request, env);
-  if (existingSession?.user && action !== 'link' && sessionHasGithubApp(existingSession)) return redirect('/');
+  if (existingSession?.user && action !== 'link' && sessionHasGithubApp(existingSession)) return redirect(returnTo || '/');
   const state = crypto.randomUUID();
   const callback = `${baseUrl(request, env)}/auth/github-app/callback`;
   const githubUrl = new URL('https://github.com/login/oauth/authorize');
@@ -6750,7 +6750,7 @@ async function handleAuthStart(request, env) {
     return json({ error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' }, 503);
   }
   const { existingSession, action, returnTo, loginSource, visitorId } = await oauthStartContext(request, env);
-  if (existingSession?.user && action !== 'link') return redirect('/');
+  if (existingSession?.user && action !== 'link') return redirect(returnTo || '/');
   const state = crypto.randomUUID();
   const callback = `${baseUrl(request, env)}/auth/github/callback`;
   const githubUrl = new URL('https://github.com/login/oauth/authorize');
@@ -6873,7 +6873,7 @@ async function handleGoogleAuthStart(request, env) {
     return json({ error: 'Google OAuth is not configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.' }, 503);
   }
   const { existingSession, action, returnTo, loginSource, visitorId } = await oauthStartContext(request, env);
-  if (existingSession?.user && action !== 'link') return redirect('/');
+  if (existingSession?.user && action !== 'link') return redirect(returnTo || '/');
   const state = crypto.randomUUID();
   const callback = `${baseUrl(request, env)}/auth/google/callback`;
   const googleUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
