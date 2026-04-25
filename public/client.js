@@ -890,9 +890,10 @@ function orderProgressCounts(jobOrCreated = {}) {
   const total = Number(counts.total || childRuns.length || 0);
   const completed = Number(counts.completed || childRuns.filter((run) => String(run?.status || '').toLowerCase() === 'completed').length || 0);
   const failed = Number(counts.failed || childRuns.filter((run) => ['failed', 'timed_out'].includes(String(run?.status || '').toLowerCase())).length || 0);
+  const blocked = Number(counts.blocked || childRuns.filter((run) => String(run?.status || '').toLowerCase() === 'blocked').length || 0);
   const running = Number(counts.running || childRuns.filter((run) => ['running', 'claimed', 'dispatched'].includes(String(run?.status || '').toLowerCase())).length || 0);
   const queued = Number(counts.queued || childRuns.filter((run) => String(run?.status || '').toLowerCase() === 'queued').length || 0);
-  return { total, completed, failed, running, queued };
+  return { total, completed, failed, blocked, running, queued };
 }
 
 function orderProgressMeta(subject = {}, options = {}) {
@@ -904,11 +905,12 @@ function orderProgressMeta(subject = {}, options = {}) {
     || Boolean(subject?.workflow_job_id);
   const total = Math.max(
     isWorkflow ? Number(counts.total || 0) : 1,
-    Number(counts.completed || 0) + Number(counts.failed || 0) + Number(counts.running || 0) + Number(counts.queued || 0),
+    Number(counts.completed || 0) + Number(counts.failed || 0) + Number(counts.blocked || 0) + Number(counts.running || 0) + Number(counts.queued || 0),
     1
   );
   const completed = Math.max(0, Number(counts.completed || 0));
   const failed = Math.max(0, Number(counts.failed || 0));
+  const blocked = Math.max(0, Number(counts.blocked || 0));
   let running = Math.max(0, Number(counts.running || 0));
   let queued = Math.max(0, Number(counts.queued || 0));
   if (!isWorkflow) {
@@ -925,7 +927,7 @@ function orderProgressMeta(subject = {}, options = {}) {
   pushState('completed', completed);
   pushState('running', running);
   pushState('queued', queued);
-  pushState('failed', failed);
+  pushState('failed', failed + blocked);
   while (states.length < shown) states.push(status === 'completed' ? 'completed' : 'queued');
   const ratioBase = total || 1;
   const weighted = status === 'completed'
@@ -944,6 +946,7 @@ function orderProgressMeta(subject = {}, options = {}) {
     running,
     queued,
     failed,
+    blocked,
     percent,
     states,
     route: String(subject?.assignedAgentId || subject?.matched_agent_id || (isWorkflow ? (subject?.workflow?.teamName || 'Agent Team') : 'auto-routing')).trim() || 'auto-routing'
@@ -1121,8 +1124,8 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
     : (isWorkflow ? 'Agent Team' : 'auto-routing');
   const childLine = isWorkflow && counts.total
     ? (ja
-      ? `進捗: ${counts.completed}/${counts.total} agent runs 完了${counts.failed ? `, ${counts.failed} failed` : ''}`
-      : `Progress: ${counts.completed}/${counts.total} agent runs completed${counts.failed ? `, ${counts.failed} failed` : ''}`)
+      ? `進捗: ${counts.completed}/${counts.total} agent runs 完了${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} blocked` : ''}`
+      : `Progress: ${counts.completed}/${counts.total} agent runs completed${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} blocked` : ''}`)
     : '';
   const routingLines = orderRoutingContextLines(created, { ja });
   const failure = String(created?.failure_reason || created?.error || '').trim();
@@ -1171,8 +1174,8 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
   const isWorkflow = job?.jobKind === 'workflow' || Boolean(job?.workflow);
   const childLine = isWorkflow && counts.total
     ? (ja
-      ? `進捗: ${counts.completed}/${counts.total} agent runs 完了${counts.failed ? `, ${counts.failed} failed` : ''}${counts.running ? `, ${counts.running} running` : ''}${counts.queued ? `, ${counts.queued} queued` : ''}`
-      : `Progress: ${counts.completed}/${counts.total} agent runs completed${counts.failed ? `, ${counts.failed} failed` : ''}${counts.running ? `, ${counts.running} running` : ''}${counts.queued ? `, ${counts.queued} queued` : ''}`)
+      ? `進捗: ${counts.completed}/${counts.total} agent runs 完了${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} blocked` : ''}${counts.running ? `, ${counts.running} running` : ''}${counts.queued ? `, ${counts.queued} queued` : ''}`
+      : `Progress: ${counts.completed}/${counts.total} agent runs completed${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} blocked` : ''}${counts.running ? `, ${counts.running} running` : ''}${counts.queued ? `, ${counts.queued} queued` : ''}`)
     : '';
   const route = job?.assignedAgentId || (isWorkflow ? (job?.workflow?.teamName || 'Agent Team') : 'auto-routing');
   const summary = orderProgressSummaryFromJob(job);
@@ -11537,9 +11540,11 @@ function renderOrderProgressVisual(meta = {}, options = {}) {
     : `${meta.completed || 0}/${meta.total || states.length || 1} completed`;
   const sideLabel = meta.failed
     ? `${meta.failed} failed`
-    : (meta.running
+    : (meta.blocked
+      ? `${meta.blocked} blocked`
+      : (meta.running
       ? `${meta.running} running`
-      : (meta.queued ? `${meta.queued} queued` : (ja ? 'dispatching' : 'dispatching')));
+      : (meta.queued ? `${meta.queued} queued` : (ja ? 'dispatching' : 'dispatching'))));
   return `
     <div class="order-progress-visual" aria-label="${escapeHtml(ja ? 'エージェント進捗' : 'Agent progress')}">
       <div class="order-progress-head">

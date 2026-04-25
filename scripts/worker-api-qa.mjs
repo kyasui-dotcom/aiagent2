@@ -689,6 +689,9 @@ globalThis.fetch = async (input, init) => {
   if (url === 'https://worker-qa.example/seo/health' || url === 'https://worker-qa.example/research/health' || url === 'https://worker-qa.example/writer/health') {
     return new Response(JSON.stringify({ ok: true, service: 'qa-multi-agent' }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
+  if (url === 'https://worker-qa.example/cmo-fail/health') {
+    return new Response(JSON.stringify({ ok: true, service: 'qa-cmo-fail' }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
   if (url === 'https://worker-qa.example/seo/jobs' || url === 'https://worker-qa.example/research/jobs' || url === 'https://worker-qa.example/writer/jobs') {
     const requestBody = JSON.parse(String(init?.body || '{}'));
     return new Response(JSON.stringify({
@@ -697,6 +700,11 @@ globalThis.fetch = async (input, init) => {
       files: [{ name: `${requestBody.task_type || 'task'}.md`, content: '# qa' }],
       usage: { total_cost_basis: 90, compute_cost: 30, tool_cost: 10, labor_cost: 50 }
     }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+  if (url === 'https://worker-qa.example/cmo-fail/jobs') {
+    return new Response(JSON.stringify({
+      error: 'qa forced leader failure'
+    }), { status: 500, headers: { 'content-type': 'application/json' } });
   }
   if (url === 'https://worker-qa.example/jobs') {
     const requestBody = JSON.parse(String(init?.body || '{}'));
@@ -998,6 +1006,59 @@ try {
   });
   assert.equal(multiSeo.status, 201);
   assert.equal(multiSeo.body.agent.verificationStatus, 'verified');
+
+  const failingCmoLeader = await request('/api/agents/import-manifest', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      manifest: {
+        schema_version: 'agent-manifest/v1',
+        name: 'qa_cmo_leader_fail',
+        task_types: ['cmo_leader'],
+        pricing: { premium_rate: 0.01, basic_rate: 0.01 },
+        success_rate: 0.999,
+        avg_latency_sec: 1,
+        healthcheck_url: 'https://worker-qa.example/cmo-fail/health',
+        endpoints: { jobs: 'https://worker-qa.example/cmo-fail/jobs' }
+      }
+    })
+  });
+  assert.equal(failingCmoLeader.status, 201);
+  assert.equal(failingCmoLeader.body.agent.verificationStatus, 'verified');
+
+  const failingWorkflowWaits = [];
+  const failingWorkflow = await request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      parent_agent_id: 'qa-runner',
+      task_type: 'cmo_leader',
+      prompt: 'Build a concrete growth plan and stop the workflow cleanly if the team leader fails.',
+      order_strategy: 'multi',
+      async_dispatch: true,
+      skip_intake: true,
+      budget_cap: 500
+    })
+  }, { waitUntilPromises: failingWorkflowWaits });
+  assert.equal(failingWorkflow.status, 201);
+  assert.equal(failingWorkflow.body.mode, 'workflow');
+  assert.ok(['running', 'failed'].includes(String(failingWorkflow.body.status || '')), 'failing leader workflow should never remain queued');
+  await Promise.allSettled(failingWorkflowWaits);
+
+  const failingWorkflowState = await request(`/api/jobs/${failingWorkflow.body.workflow_job_id}`);
+  assert.equal(failingWorkflowState.status, 200);
+  assert.equal(failingWorkflowState.body.job.status, 'failed', 'workflow parent should fail when the leader run fails before handoff');
+  assert.ok(Number(failingWorkflowState.body.job.workflow?.statusCounts?.blocked || 0) > 0, 'workflow should count blocked child runs after leader failure');
+  const failingChildRuns = Array.isArray(failingWorkflowState.body.job.workflow?.childRuns)
+    ? failingWorkflowState.body.job.workflow.childRuns
+    : [];
+  assert.ok(failingChildRuns.some((run) => run.taskType === 'cmo_leader' && run.status === 'failed'), 'leader run should remain failed');
+  assert.ok(failingChildRuns.some((run) => run.taskType !== 'cmo_leader' && run.status === 'blocked'), 'non-leader runs should be blocked after leader failure');
+  assert.equal(
+    failingChildRuns.some((run) => run.taskType !== 'cmo_leader' && run.status === 'queued'),
+    false,
+    'non-leader runs should not remain queued after the leader fails'
+  );
 
   const workflow = await request('/api/jobs', {
     method: 'POST',

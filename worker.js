@@ -8919,6 +8919,37 @@ function workflowChildSnapshot(children = []) {
   }));
 }
 
+function blockWorkflowPendingChildren(children = [], reason = 'blocked_by_workflow_failure') {
+  const blockedAt = nowIso();
+  let blocked = 0;
+  for (const child of Array.isArray(children) ? children : []) {
+    const status = String(child?.status || '').trim().toLowerCase();
+    if (!child || ['completed', 'failed', 'timed_out', 'blocked'].includes(status)) continue;
+    child.status = 'blocked';
+    child.claimedAt = null;
+    child.dispatchedAt = null;
+    child.startedAt = null;
+    child.completedAt = null;
+    child.failedAt = null;
+    child.timedOutAt = null;
+    child.lastCallbackAt = null;
+    child.failureReason = reason;
+    child.failureCategory = 'workflow_blocked';
+    child.dispatch = {
+      ...(child.dispatch || {}),
+      completionStatus: reason,
+      retryable: false,
+      nextRetryAt: null
+    };
+    child.logs = [
+      ...(child.logs || []),
+      `workflow blocked before dispatch: ${reason} (${blockedAt})`
+    ];
+    blocked += 1;
+  }
+  return blocked;
+}
+
 async function reconcileWorkflowParent(storage, parentJobId) {
   if (!parentJobId) return null;
   return storage.mutate(async (state) => {
@@ -8940,6 +8971,7 @@ async function reconcileWorkflowParent(storage, parentJobId) {
     const failed = children.filter((item) => item.status === 'failed' || item.status === 'timed_out');
     const queued = children.filter((item) => item.status === 'queued');
     const running = children.filter((item) => item.status === 'claimed' || item.status === 'running' || item.status === 'dispatched');
+    const blocked = children.filter((item) => item.status === 'blocked');
     parent.workflow = {
       ...(parent.workflow || {}),
       childJobIds: children.map((item) => item.id),
@@ -8949,6 +8981,7 @@ async function reconcileWorkflowParent(storage, parentJobId) {
         planned: plannedRunCount,
         completed: completed.length,
         failed: failed.length,
+        blocked: blocked.length,
         queued: queued.length,
         running: running.length
       }
@@ -8960,10 +8993,22 @@ async function reconcileWorkflowParent(storage, parentJobId) {
       const checkpointStatus = String(checkpointJob?.status || '').trim().toLowerCase();
       const leaderRuns = children.filter((item) => isWorkflowLeaderTask(workflowTaskName(item)));
       const anyLeaderCompleted = leaderRuns.some((item) => item.status === 'completed');
-      const anyLeaderActive = leaderRuns.some((item) => ['queued', 'claimed', 'running', 'dispatched', 'blocked'].includes(String(item.status || '').toLowerCase()));
+      const anyLeaderActive = leaderRuns.some((item) => ['queued', 'claimed', 'running', 'dispatched'].includes(String(item.status || '').toLowerCase()));
       if (!anyLeaderCompleted && !anyLeaderActive && leaderRuns.some((item) => ['failed', 'timed_out'].includes(String(item.status || '').toLowerCase()))) {
+        blockWorkflowPendingChildren(children.filter((item) => !isWorkflowLeaderTask(workflowTaskName(item))), 'blocked_after_leader_failure');
+        const refreshedChildRuns = workflowChildSnapshot(children);
         parent.workflow = {
           ...(parent.workflow || {}),
+          childRuns: refreshedChildRuns,
+          statusCounts: {
+            total: expectedTotal,
+            planned: plannedRunCount,
+            completed: children.filter((item) => item.status === 'completed').length,
+            failed: children.filter((item) => ['failed', 'timed_out'].includes(String(item.status || '').toLowerCase())).length,
+            blocked: children.filter((item) => item.status === 'blocked').length,
+            queued: children.filter((item) => item.status === 'queued').length,
+            running: children.filter((item) => ['claimed', 'running', 'dispatched'].includes(String(item.status || '').toLowerCase())).length
+          },
           leaderSequence: {
             ...leaderSequence,
             status: 'failed',
@@ -8988,8 +9033,20 @@ async function reconcileWorkflowParent(storage, parentJobId) {
         };
       }
       if (['failed', 'timed_out'].includes(checkpointStatus)) {
+        blockWorkflowPendingChildren(children.filter((item) => item.id !== checkpointJobId), 'blocked_after_leader_checkpoint_failure');
+        const refreshedChildRuns = workflowChildSnapshot(children);
         parent.workflow = {
           ...(parent.workflow || {}),
+          childRuns: refreshedChildRuns,
+          statusCounts: {
+            total: expectedTotal,
+            planned: plannedRunCount,
+            completed: children.filter((item) => item.status === 'completed').length,
+            failed: children.filter((item) => ['failed', 'timed_out'].includes(String(item.status || '').toLowerCase())).length,
+            blocked: children.filter((item) => item.status === 'blocked').length,
+            queued: children.filter((item) => item.status === 'queued').length,
+            running: children.filter((item) => ['claimed', 'running', 'dispatched'].includes(String(item.status || '').toLowerCase())).length
+          },
           leaderSequence: {
             ...leaderSequence,
             status: 'failed',
