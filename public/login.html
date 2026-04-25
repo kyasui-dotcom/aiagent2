@@ -26,26 +26,34 @@
 
     <section class="hero-grid hero-grid-wide start-landing">
       <section class="box panel-stack hero-copy start-hero">
-        <div class="section-title">LOGIN</div>
-        <h1>Sign in to enter CAIt.</h1>
+        <div class="section-title">LOGIN / SIGN UP</div>
+        <h1>Sign in or create your CAIt account.</h1>
         <p id="loginHint">WORK, AGENTS, CONNECT, and SETTINGS are private after login. START stays public.</p>
         <div class="mission-card-grid mission-card-grid-2">
           <button id="loginGoogleBtn" class="btn" type="button">CONTINUE WITH GOOGLE</button>
           <button id="loginGithubBtn" class="btn btn-alt" type="button">CONTINUE WITH GITHUB</button>
+        </div>
+        <div class="detail-box action-card info compact-card">
+          <strong>Email sign in or sign up</strong>
+          <span>Enter your email to receive a one-time link. The same flow creates your account if it does not exist yet.</span>
+          <div class="helper-row" style="margin-top:10px">
+            <input id="loginEmailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" />
+            <button id="loginEmailBtn" class="mini-btn" type="button">EMAIL ME A LINK</button>
+          </div>
         </div>
         <div class="helper-row" style="margin-top:10px">
           <button id="loginContinueBtn" class="mini-btn" type="button" hidden>CONTINUE TO WORK</button>
         </div>
         <div id="loginStatus" class="muted">Checking your session. The page stays here until you choose what to do.</div>
         <div class="detail-box action-card info compact-card">
-          Need email login too?
-          <span>Resend is already wired in this product, so email magic link is the low-risk next step. Password login can be added later if conversion data justifies the extra auth surface.</span>
+          New account flow
+          <span>There is no separate signup page. Google, GitHub, and email magic link all create your account on first successful sign-in.</span>
         </div>
       </section>
     </section>
   </main>
 
-  <script type="module" src="/login.js?v=20260425b"></script>
+  <script type="module" src="/login.js?v=20260425c"></script>
   <script defer src="/analytics-loader.js?v=20260425a"></script>
 </body>
 </html>

@@ -40,6 +40,7 @@ const SESSION_MAX_AGE_SEC = 30 * 24 * 60 * 60;
 const SESSION_REFRESH_WINDOW_SEC = 7 * 24 * 60 * 60;
 const SESSION_REFRESH_MIN_INTERVAL_SEC = 6 * 60 * 60;
 const OAUTH_STATE_MAX_AGE_SEC = 10 * 60;
+const EMAIL_AUTH_MAX_AGE_SEC = 20 * 60;
 const MAX_PENDING_OAUTH_STATES = 8;
 const SESSION_VERSION = 2;
 const APP_SHELL_ASSET_VERSION = '20260424c';
@@ -1926,6 +1927,31 @@ function welcomeEmailContent(name = '') {
   return { subject, text, html, template: 'signup_welcome_v1' };
 }
 
+function emailAuthLinkContent(email = '', link = '') {
+  const safeEmail = String(email || '').trim().toLowerCase();
+  const safeLink = String(link || '').trim();
+  const subject = 'Your CAIt sign-in link';
+  const text = [
+    `Hi ${safeEmail || 'there'},`,
+    '',
+    'Use this link to sign in to CAIt or create your account:',
+    safeLink,
+    '',
+    'The link expires in 20 minutes.',
+    'If you did not request this email, you can ignore it.'
+  ].join('\n');
+  const html = `
+    <div style="font-family:Arial,sans-serif;line-height:1.6;color:#111">
+      <p>Hi ${safeEmail || 'there'},</p>
+      <p>Use this link to sign in to CAIt or create your account:</p>
+      <p><a href="${safeLink}">Open CAIt sign-in link</a></p>
+      <p>This link expires in 20 minutes.</p>
+      <p>If you did not request this email, you can ignore it.</p>
+    </div>
+  `.trim();
+  return { subject, text, html, template: 'email_auth_link_v1' };
+}
+
 function monthlyUpdateTimeZone(env) {
   return String(env?.MONTHLY_UPDATE_TIMEZONE || 'Asia/Tokyo').trim() || 'Asia/Tokyo';
 }
@@ -2121,6 +2147,91 @@ function accountEmailCandidates(account = null, user = null) {
     ...identities.map((identity) => identity?.email)
   ];
   return [...new Set(values.map((value) => String(value || '').trim().toLowerCase()).filter((value) => validateEmailAddress(value)))];
+}
+
+async function sendEmailAuthLink(storage, env, email = '', link = '', meta = {}) {
+  const recipientEmail = String(email || '').trim().toLowerCase();
+  const content = emailAuthLinkContent(recipientEmail, link);
+  const baseDelivery = {
+    id: crypto.randomUUID(),
+    accountLogin: recipientEmail,
+    recipientEmail,
+    senderEmail: resendFromEmail(env),
+    subject: content.subject,
+    template: content.template,
+    provider: 'resend',
+    status: 'queued',
+    providerMessageId: '',
+    payload: {
+      authProvider: 'email',
+      from: resendFromEmail(env),
+      replyTo: resendReplyToEmail(env),
+      to: recipientEmail,
+      subject: content.subject,
+      text: content.text,
+      html: content.html,
+      returnTo: String(meta.returnTo || '').trim(),
+      loginSource: String(meta.loginSource || '').trim(),
+      visitorId: String(meta.visitorId || '').trim()
+    },
+    response: {},
+    errorText: '',
+    createdAt: nowIso(),
+    updatedAt: nowIso()
+  };
+  if (!validateEmailAddress(recipientEmail)) {
+    const skipped = { ...baseDelivery, status: 'skipped', errorText: 'Valid recipient email is required' };
+    await appendEmailDelivery(storage, skipped);
+    return skipped;
+  }
+  if (!resendConfigured(env)) {
+    const skipped = { ...baseDelivery, status: 'skipped', errorText: 'RESEND_API_KEY not configured' };
+    await appendEmailDelivery(storage, skipped);
+    return skipped;
+  }
+  try {
+    const sent = await sendResendEmail(env, {
+      from: resendFromEmail(env),
+      replyTo: resendReplyToEmail(env),
+      to: recipientEmail,
+      subject: content.subject,
+      text: content.text,
+      html: content.html
+    });
+    const delivery = {
+      ...baseDelivery,
+      status: 'sent',
+      providerMessageId: String(sent?.id || ''),
+      response: sent,
+      updatedAt: nowIso()
+    };
+    await appendEmailDelivery(storage, delivery);
+    await touchEvent(storage, 'EMAIL', `${recipientEmail} email sign-in link sent`, {
+      login: recipientEmail,
+      to: recipientEmail,
+      template: content.template,
+      provider: 'resend',
+      providerMessageId: delivery.providerMessageId
+    });
+    return delivery;
+  } catch (error) {
+    const failed = {
+      ...baseDelivery,
+      status: 'failed',
+      response: error?.payload || {},
+      errorText: String(error?.message || error || 'email auth link send failed').slice(0, 500),
+      updatedAt: nowIso()
+    };
+    await appendEmailDelivery(storage, failed);
+    await touchEvent(storage, 'FAILED', `${recipientEmail} email sign-in link failed`, {
+      login: recipientEmail,
+      to: recipientEmail,
+      template: content.template,
+      provider: 'resend',
+      error: failed.errorText
+    });
+    return failed;
+  }
 }
 
 async function maybeSendMonthlyUpdateEmail(storage, env, state, account, options = {}) {
@@ -3806,6 +3917,7 @@ async function authStatus(request, env) {
   return {
     loggedIn,
     authProvider: current?.authProvider || 'guest',
+    emailConfigured: resendConfigured(env),
     githubConfigured: Boolean(githubClientId(env) && githubClientSecret(env)),
     googleConfigured: googleConfigured(env),
     xConfigured: xOAuthConfigured(env),
@@ -5686,6 +5798,7 @@ async function touchEvent(storage, type, message, meta = {}) {
 
 function authAnalyticsProviderName(authProvider = 'guest') {
   const value = String(authProvider || '').trim().toLowerCase();
+  if (value.includes('email')) return 'email';
   if (value.includes('google')) return 'google';
   if (value.includes('github')) return 'github';
   return '';
@@ -6068,8 +6181,10 @@ function accountHasXConnector(account = null) {
 
 function linkedProvidersFromAccount(account = null) {
   const providers = [];
+  const emailIdentity = accountIdentityForProvider(account, 'email');
   const googleIdentity = accountIdentityForProvider(account, 'google');
   const githubIdentity = accountIdentityForProvider(account, 'github');
+  if (emailIdentity?.provider) providers.push(emailIdentity.provider);
   if (googleIdentity?.provider) providers.push(googleIdentity.provider);
   else if (accountHasGoogleConnector(account)) providers.push('google-oauth');
   if (githubIdentity?.provider) providers.push(githubIdentity.provider);
@@ -6167,6 +6282,32 @@ function authFailureRedirectPath(request, env, code = 'auth_failed', cookieState
     return `${loginUrl.pathname}${loginUrl.search}`;
   }
   return `/?auth_error=${encodeURIComponent(safeCode)}`;
+}
+
+async function createEmailAuthToken(env, payload = {}) {
+  const now = Date.now();
+  return sealPayload({
+    kind: 'email-auth',
+    email: String(payload.email || '').trim().toLowerCase(),
+    returnTo: String(payload.returnTo || '/?tab=work').trim() || '/?tab=work',
+    loginSource: String(payload.loginSource || 'login_page').trim().toLowerCase(),
+    visitorId: String(payload.visitorId || '').trim(),
+    exp: now + EMAIL_AUTH_MAX_AGE_SEC * 1000
+  }, env);
+}
+
+async function parseEmailAuthToken(env, raw = '') {
+  const payload = await openPayload(raw, env);
+  if (!payload || payload.kind !== 'email-auth') return null;
+  if (Number(payload.exp || 0) < Date.now()) return null;
+  const email = String(payload.email || '').trim().toLowerCase();
+  if (!validateEmailAddress(email)) return null;
+  return {
+    email,
+    returnTo: String(payload.returnTo || '/?tab=work').trim() || '/?tab=work',
+    loginSource: String(payload.loginSource || 'login_page').trim().toLowerCase() || 'login_page',
+    visitorId: String(payload.visitorId || '').trim()
+  };
 }
 
 function mapGithubAppInstallation(installation = {}) {
@@ -6990,6 +7131,131 @@ async function handleGoogleAuthCallback(request, env) {
       status: 'callback_error'
     });
     return redirectWithCookies(authFailureRedirectPath(request, env, error.message, cookieState), [oauthState.cookie]);
+  }
+}
+
+async function handleEmailAuthRequest(request, env) {
+  const storage = runtimeStorage(env);
+  let body = {};
+  try {
+    body = await parseBody(request);
+  } catch (error) {
+    await trackAuthLoginFailure(storage, 'email', {
+      source: 'email_auth_request',
+      status: 'invalid_json'
+    });
+    return json({ error: error.message }, 400);
+  }
+  const email = String(body?.email || '').trim().toLowerCase();
+  const returnTo = normalizeLocalRedirectPath(request, env, body?.return_to || '', '/?tab=work');
+  const loginSource = normalizeOAuthLoginSource(body?.login_source || 'login_page') || 'login_page';
+  const visitorId = normalizeOAuthVisitorId(body?.visitor_id || '');
+  if (!validateEmailAddress(email)) {
+    await trackAuthLoginFailure(storage, 'email', {
+      source: 'email_auth_request',
+      status: 'invalid_email'
+    });
+    return json({ error: 'A valid email address is required.' }, 400);
+  }
+  if (!resendConfigured(env)) {
+    await trackAuthLoginFailure(storage, 'email', {
+      source: 'email_auth_request',
+      status: 'provider_not_configured',
+      login: email
+    });
+    return json({ error: 'Email sign-in is not configured yet.' }, 503);
+  }
+  const token = await createEmailAuthToken(env, {
+    email,
+    returnTo,
+    loginSource,
+    visitorId
+  });
+  const verifyUrl = new URL('/auth/email/verify', baseUrl(request, env));
+  verifyUrl.searchParams.set('token', token);
+  const delivery = await sendEmailAuthLink(storage, env, email, verifyUrl.toString(), {
+    returnTo,
+    loginSource,
+    visitorId
+  });
+  if (delivery.status !== 'sent') {
+    await trackAuthLoginFailure(storage, 'email', {
+      source: 'email_auth_request',
+      status: delivery.status === 'failed' ? 'send_failed' : 'send_skipped',
+      login: email
+    });
+    return json({ error: delivery.errorText || 'Could not send the email sign-in link.' }, delivery.status === 'failed' ? 502 : 503);
+  }
+  return json({ ok: true, status: 'sent' }, 201);
+}
+
+async function handleEmailAuthVerify(request, env) {
+  const storage = runtimeStorage(env);
+  const url = new URL(request.url);
+  const token = String(url.searchParams.get('token') || '').trim();
+  const fallbackState = {
+    action: 'login',
+    loginSource: 'login_page',
+    returnTo: '/?tab=work',
+    visitorId: ''
+  };
+  if (!token) {
+    await trackAuthLoginFailure(storage, 'email', {
+      source: 'email_auth_verify',
+      status: 'missing_token'
+    });
+    return redirect(authFailureRedirectPath(request, env, 'email_link_invalid', fallbackState));
+  }
+  const emailState = await parseEmailAuthToken(env, token);
+  if (!emailState) {
+    await trackAuthLoginFailure(storage, 'email', {
+      source: 'email_auth_verify',
+      status: 'invalid_token'
+    });
+    return redirect(authFailureRedirectPath(request, env, 'email_link_invalid', fallbackState));
+  }
+  try {
+    const account = await persistAccountForIdentity(storage, env, {
+      providerUserId: emailState.email,
+      login: emailState.email,
+      email: emailState.email,
+      name: emailState.email.split('@')[0] || emailState.email,
+      avatarUrl: '',
+      profileUrl: ''
+    }, 'email');
+    const session = mergeLinkedSession({}, {
+      authProvider: 'email',
+      user: {
+        login: account?.login || emailState.email,
+        name: account?.profile?.displayName || emailState.email,
+        avatarUrl: '',
+        profileUrl: '',
+        email: emailState.email,
+        accountId: account?.id || ''
+      },
+      accountLogin: account?.login || emailState.email,
+      linkedProviders: linkedProvidersFromAccount(account)
+    });
+    return redirectWithCookies(authSuccessRedirectPath(request, env, {
+      action: 'login',
+      loginSource: emailState.loginSource,
+      returnTo: emailState.returnTo,
+      visitorId: emailState.visitorId
+    }), [
+      await makeSessionCookie(session, env)
+    ]);
+  } catch (error) {
+    await trackAuthLoginFailure(storage, 'email', {
+      source: 'email_auth_verify',
+      status: 'verify_error',
+      login: emailState.email
+    });
+    return redirect(authFailureRedirectPath(request, env, 'email_link_invalid', {
+      action: 'login',
+      loginSource: emailState.loginSource,
+      returnTo: emailState.returnTo,
+      visitorId: emailState.visitorId
+    }));
   }
 }
 
@@ -11427,6 +11693,12 @@ export default {
     }
     if (url.pathname === '/auth/google/callback' && request.method === 'GET') {
       return handleGoogleAuthCallback(request, env);
+    }
+    if (url.pathname === '/auth/email/request' && request.method === 'POST') {
+      return handleEmailAuthRequest(request, env);
+    }
+    if (url.pathname === '/auth/email/verify' && request.method === 'GET') {
+      return handleEmailAuthVerify(request, env);
     }
     if (url.pathname === '/auth/x' && request.method === 'GET') {
       return handleXAuthStart(request, env);

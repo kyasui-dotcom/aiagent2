@@ -19,7 +19,7 @@
     "qa:settings": "node scripts/settings-qa.mjs",
     "qa:feedback": "node scripts/feedback-qa.mjs",
     "qa:api-keys": "node scripts/api-keys-qa.mjs",
-    "qa:auth": "node scripts/auth-link-qa.mjs",
+    "qa:auth": "node scripts/auth-link-qa.mjs && node scripts/email-auth-qa.mjs",
     "qa:agent-api": "node scripts/agent-api-e2e-qa.mjs",
     "qa:callback": "node scripts/callback-qa.mjs && node scripts/callback-state-guard.mjs",
     "qa:retry-timeout": "node scripts/retry-timeout-qa.mjs",

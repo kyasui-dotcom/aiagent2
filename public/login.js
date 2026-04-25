@@ -4,6 +4,8 @@ const els = {
   flash: $('loginFlash'),
   hint: $('loginHint'),
   status: $('loginStatus'),
+  emailInput: $('loginEmailInput'),
+  emailBtn: $('loginEmailBtn'),
   google: $('loginGoogleBtn'),
   github: $('loginGithubBtn'),
   continueBtn: $('loginContinueBtn')
@@ -100,8 +102,14 @@ function buildAuthUrl(provider = 'google', route = currentRoute()) {
 }
 
 function applyProviderAvailability(status = {}) {
+  const emailAvailable = Boolean(status?.emailConfigured);
   const googleAvailable = Boolean(status?.googleConfigured);
   const githubAvailable = Boolean(status?.githubConfigured || status?.githubAppConfigured);
+  if (els.emailInput) els.emailInput.disabled = !emailAvailable || !authStatusChecked || Boolean(status?.loggedIn);
+  if (els.emailBtn) {
+    els.emailBtn.hidden = !emailAvailable;
+    els.emailBtn.disabled = !emailAvailable || !authStatusChecked || Boolean(status?.loggedIn);
+  }
   if (els.google) {
     els.google.hidden = !googleAvailable;
     els.google.disabled = !googleAvailable || !authStatusChecked || Boolean(status?.loggedIn);
@@ -113,7 +121,7 @@ function applyProviderAvailability(status = {}) {
   if (els.continueBtn) {
     els.continueBtn.hidden = !status?.loggedIn;
   }
-  if (!googleAvailable && !githubAvailable && els.status) {
+  if (!emailAvailable && !googleAvailable && !githubAvailable && els.status) {
     els.status.textContent = 'No login provider is configured on this deployment yet.';
   }
 }
@@ -137,6 +145,11 @@ async function loadAuthStatus(route = currentRoute()) {
     applyProviderAvailability(status);
   } catch {
     authStatusChecked = true;
+    if (els.emailInput) els.emailInput.disabled = false;
+    if (els.emailBtn) {
+      els.emailBtn.hidden = false;
+      els.emailBtn.disabled = false;
+    }
     if (els.google) {
       els.google.hidden = false;
       els.google.disabled = false;
@@ -161,6 +174,43 @@ function bindProviderButton(button, provider, route = currentRoute()) {
   };
 }
 
+async function requestEmailLink(route = currentRoute()) {
+  const email = safeString(els.emailInput?.value || '', 160).toLowerCase();
+  if (!email || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) {
+    flash('Enter a valid email address first.', 'error');
+    els.emailInput?.focus();
+    return;
+  }
+  if (els.emailBtn) els.emailBtn.disabled = true;
+  if (els.status) els.status.textContent = 'Sending your sign-in link. The page stays here.';
+  await track('email_login_started', {
+    source: `login_page:${route.source}`,
+    action: route.next
+  });
+  try {
+    const response = await fetch('/auth/email/request', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        email,
+        return_to: route.next,
+        login_source: route.source,
+        visitor_id: visitorId()
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload?.error || 'Could not send the email sign-in link.');
+    flash('Check your inbox. The email link signs you in and creates your account if needed.', 'ok');
+    if (els.status) els.status.textContent = 'Email link sent. Open the link in the same browser if possible.';
+  } catch (error) {
+    flash(String(error?.message || error || 'Could not send the email sign-in link.'), 'error');
+    if (els.status) els.status.textContent = 'Email sign-in failed. Review the address and try again.';
+  } finally {
+    if (els.emailBtn) els.emailBtn.disabled = false;
+  }
+}
+
 async function init() {
   const route = currentRoute();
   if (els.hint && route.source.startsWith('gate_')) {
@@ -170,6 +220,12 @@ async function init() {
   if (route.authError) {
     flash(`Sign-in failed: ${route.authError}`, 'error');
   }
+  if (els.emailBtn) els.emailBtn.onclick = () => { void requestEmailLink(route); };
+  if (els.emailInput) els.emailInput.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    void requestEmailLink(route);
+  });
   bindProviderButton(els.google, 'google', route);
   bindProviderButton(els.github, 'github', route);
   await track('page_view', { source: `login_page:${route.source}` });
