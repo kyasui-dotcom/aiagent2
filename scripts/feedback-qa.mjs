@@ -252,6 +252,28 @@ try {
   assert.equal(activeOnlyDashboard.chats[0].linkedOrderId, 'job_active_admin_1');
   assert.equal(activeOnlyDashboard.chats[0].handlingStatus, 'order_brief_prepared');
 
+  const blankTranscriptDashboard = buildAdminDashboard({
+    accounts: [],
+    agents: [],
+    jobs: [],
+    feedbackReports: [],
+    events: [],
+    chatTranscripts: [{
+      id: 'chat_blank_admin_1',
+      kind: 'work_chat',
+      prompt: '',
+      answer: '',
+      sessionId: 'blank_session_1',
+      createdAt: created.createdAt,
+      updatedAt: created.createdAt,
+      authProvider: 'guest',
+      loggedIn: false
+    }]
+  }, { operator: 'owner@example.com' });
+  assert.equal(blankTranscriptDashboard.summary.chats.total, 1);
+  assert.equal(blankTranscriptDashboard.summary.chats.turnsTotal, 1);
+  assert.equal(blankTranscriptDashboard.chats[0].sessionId, 'blank_session_1');
+
   console.log('feedback qa passed');
 } finally {
 }
