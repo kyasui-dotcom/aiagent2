@@ -16084,6 +16084,49 @@ function genericDeliverableFromClassification(run = null, cached = null) {
   };
 }
 
+function genericDeliverableFromExplicitFiles(report = {}, files = []) {
+  const safeFiles = Array.isArray(files) ? files : [];
+  const explicit = safeFiles.find((file) => {
+    const type = String(file?.content_type || file?.contentType || '').trim();
+    return Boolean(
+      String(file?.content || '').trim()
+      && ['social_post_pack', 'email_pack', 'code_handoff', 'report_bundle'].includes(type)
+      && (file?.execution_candidate === true || file?.executionCandidate === true)
+    );
+  }) || null;
+  if (!explicit) {
+    const reportCandidate = report?.execution_candidate && typeof report.execution_candidate === 'object'
+      ? report.execution_candidate
+      : report?.executionCandidate && typeof report.executionCandidate === 'object'
+        ? report.executionCandidate
+        : null;
+    if (!reportCandidate?.type || !String(reportCandidate?.content || '').trim()) return null;
+    return {
+      type: String(reportCandidate.type || '').trim(),
+      title: compactChatText(String(reportCandidate.title || 'Execution candidate'), 140),
+      content: normalizeArticleText(String(reportCandidate.content || '')),
+      fileName: String(reportCandidate.file_name || reportCandidate.fileName || ''),
+      format: String(reportCandidate.format || 'text/markdown'),
+      confidence: 1,
+      reason: String(reportCandidate.reason || ''),
+      actionContract: resolveDeliveryActionContract(String(reportCandidate.type || '').trim(), reportCandidate.action_contract || reportCandidate.actionContract),
+      draftDefaults: reportCandidate.draft_defaults && typeof reportCandidate.draft_defaults === 'object' ? reportCandidate.draft_defaults : {}
+    };
+  }
+  const normalizedType = String(explicit.content_type || explicit.contentType || '').trim();
+  return {
+    type: normalizedType,
+    title: compactChatText(String(explicit.title || explicit.name || 'Execution candidate'), 140),
+    content: normalizeArticleText(String(explicit.content || '')),
+    fileName: String(explicit.name || ''),
+    format: String(explicit.type || 'text/markdown'),
+    confidence: 1,
+    reason: String(explicit.reason || ''),
+    actionContract: resolveDeliveryActionContract(normalizedType, explicit.action_contract || explicit.actionContract),
+    draftDefaults: explicit.draft_defaults && typeof explicit.draft_defaults === 'object' ? explicit.draft_defaults : {}
+  };
+}
+
 function shouldClassifyDeliveryCandidate(run = null, report = {}, files = [], article = null) {
   if (!run?.id || article) return false;
   if (String(run.status || '') !== 'completed') return false;
@@ -16225,6 +16268,9 @@ function genericDeliverableDraftForJob(job = {}, deliverable = null) {
     defaultCodeTarget: isGithubLinked(state.snapshot?.auth || {}) ? 'github_repo' : 'local_terminal',
     preferredRepoFullName: preferredGithubRepoFullName()
   });
+  if (deliverable?.draftDefaults && typeof deliverable.draftDefaults === 'object') {
+    draft = { ...draft, ...deliverable.draftDefaults };
+  }
   const googlePrefs = googleExecutorPreferences();
   draft.googleSearchConsoleSite = String(googlePrefs.searchConsoleSite || '').trim();
   draft.googleGa4Property = String(googlePrefs.ga4Property || '').trim();
@@ -18604,8 +18650,9 @@ function deliveryRenderContextFromValue(value) {
 }
 
 function resolveDeliveryCandidates(run = null, report = {}, files = [], cachedPublishClassification = null) {
+  const explicitDeliverable = genericDeliverableFromExplicitFiles(report, files);
   return {
-    genericDeliverable: genericDeliverableFromClassification(run, cachedPublishClassification),
+    genericDeliverable: explicitDeliverable || genericDeliverableFromClassification(run, cachedPublishClassification),
     article: articleCandidateFromDelivery(run, report || {}, files) || articleCandidateFromClassification(run, cachedPublishClassification)
   };
 }

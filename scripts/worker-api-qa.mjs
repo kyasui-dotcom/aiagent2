@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import worker from '../worker.js';
 import { createD1LikeStorage } from '../lib/storage.js';
-import { nowIso } from '../lib/shared.js';
+import { buildAgentTeamDeliveryOutput, nowIso } from '../lib/shared.js';
 
 const env = {
   APP_VERSION: '0.2.0-test',
@@ -329,6 +329,73 @@ const finalSummaryChildRun = asyncFinalSummaryState.body.job.workflow.childRuns.
 ));
 assert.equal(finalSummaryChildRun?.status, 'completed', 'final summary leader should complete after specialists finish');
 assert.equal(asyncFinalSummaryState.body.job.output?.report?.leaderPhase, 'final_summary', 'workflow output should promote the final leader summary');
+assert.ok(asyncFinalSummaryState.body.job.output?.files?.[0]?.content_type, 'workflow output should surface an explicit execution candidate file when a specialist packet exists');
+
+const syntheticAgentTeamOutput = buildAgentTeamDeliveryOutput({
+  workflow: { objective: 'Launch synthetic QA' },
+  prompt: 'Launch synthetic QA'
+}, [
+  {
+    id: 'leader-final',
+    taskType: 'cmo_leader',
+    workflowTask: 'cmo_leader',
+    workflowAgentName: 'CMO Team Leader',
+    status: 'completed',
+    createdAt: nowIso(),
+    completedAt: nowIso(),
+    input: { _broker: { workflow: { sequencePhase: 'final_summary' } } },
+    output: {
+      summary: 'Leader final summary',
+      report: {
+        summary: 'Leader final summary',
+        bullets: ['lane chosen'],
+        nextAction: 'Execute the first packet.'
+      },
+      files: [
+        {
+          name: 'leader-summary.md',
+          type: 'text/markdown',
+          content: '# Leader summary\n\nExecute the approved lane.'
+        }
+      ]
+    }
+  },
+  {
+    id: 'x-specialist',
+    taskType: 'x_post',
+    workflowTask: 'x_post',
+    workflowAgentName: 'X Connector Agent',
+    status: 'completed',
+    createdAt: nowIso(),
+    completedAt: nowIso(),
+    input: { _broker: { workflow: { sequencePhase: 'action' } } },
+    output: {
+      summary: 'Prepared X packet',
+      report: {
+        summary: 'Prepared X packet',
+        bullets: ['exact post ready'],
+        nextAction: 'Approve and publish.',
+        authority_request: {
+          reason: 'Connect X before publishing.',
+          missing_connectors: ['x'],
+          missing_connector_capabilities: ['x.post'],
+          required_google_sources: [],
+          owner_label: 'CMO Leader',
+          source: 'built_in_preflight'
+        }
+      },
+      files: [
+        {
+          name: 'x-post-pack.md',
+          type: 'text/markdown',
+          content: '# X post pack\n\nPost text:\nLaunching now.'
+        }
+      ]
+    }
+  }
+]);
+assert.equal(syntheticAgentTeamOutput.files?.[0]?.content_type, 'social_post_pack', 'agent team output should promote specialist execution packets to explicit deliverables');
+assert.equal(syntheticAgentTeamOutput.report?.authority_request?.missing_connectors?.[0], 'x', 'agent team output should preserve specialist authority requests for execution gating');
 const manualParentId = 'qa-progress-parent';
 const manualChildAId = 'qa-progress-child-a';
 const manualChildBId = 'qa-progress-child-b';
