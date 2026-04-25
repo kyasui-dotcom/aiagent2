@@ -2332,15 +2332,68 @@ function hasOAuthBaseSession(session = null) {
   return Boolean(session?.accountLogin || session?.user?.login);
 }
 
+function normalizeLocalRedirectPath(req, value = '', fallback = '/') {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  try {
+    const parsed = new URL(raw, baseUrl(req));
+    const expectedOrigin = new URL(baseUrl(req)).origin;
+    if (parsed.origin !== expectedOrigin) return fallback;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeOAuthLoginSource(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
+function normalizeOAuthVisitorId(value = '') {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9:_-]+/g, '')
+    .slice(0, 80);
+}
+
 function oauthStartContext(req, url = new URL(req.url, baseUrl(req))) {
   const explicitMode = String(url.searchParams.get('mode') || '').toLowerCase();
   const existingSession = getSession(req);
   const action = explicitMode === 'link' ? 'link' : 'login';
-  return { existingSession, action };
+  return {
+    existingSession,
+    action,
+    returnTo: normalizeLocalRedirectPath(req, url.searchParams.get('return_to') || '', '/'),
+    loginSource: normalizeOAuthLoginSource(url.searchParams.get('login_source') || ''),
+    visitorId: normalizeOAuthVisitorId(url.searchParams.get('visitor_id') || '')
+  };
 }
 
 function shouldLinkOAuthCallback(oauthState = null, existingSession = null) {
   return oauthState?.action === 'link';
+}
+
+function authSuccessRedirectPath(req, oauthState = null) {
+  return normalizeLocalRedirectPath(req, oauthState?.returnTo || '', '/');
+}
+
+function authFailureRedirectPath(req, code = 'auth_failed', oauthState = null) {
+  const safeCode = String(code || 'auth_failed').trim() || 'auth_failed';
+  if (oauthState?.action === 'login' && oauthState?.loginSource) {
+    const loginUrl = new URL('/login.html', baseUrl(req));
+    loginUrl.searchParams.set('auth_error', safeCode);
+    loginUrl.searchParams.set('source', oauthState.loginSource);
+    if (oauthState.returnTo) loginUrl.searchParams.set('next', authSuccessRedirectPath(req, oauthState));
+    if (oauthState.visitorId) loginUrl.searchParams.set('visitor_id', oauthState.visitorId);
+    return `${loginUrl.pathname}${loginUrl.search}`;
+  }
+  return `/?auth_error=${encodeURIComponent(safeCode)}`;
 }
 
 function mapGithubAppInstallation(installation = {}) {
@@ -2813,8 +2866,10 @@ function serveStatic(res, path) {
   if (!existsSync(file)) return false;
   const noCache = new Set([
     '/index.html',
+    '/login.html',
     '/styles.css',
     '/client.js',
+    '/login.js',
     '/delivery-action-contract.js',
     '/work-action-registry.js',
     '/work-intent-resolver.js'
@@ -7276,10 +7331,10 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/auth/github-app/connect') {
     if (!githubAppConfigured()) return json(res, 503, { error: 'GitHub App is not configured yet.', setup: githubAppRecommendedSettings(req) });
-    const { existingSession, action } = oauthStartContext(req, url);
+    const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
     if (existingSession?.user && action !== 'link' && sessionHasGithubApp(existingSession)) return redirect(res, '/');
     const state = randomBytes(16).toString('hex');
-    oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action });
+    oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action, returnTo, loginSource, visitorId });
     return redirect(res, githubAppConnectUrl(req, state));
   }
   if (req.method === 'GET' && url.pathname === '/auth/github-app/callback') {
@@ -7302,9 +7357,9 @@ const server = http.createServer(async (req, res) => {
       let session = linkedSession;
       if (shouldLinkOAuthCallback(oauthState, existingSession)) {
         const current = currentUserContext(req);
-        if (!current?.login) return redirect(res, '/?auth_error=login_required_for_link');
+        if (!current?.login) return redirect(res, authFailureRedirectPath(req, 'login_required_for_link', oauthState));
         const linked = await linkSessionIdentityToAccount(current.login, linkedSession.githubIdentity, 'github-app');
-        if (!linked?.ok) return redirect(res, '/?auth_error=github_identity_already_linked');
+        if (!linked?.ok) return redirect(res, authFailureRedirectPath(req, 'github_identity_already_linked', oauthState));
         session = mergeLinkedSession(existingSession || {}, {
           accountLogin: linked.account.login,
           githubIdentity: accountIdentityForProvider(linked.account, 'github') || linkedSession.githubIdentity,
@@ -7326,9 +7381,9 @@ const server = http.createServer(async (req, res) => {
       await persistGithubAppAccess(session.accountLogin || session.user?.login || '', session);
       const sessionId = randomBytes(24).toString('hex');
       sessions.set(sessionId, session);
-      return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId, req) });
+      return redirect(res, authSuccessRedirectPath(req, oauthState), { 'Set-Cookie': makeSessionCookie(sessionId, req) });
     } catch (error) {
-      return redirect(res, `/?auth_error=${encodeURIComponent(error.message)}`);
+      return redirect(res, authFailureRedirectPath(req, error.message, oauthState));
     }
   }
   if (req.method === 'GET' && url.pathname === '/auth/github-app/setup') {
@@ -7345,9 +7400,9 @@ const server = http.createServer(async (req, res) => {
         let session = linkedSession;
         if (shouldLinkOAuthCallback(oauthState, existingSession)) {
           const current = currentUserContext(req);
-          if (!current?.login) return redirect(res, '/?auth_error=login_required_for_link');
+          if (!current?.login) return redirect(res, authFailureRedirectPath(req, 'login_required_for_link', oauthState));
           const linked = await linkSessionIdentityToAccount(current.login, linkedSession.githubIdentity, 'github-app');
-          if (!linked?.ok) return redirect(res, '/?auth_error=github_identity_already_linked');
+          if (!linked?.ok) return redirect(res, authFailureRedirectPath(req, 'github_identity_already_linked', oauthState));
           session = mergeLinkedSession(existingSession || {}, {
             accountLogin: linked.account.login,
             githubIdentity: accountIdentityForProvider(linked.account, 'github') || linkedSession.githubIdentity,
@@ -7369,13 +7424,13 @@ const server = http.createServer(async (req, res) => {
         await persistGithubAppAccess(session.accountLogin || session.user?.login || '', session);
         const sessionId = randomBytes(24).toString('hex');
         sessions.set(sessionId, session);
-        return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId, req) });
+        return redirect(res, authSuccessRedirectPath(req, oauthState), { 'Set-Cookie': makeSessionCookie(sessionId, req) });
       } catch (error) {
         await trackAuthLoginFailure('github-app', {
           source: 'auth_callback',
           status: 'callback_error'
         });
-        return redirect(res, `/?auth_error=${encodeURIComponent(error.message)}`);
+        return redirect(res, authFailureRedirectPath(req, error.message, oauthState));
       }
     }
     if (!githubAppConfigured()) return json(res, 503, { error: 'GitHub App is not configured yet.', setup: githubAppRecommendedSettings(req) });
@@ -7385,16 +7440,16 @@ const server = http.createServer(async (req, res) => {
     if (!(githubClientId && githubClientSecret)) {
       if (githubAppConfigured()) {
         const state = randomBytes(16).toString('hex');
-        const { action } = oauthStartContext(req, url);
-        oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action });
+        const { action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
+        oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action, returnTo, loginSource, visitorId });
         return redirect(res, githubAppConnectUrl(req, state));
       }
       return json(res, 503, { error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' });
     }
-    const { existingSession, action } = oauthStartContext(req, url);
+    const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
     if (existingSession?.user && action !== 'link') return redirect(res, '/');
     const state = randomBytes(16).toString('hex');
-    oauthStates.set(state, { createdAt: Date.now(), provider: 'github-oauth', action });
+    oauthStates.set(state, { createdAt: Date.now(), provider: 'github-oauth', action, returnTo, loginSource, visitorId });
     const callback = `${baseUrl(req)}/auth/github/callback`;
     const githubScope = githubOAuthScope();
     const githubUrl = new URL('https://github.com/login/oauth/authorize');
@@ -7430,9 +7485,9 @@ const server = http.createServer(async (req, res) => {
       let session;
       if (shouldLinkOAuthCallback(oauthState, existingSession)) {
         const current = currentUserContext(req);
-        if (!current?.login) return redirect(res, '/?auth_error=login_required_for_link');
+        if (!current?.login) return redirect(res, authFailureRedirectPath(req, 'login_required_for_link', oauthState));
         const linked = await linkSessionIdentityToAccount(current.login, githubIdentity, 'github-oauth');
-        if (!linked?.ok) return redirect(res, '/?auth_error=github_identity_already_linked');
+        if (!linked?.ok) return redirect(res, authFailureRedirectPath(req, 'github_identity_already_linked', oauthState));
         if (connectorTokenEncryptionConfigured(process.env)) {
           await storage.mutate(async (draft) => {
             const latest = accountSettingsForLogin(draft, linked.account.login, { ...githubIdentity, login: linked.account.login }, 'github-oauth');
@@ -7484,21 +7539,21 @@ const server = http.createServer(async (req, res) => {
       }
       const sessionId = randomBytes(24).toString('hex');
       sessions.set(sessionId, session);
-      return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId, req) });
+      return redirect(res, authSuccessRedirectPath(req, oauthState), { 'Set-Cookie': makeSessionCookie(sessionId, req) });
     } catch (error) {
       await trackAuthLoginFailure('github-oauth', {
         source: 'auth_callback',
         status: 'callback_error'
       });
-      return redirect(res, `/?auth_error=${encodeURIComponent(error.message)}`);
+      return redirect(res, authFailureRedirectPath(req, error.message, oauthState));
     }
   }
   if (req.method === 'GET' && url.pathname === '/auth/google') {
     if (!googleConfigured()) return json(res, 503, { error: 'Google OAuth is not configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.' });
-    const { existingSession, action } = oauthStartContext(req, url);
+    const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
     if (existingSession?.user && action !== 'link') return redirect(res, '/');
     const state = randomBytes(16).toString('hex');
-    oauthStates.set(state, { createdAt: Date.now(), provider: 'google-oauth', action });
+    oauthStates.set(state, { createdAt: Date.now(), provider: 'google-oauth', action, returnTo, loginSource, visitorId });
     const callback = `${baseUrl(req)}/auth/google/callback`;
     const googleUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     googleUrl.searchParams.set('client_id', googleClientId);
@@ -7543,9 +7598,9 @@ const server = http.createServer(async (req, res) => {
       let session;
       if (shouldLinkOAuthCallback(oauthState, existingSession)) {
         const current = currentUserContext(req);
-        if (!current?.login) return redirect(res, '/?auth_error=login_required_for_link');
+        if (!current?.login) return redirect(res, authFailureRedirectPath(req, 'login_required_for_link', oauthState));
         const linked = await linkSessionIdentityToAccount(current.login, googleIdentity, 'google-oauth');
-        if (!linked?.ok) return redirect(res, '/?auth_error=google_identity_already_linked');
+        if (!linked?.ok) return redirect(res, authFailureRedirectPath(req, 'google_identity_already_linked', oauthState));
         if (connectorTokenEncryptionConfigured(process.env)) {
           await storage.mutate(async (draft) => {
             const latest = accountSettingsForLogin(draft, linked.account.login, { ...googleIdentity, login: linked.account.login }, 'google-oauth');
@@ -7595,13 +7650,13 @@ const server = http.createServer(async (req, res) => {
       }
       const sessionId = randomBytes(24).toString('hex');
       sessions.set(sessionId, session);
-      return redirect(res, '/', { 'Set-Cookie': makeSessionCookie(sessionId, req) });
+      return redirect(res, authSuccessRedirectPath(req, oauthState), { 'Set-Cookie': makeSessionCookie(sessionId, req) });
     } catch (error) {
       await trackAuthLoginFailure('google-oauth', {
         source: 'auth_callback',
         status: 'callback_error'
       });
-      return redirect(res, `/?auth_error=${encodeURIComponent(error.message)}`);
+      return redirect(res, authFailureRedirectPath(req, error.message, oauthState));
     }
   }
   if (req.method === 'GET' && url.pathname === '/auth/x') {

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CAIt | Login</title>
+  <meta name="description" content="Sign in to CAIt to enter the private AI agent workspace for Work Chat, agent publishing, and account-based delivery." />
+  <meta name="robots" content="noindex,follow" />
+  <link rel="canonical" href="https://aiagent-marketplace.net/login.html" />
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="stylesheet" href="/styles.css?v=20260424am" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-row">
+      <a class="logo logo-link brand-logo" href="/" aria-label="Back to CAIt start"><span class="logo-mark">CAIt</span></a>
+      <div class="helper-row">
+        <a href="/" id="loginBackBtn" class="mini-btn link-btn">BACK TO START</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell">
+    <section id="loginFlash" class="box flash" hidden></section>
+
+    <section class="hero-grid hero-grid-wide start-landing">
+      <section class="box panel-stack hero-copy start-hero">
+        <div class="section-title">LOGIN</div>
+        <h1>Sign in to enter CAIt.</h1>
+        <p id="loginHint">WORK, AGENTS, CONNECT, and SETTINGS are private after login. START stays public.</p>
+        <div class="mission-card-grid mission-card-grid-2">
+          <button id="loginGoogleBtn" class="btn" type="button">CONTINUE WITH GOOGLE</button>
+          <button id="loginGithubBtn" class="btn btn-alt" type="button">CONTINUE WITH GITHUB</button>
+        </div>
+        <div id="loginStatus" class="muted">Choose one account provider. After login, CAIt opens the requested product area.</div>
+        <div class="detail-box action-card info compact-card">
+          Need email login too?
+          <span>Resend is already wired in this product, so email magic link is the low-risk next step. Password login can be added later if conversion data justifies the extra auth surface.</span>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script type="module" src="/login.js?v=20260425b"></script>
+</body>
+</html>

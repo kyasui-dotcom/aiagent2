@@ -5724,12 +5724,56 @@ async function trackAuthLoginFailure(storage, authProvider, meta = {}) {
   }, meta);
 }
 
+async function claimSignupWelcomeEmailAttempt(storage, account, user = null, authProvider = 'guest') {
+  const safeLogin = String(account?.login || '').trim().toLowerCase();
+  if (!safeLogin) return { claimed: false, account };
+  let claimed = false;
+  let nextAccount = account || null;
+  const attemptedAt = nowIso();
+  const seedUser = user ? { ...user, login: safeLogin } : { login: safeLogin };
+  await storage.mutate(async (draft) => {
+    const latest = accountSettingsForLogin(draft, safeLogin, seedUser, authProvider);
+    if (String(latest?.billing?.signupWelcomeEmailAttemptedAt || '').trim()) {
+      nextAccount = latest;
+      return;
+    }
+    nextAccount = upsertAccountSettingsInState(draft, safeLogin, seedUser, authProvider, {
+      billing: {
+        ...(latest?.billing || {}),
+        signupWelcomeEmailAttemptedAt: attemptedAt
+      }
+    });
+    claimed = true;
+  });
+  return { claimed, account: nextAccount };
+}
+
 async function maybeSendSignupWelcomeEmail(storage, env, account, user = null, authProvider = 'guest') {
-  const recipientEmail = accountEmailCandidates(account, user)[0] || '';
-  const content = welcomeEmailContent(account?.profile?.displayName || user?.name || account?.login || '');
+  const claim = await claimSignupWelcomeEmailAttempt(storage, account, user, authProvider);
+  if (!claim.claimed) {
+    return {
+      id: crypto.randomUUID(),
+      accountLogin: String(claim.account?.login || account?.login || '').trim().toLowerCase(),
+      recipientEmail: accountEmailCandidates(claim.account || account, user)[0] || '',
+      senderEmail: resendFromEmail(env),
+      subject: '',
+      template: 'signup_welcome_v1',
+      provider: 'resend',
+      status: 'skipped',
+      providerMessageId: '',
+      payload: {},
+      response: {},
+      errorText: 'Signup welcome email already attempted',
+      createdAt: nowIso(),
+      updatedAt: nowIso()
+    };
+  }
+  const activeAccount = claim.account || account;
+  const recipientEmail = accountEmailCandidates(activeAccount, user)[0] || '';
+  const content = welcomeEmailContent(activeAccount?.profile?.displayName || user?.name || activeAccount?.login || '');
   const baseDelivery = {
     id: crypto.randomUUID(),
-    accountLogin: String(account?.login || '').trim().toLowerCase(),
+    accountLogin: String(activeAccount?.login || '').trim().toLowerCase(),
     recipientEmail,
     senderEmail: resendFromEmail(env),
     subject: content.subject,
@@ -5786,8 +5830,8 @@ async function maybeSendSignupWelcomeEmail(storage, env, account, user = null, a
       updatedAt: nowIso()
     };
     await appendEmailDelivery(storage, delivery);
-    await touchEvent(storage, 'EMAIL', `${account.login} welcome email sent`, {
-      login: account.login,
+    await touchEvent(storage, 'EMAIL', `${activeAccount.login} welcome email sent`, {
+      login: activeAccount.login,
       to: recipientEmail,
       template: content.template,
       provider: 'resend',
@@ -5803,8 +5847,8 @@ async function maybeSendSignupWelcomeEmail(storage, env, account, user = null, a
       updatedAt: nowIso()
     };
     await appendEmailDelivery(storage, failed);
-    await touchEvent(storage, 'FAILED', `${account.login} welcome email failed`, {
-      login: account.login,
+    await touchEvent(storage, 'FAILED', `${activeAccount.login} welcome email failed`, {
+      login: activeAccount.login,
       to: recipientEmail,
       template: content.template,
       provider: 'resend',
@@ -6059,16 +6103,70 @@ function hasOAuthBaseSession(session = null) {
   return Boolean(session?.accountLogin || session?.user?.login);
 }
 
+function normalizeLocalRedirectPath(request, env, value = '', fallback = '/') {
+  const raw = String(value || '').trim();
+  if (!raw) return fallback;
+  if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  try {
+    const parsed = new URL(raw, baseUrl(request, env));
+    const expectedOrigin = new URL(baseUrl(request, env)).origin;
+    if (parsed.origin !== expectedOrigin) return fallback;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeOAuthLoginSource(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
+function normalizeOAuthVisitorId(value = '') {
+  return String(value || '')
+    .trim()
+    .replace(/[^a-zA-Z0-9:_-]+/g, '')
+    .slice(0, 80);
+}
+
 async function oauthStartContext(request, env) {
   const url = new URL(request.url);
   const explicitMode = String(url.searchParams.get('mode') || '').toLowerCase();
   const existingSession = await getSession(request, env);
   const action = explicitMode === 'link' ? 'link' : 'login';
-  return { url, existingSession, action };
+  return {
+    url,
+    existingSession,
+    action,
+    returnTo: normalizeLocalRedirectPath(request, env, url.searchParams.get('return_to') || '', '/'),
+    loginSource: normalizeOAuthLoginSource(url.searchParams.get('login_source') || ''),
+    visitorId: normalizeOAuthVisitorId(url.searchParams.get('visitor_id') || '')
+  };
 }
 
 function shouldLinkOAuthCallback(cookieState = null, existingSession = null) {
   return cookieState?.action === 'link';
+}
+
+function authSuccessRedirectPath(request, env, cookieState = null) {
+  return normalizeLocalRedirectPath(request, env, cookieState?.returnTo || '', '/');
+}
+
+function authFailureRedirectPath(request, env, code = 'auth_failed', cookieState = null) {
+  const safeCode = String(code || 'auth_failed').trim() || 'auth_failed';
+  if (cookieState?.action === 'login' && cookieState?.loginSource) {
+    const loginUrl = new URL('/login.html', baseUrl(request, env));
+    loginUrl.searchParams.set('auth_error', safeCode);
+    loginUrl.searchParams.set('source', cookieState.loginSource);
+    if (cookieState.returnTo) loginUrl.searchParams.set('next', authSuccessRedirectPath(request, env, cookieState));
+    if (cookieState.visitorId) loginUrl.searchParams.set('visitor_id', cookieState.visitorId);
+    return `${loginUrl.pathname}${loginUrl.search}`;
+  }
+  return `/?auth_error=${encodeURIComponent(safeCode)}`;
 }
 
 function mapGithubAppInstallation(installation = {}) {
@@ -6538,11 +6636,11 @@ async function handleGithubAppInstallStart(request, env) {
   }, 503);
   const slug = await githubAppInstallSlug(env);
   if (!slug) return json({ error: 'GitHub App slug is unavailable. Set GITHUB_APP_SLUG or complete app registration.' }, 503);
-  const { action } = await oauthStartContext(request, env);
+  const { action, returnTo, loginSource, visitorId } = await oauthStartContext(request, env);
   const state = crypto.randomUUID();
   const installUrl = new URL(`https://github.com/apps/${slug}/installations/new`);
   installUrl.searchParams.set('state', state);
-  return redirectWithCookies(installUrl.toString(), [await pushOAuthStateCookie(request, env, state, { provider: 'github-app', action })]);
+  return redirectWithCookies(installUrl.toString(), [await pushOAuthStateCookie(request, env, state, { provider: 'github-app', action, returnTo, loginSource, visitorId })]);
 }
 
 async function handleGithubAppConnectStart(request, env) {
@@ -6550,7 +6648,7 @@ async function handleGithubAppConnectStart(request, env) {
     error: 'GitHub App is not configured yet.',
     setup: githubAppRecommendedSettings(request, env)
   }, 503);
-  const { existingSession, action } = await oauthStartContext(request, env);
+  const { existingSession, action, returnTo, loginSource, visitorId } = await oauthStartContext(request, env);
   if (existingSession?.user && action !== 'link' && sessionHasGithubApp(existingSession)) return redirect('/');
   const state = crypto.randomUUID();
   const callback = `${baseUrl(request, env)}/auth/github-app/callback`;
@@ -6558,7 +6656,7 @@ async function handleGithubAppConnectStart(request, env) {
   githubUrl.searchParams.set('client_id', githubAppClientId(env));
   githubUrl.searchParams.set('redirect_uri', callback);
   githubUrl.searchParams.set('state', state);
-  return redirectWithCookies(githubUrl.toString(), [await pushOAuthStateCookie(request, env, state, { provider: 'github-app', action })]);
+  return redirectWithCookies(githubUrl.toString(), [await pushOAuthStateCookie(request, env, state, { provider: 'github-app', action, returnTo, loginSource, visitorId })]);
 }
 
 async function handleGithubAppCallback(request, env) {
@@ -6591,11 +6689,11 @@ async function handleGithubAppCallback(request, env) {
     if (shouldLinkOAuthCallback(cookieState, existingSession)) {
       const current = await currentUserContext(request, env);
       if (!current?.login) {
-        return redirectWithCookies('/?auth_error=login_required_for_link', [oauthState.cookie]);
+        return redirectWithCookies(authFailureRedirectPath(request, env, 'login_required_for_link', cookieState), [oauthState.cookie]);
       }
       const linked = await linkSessionIdentityToAccount(storage, env, current.login, linkedSession.githubIdentity, 'github-app');
       if (!linked?.ok) {
-        return redirectWithCookies('/?auth_error=github_identity_already_linked', [oauthState.cookie]);
+        return redirectWithCookies(authFailureRedirectPath(request, env, 'github_identity_already_linked', cookieState), [oauthState.cookie]);
       }
       session = mergeLinkedSession(existingSession || {}, {
         accountLogin: linked.account.login,
@@ -6623,7 +6721,7 @@ async function handleGithubAppCallback(request, env) {
       }
     };
     await persistGithubAppAccess(storage, session.accountLogin || session.user?.login || '', session, repos);
-    return redirectWithCookies('/', [
+    return redirectWithCookies(authSuccessRedirectPath(request, env, cookieState), [
       await makeSessionCookie(session, env),
       oauthState.cookie
     ]);
@@ -6632,7 +6730,7 @@ async function handleGithubAppCallback(request, env) {
       source: 'auth_callback',
       status: 'callback_error'
     });
-    return redirectWithCookies(`/?auth_error=${encodeURIComponent(error.message)}`, [oauthState.cookie]);
+    return redirectWithCookies(authFailureRedirectPath(request, env, error.message, cookieState), [oauthState.cookie]);
   }
 }
 
@@ -6651,7 +6749,7 @@ async function handleAuthStart(request, env) {
     if (githubAppConfigured(env)) return handleGithubAppConnectStart(request, env);
     return json({ error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' }, 503);
   }
-  const { existingSession, action } = await oauthStartContext(request, env);
+  const { existingSession, action, returnTo, loginSource, visitorId } = await oauthStartContext(request, env);
   if (existingSession?.user && action !== 'link') return redirect('/');
   const state = crypto.randomUUID();
   const callback = `${baseUrl(request, env)}/auth/github/callback`;
@@ -6660,7 +6758,7 @@ async function handleAuthStart(request, env) {
   githubUrl.searchParams.set('redirect_uri', callback);
   githubUrl.searchParams.set('scope', githubOAuthScope(env));
   githubUrl.searchParams.set('state', state);
-  return redirectWithCookies(githubUrl.toString(), [await pushOAuthStateCookie(request, env, state, { provider: 'github-oauth', action })]);
+  return redirectWithCookies(githubUrl.toString(), [await pushOAuthStateCookie(request, env, state, { provider: 'github-oauth', action, returnTo, loginSource, visitorId })]);
 }
 
 async function handleAuthCallback(request, env) {
@@ -6705,11 +6803,11 @@ async function handleAuthCallback(request, env) {
     if (shouldLinkOAuthCallback(cookieState, existingSession)) {
       const current = await currentUserContext(request, env);
       if (!current?.login) {
-        return redirectWithCookies('/?auth_error=login_required_for_link', [oauthState.cookie]);
+        return redirectWithCookies(authFailureRedirectPath(request, env, 'login_required_for_link', cookieState), [oauthState.cookie]);
       }
       const linked = await linkSessionIdentityToAccount(storage, env, current.login, githubIdentity, 'github-oauth');
       if (!linked?.ok) {
-        return redirectWithCookies('/?auth_error=github_identity_already_linked', [oauthState.cookie]);
+        return redirectWithCookies(authFailureRedirectPath(request, env, 'github_identity_already_linked', cookieState), [oauthState.cookie]);
       }
       if (connectorTokenEncryptionConfigured(env)) {
         await storage.mutate(async (draft) => {
@@ -6757,7 +6855,7 @@ async function handleAuthCallback(request, env) {
         createdAt: Date.now()
       });
     }
-    return redirectWithCookies('/', [
+    return redirectWithCookies(authSuccessRedirectPath(request, env, cookieState), [
       await makeSessionCookie(session, env),
       oauthState.cookie
     ]);
@@ -6766,7 +6864,7 @@ async function handleAuthCallback(request, env) {
       source: 'auth_callback',
       status: 'callback_error'
     });
-    return redirectWithCookies(`/?auth_error=${encodeURIComponent(error.message)}`, [oauthState.cookie]);
+    return redirectWithCookies(authFailureRedirectPath(request, env, error.message, cookieState), [oauthState.cookie]);
   }
 }
 
@@ -6774,7 +6872,7 @@ async function handleGoogleAuthStart(request, env) {
   if (!googleConfigured(env)) {
     return json({ error: 'Google OAuth is not configured yet. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.' }, 503);
   }
-  const { existingSession, action } = await oauthStartContext(request, env);
+  const { existingSession, action, returnTo, loginSource, visitorId } = await oauthStartContext(request, env);
   if (existingSession?.user && action !== 'link') return redirect('/');
   const state = crypto.randomUUID();
   const callback = `${baseUrl(request, env)}/auth/google/callback`;
@@ -6787,7 +6885,7 @@ async function handleGoogleAuthStart(request, env) {
   googleUrl.searchParams.set('access_type', 'offline');
   googleUrl.searchParams.set('include_granted_scopes', 'true');
   googleUrl.searchParams.set('prompt', googlePromptForOAuthAction(action));
-  return redirectWithCookies(googleUrl.toString(), [await pushOAuthStateCookie(request, env, state, { provider: 'google-oauth', action })]);
+  return redirectWithCookies(googleUrl.toString(), [await pushOAuthStateCookie(request, env, state, { provider: 'google-oauth', action, returnTo, loginSource, visitorId })]);
 }
 
 async function handleGoogleAuthCallback(request, env) {
@@ -6832,11 +6930,11 @@ async function handleGoogleAuthCallback(request, env) {
     if (shouldLinkOAuthCallback(cookieState, existingSession)) {
       const current = await currentUserContext(request, env);
       if (!current?.login) {
-        return redirectWithCookies('/?auth_error=login_required_for_link', [oauthState.cookie]);
+        return redirectWithCookies(authFailureRedirectPath(request, env, 'login_required_for_link', cookieState), [oauthState.cookie]);
       }
       const linked = await linkSessionIdentityToAccount(storage, env, current.login, googleIdentity, 'google-oauth');
       if (!linked?.ok) {
-        return redirectWithCookies('/?auth_error=google_identity_already_linked', [oauthState.cookie]);
+        return redirectWithCookies(authFailureRedirectPath(request, env, 'google_identity_already_linked', cookieState), [oauthState.cookie]);
       }
       if (connectorTokenEncryptionConfigured(env)) {
         await storage.mutate(async (draft) => {
@@ -6882,7 +6980,7 @@ async function handleGoogleAuthCallback(request, env) {
         createdAt: Date.now()
       });
     }
-    return redirectWithCookies('/', [
+    return redirectWithCookies(authSuccessRedirectPath(request, env, cookieState), [
       await makeSessionCookie(session, env),
       oauthState.cookie
     ]);
@@ -6891,7 +6989,7 @@ async function handleGoogleAuthCallback(request, env) {
       source: 'auth_callback',
       status: 'callback_error'
     });
-    return redirectWithCookies(`/?auth_error=${encodeURIComponent(error.message)}`, [oauthState.cookie]);
+    return redirectWithCookies(authFailureRedirectPath(request, env, error.message, cookieState), [oauthState.cookie]);
   }
 }
 
@@ -11850,8 +11948,10 @@ export default {
       const noCacheAssetPaths = new Set([
         '/',
         '/index.html',
+        '/login.html',
         '/styles.css',
         '/client.js',
+        '/login.js',
         '/delivery-action-contract.js',
         '/work-action-registry.js',
         '/work-intent-resolver.js'

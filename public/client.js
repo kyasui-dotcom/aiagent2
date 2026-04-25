@@ -160,9 +160,6 @@ const els = {
   topOpenChatBtn: $('topOpenChatBtn'),
   mainNavMenu: $('mainNavMenu'),
   startSignupBtn: $('startSignupBtn'),
-  startLoginChooser: $('startLoginChooser'),
-  startGoogleLoginBtn: $('startGoogleLoginBtn'),
-  startGithubLoginBtn: $('startGithubLoginBtn'),
   startCreateOrderBtn: $('startCreateOrderBtn'),
   startAgentTeamWorkBtn: $('startAgentTeamWorkBtn'),
   startViewAgentsBtn: $('startViewAgentsBtn'),
@@ -623,7 +620,6 @@ const state = {
   orderInputFileWarnings: [],
   pageViewTracked: false,
   loginCompletionTrackedFor: '',
-  startLoginChooserOpen: false,
   agentSearch: '',
   agentStatusFilter: '',
   agentAvailabilityFilter: '',
@@ -3946,7 +3942,6 @@ function renderReleaseAccess(auth) {
   const showDemoTools = Boolean(canDev);
   const canUseOps = Boolean(canDev);
   const loggedIn = Boolean(auth?.loggedIn);
-  if (els.startLoginChooser) els.startLoginChooser.hidden = loggedIn || !state.startLoginChooserOpen;
   setTabVisible('start', !loggedIn);
   setTabVisible('work', loggedIn);
   setTabVisible('agents', loggedIn);
@@ -3995,6 +3990,26 @@ function rememberTab(tab) {
   const safeTab = String(tab || '').trim();
   if (!safeTab || safeTab === 'start' || safeTab === 'ops') return;
   runtimeRememberedTab = safeTab;
+}
+
+function loginReturnPathForTab(tab = 'work') {
+  const safeTab = normalizeTab(tab);
+  if (!safeTab || safeTab === 'start') return '/';
+  return safeTab === 'work' ? '/?tab=work' : `/?tab=${encodeURIComponent(safeTab)}`;
+}
+
+function buildLoginPageUrl({ source = 'direct', nextTab = 'work', nextPath = '' } = {}) {
+  const url = new URL('/login.html', window.location.origin);
+  const safeSource = safeAnalyticsString(source, 40).toLowerCase() || 'direct';
+  const targetPath = String(nextPath || loginReturnPathForTab(nextTab)).trim() || '/?tab=work';
+  url.searchParams.set('source', safeSource);
+  url.searchParams.set('next', targetPath);
+  url.searchParams.set('visitor_id', visitorId());
+  return `${url.pathname}${url.search}`;
+}
+
+function openDedicatedLoginPage(options = {}) {
+  window.location.href = buildLoginPageUrl(options);
 }
 
 function readRememberedAuthState() {
@@ -11914,12 +11929,6 @@ function openPrimaryGoogleSignIn() {
   window.location.href = googleAuthActionUrl(state.snapshot?.auth || {});
 }
 
-function openStartLoginChooser() {
-  rememberTab('work');
-  state.startLoginChooserOpen = true;
-  if (els.startLoginChooser) els.startLoginChooser.hidden = false;
-}
-
 function continueOpenChatAsGuest() {
   state.openChatEntryDismissed = true;
   renderOrderComposer();
@@ -18983,23 +18992,14 @@ function syncTopWorkChatCta() {
 
 function requireStartLoginGate(targetTab = 'start', reason = 'Sign in from START first.') {
   if (els.mainNavMenu) els.mainNavMenu.open = false;
-  state.currentTab = 'start';
-  rememberTab('start');
-  document.querySelectorAll('[data-screen]').forEach((node) => {
-    node.hidden = node.dataset.screen !== 'start';
-  });
-  document.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.classList.toggle('active', btn.dataset.tab === 'start');
-  });
-  syncTopWorkChatCta();
-  syncRouteState();
-  flash(reason, 'info');
-  window.requestAnimationFrame(() => {
-    els.startSignupBtn?.focus();
-  });
+  const safeTargetTab = normalizeTab(targetTab) || 'work';
   void trackConversionEvent('start_login_gate_hit', {
-    source: String(targetTab || 'start'),
-    current_tab: 'start'
+    source: safeTargetTab,
+    current_tab: state.currentTab || 'start'
+  });
+  openDedicatedLoginPage({
+    source: `gate_${safeTargetTab}`,
+    nextTab: safeTargetTab
   });
 }
 
@@ -22562,7 +22562,6 @@ if (els.logoutBtn) els.logoutBtn.onclick = () => runAction(els.logoutBtn, async 
   await api('/auth/logout', { method: 'POST' });
   state.repoAutoLoadedFor = '';
   state.settingsPeriod = currentMonthPeriod();
-  state.startLoginChooserOpen = false;
   resetRepoPicker();
   switchTab('start');
   flash('Logged out.', 'ok');
@@ -22583,16 +22582,10 @@ if (els.startSignupBtn) els.startSignupBtn.onclick = () => {
     openOrderTab();
     return;
   }
-  openStartLoginChooser();
-};
-if (els.startGoogleLoginBtn) els.startGoogleLoginBtn.onclick = () => {
-  rememberTab('work');
-  openPrimaryGoogleSignIn();
-};
-if (els.startGithubLoginBtn) els.startGithubLoginBtn.onclick = () => {
-  rememberTab('work');
-  trackLoginStarted('github');
-  window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
+  openDedicatedLoginPage({
+    source: 'start_cta',
+    nextTab: 'work'
+  });
 };
 if (els.entryGoogleLoginBtn) els.entryGoogleLoginBtn.onclick = openPrimaryGoogleSignIn;
 if (els.entryGithubLoginBtn) els.entryGithubLoginBtn.onclick = () => {
