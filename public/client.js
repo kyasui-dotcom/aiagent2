@@ -19043,9 +19043,10 @@ function pauseWorkChatOnTabLeave() {
   persistCurrentOpenChatSession();
 }
 
-function switchTab(tab) {
+function switchTab(tab, options = {}) {
   if (els.mainNavMenu) els.mainNavMenu.open = false;
   const auth = state.snapshot?.auth || null;
+  const authKnown = Boolean(state.snapshot?.auth);
   const loggedIn = Boolean(auth?.loggedIn);
   const previousTab = state.currentTab;
   let nextTab = String(tab || '').trim() || 'start';
@@ -19053,8 +19054,13 @@ function switchTab(tab) {
     pauseWorkChatOnTabLeave();
   }
   if (!loggedIn && nextTab !== 'start') {
-    requireStartLoginGate(nextTab, 'Sign in from START first. The product experience is private after login.');
-    return;
+    if (!authKnown && options.allowBootstrapAccess === true) {
+      // During the first snapshot load, preserve the requested post-login route
+      // instead of bouncing back to /login before auth cookies are read.
+    } else {
+      requireStartLoginGate(nextTab, 'Sign in from START first. The product experience is private after login.');
+      return;
+    }
   }
   if (loggedIn && nextTab === 'start') {
     nextTab = defaultLoggedInTab(state.snapshot);
@@ -23438,7 +23444,7 @@ loadManifestExample();
   closePlanModal();
   state.routeAgentId = initialRoute.agentId;
   if (initialRoute.settingsSection) state.settingsSection = initialRoute.settingsSection;
-  switchTab(initialRoute.tab || readRememberedTab() || 'start');
+  switchTab(initialRoute.tab || readRememberedTab() || 'start', { allowBootstrapAccess: true });
   if (initialRoute.stripeState) {
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('stripe');
