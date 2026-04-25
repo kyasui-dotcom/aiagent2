@@ -57,6 +57,7 @@ const TEMPORARY_INVOICE_BILLING_ENABLED = false;
 const STRIPE_CARD_SETUP_DURING_TEMPORARY_BILLING_ENABLED = true;
 const TEMPORARY_INVOICE_SUPPORT_EMAIL = 'support@aiagent-marketplace.net';
 const ORDER_HISTORY_BACKFILL_RETRY_MS = 30 * 1000;
+const ORDER_HISTORY_PAGE_SIZE = 50;
 const orderHistoryBackfillInFlight = new Set();
 const orderHistoryBackfillFailedAt = new Map();
 
@@ -199,6 +200,7 @@ const els = {
   agentsTable: $('agentsTable'),
   agentOpsBoard: $('agentOpsBoard'),
   jobsTable: $('jobsTable'),
+  jobsPager: $('jobsPager'),
   runSearch: $('runSearch'),
   runRequesterFilter: $('runRequesterFilter'),
   runStatusFilter: $('runStatusFilter'),
@@ -584,6 +586,7 @@ const state = {
   jobAgentSearch: '',
   runStatusFilter: '',
   runActionFilter: '',
+  runPage: 0,
   parallelOrderDrafts: [],
   parallelToolsExpanded: false,
   orderSettingsExpanded: false,
@@ -21009,14 +21012,22 @@ function renderJobs(jobs = []) {
     const matchesRequester = requesterMatchesScope(requesterLoginOf(job), requesterAccountIdOf(job), requesterScope);
     return matchesSearch && matchesRequester;
   });
+  const totalPages = Math.max(1, Math.ceil(filtered.length / ORDER_HISTORY_PAGE_SIZE));
+  state.runPage = Math.min(Math.max(0, Number(state.runPage || 0) || 0), Math.max(0, totalPages - 1));
+  const pageStart = state.runPage * ORDER_HISTORY_PAGE_SIZE;
+  const paged = filtered.slice(pageStart, pageStart + ORDER_HISTORY_PAGE_SIZE);
   if (!filtered.length) {
     state.selectedJobId = null;
     els.jobsTable.innerHTML = '<div class="empty">No orders match the current filter.</div>';
+    if (els.jobsPager) {
+      els.jobsPager.hidden = true;
+      els.jobsPager.innerHTML = '';
+    }
     renderMarketingTimelineModal(null);
     return;
   }
   if (!filtered.some((job) => job.id === state.selectedJobId)) state.selectedJobId = null;
-  els.jobsTable.innerHTML = `<div class="table-header runs-grid"><div>ORDER</div><div>STATUS</div><div>NEXT STEP</div></div>${filtered.map((job) => {
+  els.jobsTable.innerHTML = `<div class="table-header runs-grid"><div>ORDER</div><div>STATUS</div><div>NEXT STEP</div></div>${paged.map((job) => {
       const nextAction = runNextAction(job);
       const runLabel = job.jobKind === 'workflow' ? 'agent-team' : (job.assignedAgentId ? job.assignedAgentId.slice(0, 12) : 'auto-routing');
       const safeNextTone = safeCssToken(nextAction.tone, 'info');
@@ -21038,6 +21049,22 @@ function renderJobs(jobs = []) {
       renderJobs(state.snapshot?.jobs || []);
     };
   });
+  if (els.jobsPager) {
+    els.jobsPager.hidden = false;
+    els.jobsPager.innerHTML = [
+      `<span class="admin-pager-summary">${escapeHtml(`${pageStart + 1}-${pageStart + paged.length} of ${filtered.length} · page ${state.runPage + 1}/${totalPages}`)}</span>`,
+      '<div class="helper-row">',
+      `<button type="button" class="mini-btn" data-run-page-direction="prev"${state.runPage <= 0 ? ' disabled' : ''}>PREV</button>`,
+      `<button type="button" class="mini-btn" data-run-page-direction="next"${state.runPage >= totalPages - 1 ? ' disabled' : ''}>NEXT</button>`,
+      '</div>'
+    ].join('');
+    [...els.jobsPager.querySelectorAll('[data-run-page-direction]')].forEach((button) => {
+      button.onclick = () => {
+        state.runPage = Math.max(0, state.runPage + (button.dataset.runPageDirection === 'prev' ? -1 : 1));
+        renderJobs(state.snapshot?.jobs || []);
+      };
+    });
+  }
   renderMarketingTimelineModal(filtered.find((job) => job.id === state.selectedJobId) || null);
   const selected = filtered.find((job) => job.id === state.selectedJobId) || null;
   if (selected) setDetail(selected);
@@ -23854,10 +23881,10 @@ if (els.retryDispatchBtn) els.retryDispatchBtn.onclick = () => runAction(els.ret
   await refresh();
 });
 if (els.eventFilter) els.eventFilter.oninput = () => { state.eventFilter = els.eventFilter.value || ''; if (state.snapshot) renderStream(state.snapshot.events || []); };
-if (els.runSearch) els.runSearch.oninput = () => { state.runSearch = els.runSearch.value || ''; if (state.snapshot) renderJobs(state.snapshot.jobs || []); };
-if (els.runRequesterFilter) els.runRequesterFilter.onchange = () => { state.runRequesterFilter = els.runRequesterFilter.value || 'all'; if (state.snapshot) renderJobs(state.snapshot.jobs || []); };
-if (els.runStatusFilter) els.runStatusFilter.onchange = () => { state.runStatusFilter = els.runStatusFilter.value || ''; if (state.snapshot) renderJobs(state.snapshot.jobs || []); };
-if (els.runActionFilter) els.runActionFilter.onchange = () => { state.runActionFilter = els.runActionFilter.value || ''; if (state.snapshot) renderJobs(state.snapshot.jobs || []); };
+if (els.runSearch) els.runSearch.oninput = () => { state.runSearch = els.runSearch.value || ''; state.runPage = 0; if (state.snapshot) renderJobs(state.snapshot.jobs || []); };
+if (els.runRequesterFilter) els.runRequesterFilter.onchange = () => { state.runRequesterFilter = els.runRequesterFilter.value || 'all'; state.runPage = 0; if (state.snapshot) renderJobs(state.snapshot.jobs || []); };
+if (els.runStatusFilter) els.runStatusFilter.onchange = () => { state.runStatusFilter = els.runStatusFilter.value || ''; state.runPage = 0; if (state.snapshot) renderJobs(state.snapshot.jobs || []); };
+if (els.runActionFilter) els.runActionFilter.onchange = () => { state.runActionFilter = els.runActionFilter.value || ''; state.runPage = 0; if (state.snapshot) renderJobs(state.snapshot.jobs || []); };
 if (els.agentSearch) els.agentSearch.oninput = () => { state.agentSearch = els.agentSearch.value || ''; if (state.snapshot) renderAgents(state.snapshot.agents || []); };
 if (els.agentStatusFilter) els.agentStatusFilter.onchange = () => { state.agentStatusFilter = els.agentStatusFilter.value || ''; if (state.snapshot) renderAgents(state.snapshot.agents || []); };
 if (els.agentAvailabilityFilter) els.agentAvailabilityFilter.onchange = () => { state.agentAvailabilityFilter = els.agentAvailabilityFilter.value || ''; if (state.snapshot) renderAgents(state.snapshot.agents || []); };

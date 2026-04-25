@@ -89,4 +89,58 @@ assert.deepEqual(
   ['agent-owner', 'event-owner@example.com', 'job-owner@example.com', 'mail-owner@example.com', 'recurring-owner@example.com', 'report-owner@example.com']
 );
 
+function createCountingDb() {
+  const selectCounts = new Map();
+  const columnsByTable = {
+    chat_transcripts: [{ name: 'session_id' }],
+    jobs: [{ name: 'workflow_parent_id' }, { name: 'workflow_task' }, { name: 'workflow_agent_name' }, { name: 'workflow_json' }, { name: 'executor_state_json' }, { name: 'original_prompt' }, { name: 'prompt_optimization_json' }, { name: 'selection_mode' }, { name: 'estimate_window_json' }, { name: 'billing_reservation_json' }, { name: 'logs_json' }, { name: 'timed_out_at' }, { name: 'last_callback_at' }]
+  };
+  const emptyResults = { results: [] };
+  const recordSelect = (sql) => {
+    selectCounts.set(sql, (selectCounts.get(sql) || 0) + 1);
+    return emptyResults;
+  };
+  return {
+    selectCounts,
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async all() {
+          if (sql.startsWith('PRAGMA table_info(')) {
+            const table = sql.match(/PRAGMA table_info\((.+)\)/)?.[1] || '';
+            return { results: columnsByTable[table] || [] };
+          }
+          if (sql.startsWith('SELECT * FROM agents WHERE id IN')) return emptyResults;
+          if (sql.startsWith('SELECT * FROM agents ORDER BY')) return recordSelect('agents');
+          if (sql.startsWith('SELECT * FROM jobs ORDER BY')) return recordSelect('jobs');
+          if (sql.startsWith('SELECT * FROM events ORDER BY')) return recordSelect('events');
+          if (sql.startsWith('SELECT * FROM accounts ORDER BY')) return recordSelect('accounts');
+          if (sql.startsWith('SELECT * FROM feedback_reports ORDER BY')) return recordSelect('feedback_reports');
+          if (sql.startsWith('SELECT * FROM chat_transcripts ORDER BY')) return recordSelect('chat_transcripts');
+          if (sql.startsWith('SELECT * FROM recurring_orders ORDER BY')) return recordSelect('recurring_orders');
+          if (sql.startsWith('SELECT * FROM email_deliveries ORDER BY')) return recordSelect('email_deliveries');
+          if (sql.startsWith('SELECT * FROM exact_match_actions ORDER BY')) return recordSelect('exact_match_actions');
+          if (sql.startsWith('SELECT * FROM app_settings ORDER BY')) return recordSelect('app_settings');
+          return emptyResults;
+        },
+        async first() {
+          if (sql.startsWith('SELECT COUNT(*) as count FROM events')) return { count: 1 };
+          return null;
+        },
+        async run() {
+          return { success: true };
+        }
+      };
+    }
+  };
+}
+
+const countingDb = createCountingDb();
+const cachedStorage = createD1LikeStorage(countingDb, { stateCacheTtlMs: 5000 });
+await cachedStorage.getState();
+await cachedStorage.getState();
+assert.equal(countingDb.selectCounts.get('agents') || 0, 1);
+assert.equal(countingDb.selectCounts.get('jobs') || 0, 1);
+assert.equal(countingDb.selectCounts.get('chat_transcripts') || 0, 1);
+
 console.log('storage qa passed');
