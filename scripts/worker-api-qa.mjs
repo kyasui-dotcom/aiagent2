@@ -689,6 +689,9 @@ globalThis.fetch = async (input, init) => {
   if (url === 'https://worker-qa.example/seo/health' || url === 'https://worker-qa.example/research/health' || url === 'https://worker-qa.example/writer/health') {
     return new Response(JSON.stringify({ ok: true, service: 'qa-multi-agent' }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
+  if (url === 'https://worker-qa.example/accepted/health') {
+    return new Response(JSON.stringify({ ok: true, service: 'qa-accepted-agent' }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
   if (url === 'https://worker-qa.example/cmo-fail/health') {
     return new Response(JSON.stringify({ ok: true, service: 'qa-cmo-fail' }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
@@ -705,6 +708,13 @@ globalThis.fetch = async (input, init) => {
     return new Response(JSON.stringify({
       error: 'qa forced leader failure'
     }), { status: 500, headers: { 'content-type': 'application/json' } });
+  }
+  if (url === 'https://worker-qa.example/accepted/jobs') {
+    return new Response(JSON.stringify({
+      accepted: true,
+      status: 'accepted',
+      external_job_id: 'qa-accepted-remote'
+    }), { status: 202, headers: { 'content-type': 'application/json' } });
   }
   if (url === 'https://worker-qa.example/jobs') {
     const requestBody = JSON.parse(String(init?.body || '{}'));
@@ -780,6 +790,65 @@ try {
   assert.equal(imported.body.auto_verification.ok, true);
   assert.equal(imported.body.welcome_credits.status, 'granted');
   assert.equal(imported.body.welcome_credits.amount, 500);
+
+  const acceptedAgent = await request('/api/agents/import-manifest', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      manifest: {
+        schema_version: 'agent-manifest/v1',
+        name: 'qa_accepted_agent',
+        description: 'QA manifest import for an agent that accepts work and stays active until explicitly cancelled.',
+        task_types: ['ops'],
+        pricing: { premium_rate: 0.2, basic_rate: 0.1 },
+        success_rate: 0.95,
+        avg_latency_sec: 12,
+        healthcheck_url: 'https://worker-qa.example/accepted/health',
+        endpoints: { jobs: 'https://worker-qa.example/accepted/jobs' }
+      }
+    })
+  }, { sessionCookie: aliceSession });
+  assert.equal(acceptedAgent.status, 201);
+  assert.equal(acceptedAgent.body.agent.verificationStatus, 'verified');
+
+  const linkedSessionId = `qa-linked-session-${Date.now()}`;
+  const acceptedOrder = await request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      parent_agent_id: 'qa-runner',
+      agent_id: acceptedAgent.body.agent.id,
+      task_type: 'ops',
+      prompt: 'Keep this active until the linked chat session is deleted.',
+      session_id: linkedSessionId,
+      skip_intake: true
+    })
+  }, { sessionCookie: aliceSession });
+  assert.equal(acceptedOrder.status, 201);
+  assert.ok(['queued', 'dispatched'].includes(String(acceptedOrder.body.status || '')), 'accepted remote agent should remain active');
+
+  const acceptedOrderState = await request(`/api/jobs/${acceptedOrder.body.job_id}`, {}, { sessionCookie: aliceSession });
+  assert.equal(acceptedOrderState.status, 200);
+  assert.ok(['queued', 'dispatched'].includes(String(acceptedOrderState.body.job.status || '')));
+
+  const linkedSnapshot = await request('/api/snapshot', {}, { sessionCookie: aliceSession });
+  assert.equal(linkedSnapshot.status, 200);
+  const linkedMemory = Array.isArray(linkedSnapshot.body.chatMemory) ? linkedSnapshot.body.chatMemory : [];
+  const linkedSession = linkedMemory.find((item) => item.id === linkedSessionId || item.sessionId === linkedSessionId);
+  assert.ok(linkedSession, 'active work should keep a linked chat session visible even without a transcript');
+  assert.equal(Boolean(linkedSession.activeWork), true);
+  assert.ok(Array.isArray(linkedSession.activeJobIds) && linkedSession.activeJobIds.includes(acceptedOrder.body.job_id));
+
+  const deleteLinkedSession = await request(`/api/settings/chat-memory/${encodeURIComponent(linkedSessionId)}`, {
+    method: 'DELETE'
+  }, { sessionCookie: aliceSession });
+  assert.equal(deleteLinkedSession.status, 200);
+  assert.ok(Array.isArray(deleteLinkedSession.body.cancelled_job_ids) && deleteLinkedSession.body.cancelled_job_ids.includes(acceptedOrder.body.job_id));
+
+  const cancelledOrderState = await request(`/api/jobs/${acceptedOrder.body.job_id}`, {}, { sessionCookie: aliceSession });
+  assert.equal(cancelledOrderState.status, 200);
+  assert.equal(cancelledOrderState.body.job.status, 'failed');
+  assert.equal(cancelledOrderState.body.job.failureCategory, 'user_cancelled');
 
   const adminBillingBefore = await request('/api/settings', {}, { sessionCookie: adminSession });
   assert.equal(adminBillingBefore.status, 200);

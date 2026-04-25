@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createD1LikeStorage } from './lib/storage.js';
 import { BUILT_IN_KINDS, builtInAgentHealthPayload, runBuiltInAgent } from './lib/builtin-agents.js';
 import { GITHUB_ADAPTER_MARKER, adapterNextStepText, buildGithubAdapterPlan, createGithubBranch, createGithubPullRequest, fetchGithubBranchSha, fetchGithubRepoTree, fetchGithubTextFile, findKnownBrokerPath, upsertGithubTextFile } from './lib/github-adapter.js';
-import { BILLING_DISPLAY_CURRENCY, WELCOME_CREDITS_GRANT_AMOUNT, accountIdForLogin, accountIdentityForProvider, accountSettingsForIdentity, accountSettingsForLogin, aliasLoginsForAccount, applyStripeRefundToAccount, applySubscriptionRefillToAccount, authenticateOrderApiKey, billingAuditsForJobIds, billingModeFromJob, billingPeriodId, billingProfileForAccount, buildAdminDashboard, buildAgentId, buildConversionAnalytics, buildFollowupConversationContext, buildIntakeClarification, buildMonthlyAccountSummary, chatTrainingExamplesForClient, chatTranscriptsForClient, computeScore, connectorActionLabel, connectorOAuthActionInstruction, createChatTranscript, createConversionEventPayload, createFeedbackReport, createOrderApiKeyInState, createRecurringOrderInState, defaultLoginForAuthUser, deleteRecurringOrderInState, displayCurrencyToLedgerAmount, dueRecurringOrders, estimateBilling, estimateRunWindow, feedbackReportsForClient, formatFeedbackReportEmail, hideChatMemoryTranscriptForLoginInState, inferTaskSequence, inferTaskType, isAgentOwnedByLogin, isBillableJob, isJobVisibleToLogin, isPrivateNetworkHostname, jobsVisibleToLogin, ledgerAmountToDisplayCurrency, linkIdentityToAccountInState, makeEvent, markRecurringOrderRunInState, maybeGrantWelcomeCreditsForSignupInState, maybeGrantWelcomeCreditsForVerifiedAgentInState, mergeAccountsInState, mergeProtectedPromptSourceIntoInput, normalizeTaskTypes, nowIso, optimizeOrderPromptForBroker, promptInjectionGuardForPrompt, providerMonthlyBillingLedgerForLogin, providerPayoutLedgerForLogin, publicEventView, recordProviderMonthlyChargeInAccount, recurringOrderToJobPayload, recurringOrdersVisibleToLogin, recordStripeTopupInAccount, releaseBillingReservationInState, requesterContextFromUser, reserveBillingEstimateInState, revokeOrderApiKeyInState, sanitizeAccountSettingsForClient, sanitizeBillingSettingsPatch, sanitizeExecutorPreferencesPatch, sanitizeFeedbackReportForClient, sanitizePayoutSettingsPatch, settleBillingForJobInState, suggestAutoTopupChargeAmount, touchOrderApiKeyUsageInState, updateChatTranscriptReviewInState, updateFeedbackReportInState, updateRecurringOrderInState, upsertAccountSettingsForIdentityInState, upsertAccountSettingsInState } from './lib/shared.js';
+import { BILLING_DISPLAY_CURRENCY, WELCOME_CREDITS_GRANT_AMOUNT, accountIdForLogin, accountIdentityForProvider, accountSettingsForIdentity, accountSettingsForLogin, aliasLoginsForAccount, applyStripeRefundToAccount, applySubscriptionRefillToAccount, authenticateOrderApiKey, billingAuditsForJobIds, billingModeFromJob, billingPeriodId, billingProfileForAccount, buildAdminDashboard, buildAgentId, buildConversionAnalytics, buildFollowupConversationContext, buildIntakeClarification, buildMonthlyAccountSummary, chatSessionIdForJob, chatTrainingExamplesForClient, chatTranscriptsForClient, computeScore, connectorActionLabel, connectorOAuthActionInstruction, createChatTranscript, createConversionEventPayload, createFeedbackReport, createOrderApiKeyInState, createRecurringOrderInState, defaultLoginForAuthUser, deleteRecurringOrderInState, displayCurrencyToLedgerAmount, dueRecurringOrders, estimateBilling, estimateRunWindow, feedbackReportsForClient, formatFeedbackReportEmail, hideChatMemoryTranscriptForLoginInState, inferTaskSequence, inferTaskType, isAgentOwnedByLogin, isBillableJob, isJobVisibleToLogin, isPrivateNetworkHostname, jobsVisibleToLogin, ledgerAmountToDisplayCurrency, linkIdentityToAccountInState, makeEvent, markRecurringOrderRunInState, maybeGrantWelcomeCreditsForSignupInState, maybeGrantWelcomeCreditsForVerifiedAgentInState, mergeAccountsInState, mergeProtectedPromptSourceIntoInput, normalizeTaskTypes, nowIso, optimizeOrderPromptForBroker, promptInjectionGuardForPrompt, providerMonthlyBillingLedgerForLogin, providerPayoutLedgerForLogin, publicEventView, recordProviderMonthlyChargeInAccount, recurringOrderToJobPayload, recurringOrdersVisibleToLogin, recordStripeTopupInAccount, releaseBillingReservationInState, requesterContextFromUser, reserveBillingEstimateInState, revokeOrderApiKeyInState, sanitizeAccountSettingsForClient, sanitizeBillingSettingsPatch, sanitizeExecutorPreferencesPatch, sanitizeFeedbackReportForClient, sanitizePayoutSettingsPatch, settleBillingForJobInState, suggestAutoTopupChargeAmount, touchOrderApiKeyUsageInState, updateChatTranscriptReviewInState, updateFeedbackReportInState, updateRecurringOrderInState, upsertAccountSettingsForIdentityInState, upsertAccountSettingsInState } from './lib/shared.js';
 import { agentPatternFitScore, applyGuestTrialSignupDebitInState, buildAgentTeamDeliveryOutput, deliveryQualityScoreForJob, ensureGuestTrialAccountInState, guestTrialLoginForVisitorId, guestTrialUsageForVisitorInState, isAgentTeamLaunchIntent, isFreeWebGrowthIntent, isLargeAgentTeamIntent, normalizeGuestTrialRequest, orderPreflightForAgent, ownChatMemoryForClient } from './lib/shared.js';
 import { amountFromMinorUnits, createConnectedAccount, createConnectedAccountTransfer, createConnectOnboardingLink, createDepositCheckoutSession, createOffSessionMonthlyInvoicePaymentIntent, createOffSessionProviderMonthlyPaymentIntent, createOffSessionTopupPaymentIntent, createSetupCheckoutSession, createSubscriptionCheckoutSession, ensureStripeCustomer, resolveSubscriptionPlanFromPriceId, retrieveConnectedAccount, retrievePaymentIntent, retrieveSetupIntent, retrieveSubscription, stripeConfigFromEnv, stripeConfigured, stripePublicConfig, updateCustomerDefaultPaymentMethod, verifyStripeWebhookSignature } from './lib/stripe.js';
 import { MANIFEST_CANDIDATE_PATHS, assessAgentRegistrationSafety, buildDraftManifestFromAgentSkill, buildDraftManifestFromRepoAnalysis, deriveManifestSignalPaths, normalizeManifest, parseAndValidateManifest, sanitizeManifestForPublic, validateManifest } from './lib/manifest.js';
@@ -5266,16 +5266,62 @@ async function hideOwnChatMemory(req, memoryId) {
   if (!current.user) return { error: 'Login required', statusCode: 401 };
   const safeMemoryId = String(memoryId || '').trim().replace(/^server_/, '').slice(0, 140);
   if (!safeMemoryId) return { error: 'Chat memory id is required', statusCode: 400 };
+  const activeStatuses = new Set(['queued', 'claimed', 'running', 'dispatched']);
+  const stateBefore = await storage.getState();
+  const visibleJobs = jobsVisibleToLogin(stateBefore, current.login, {
+    account: accountSettingsForLogin(stateBefore, current.login, current.user, current.authProvider)
+  });
+  const rootJobIdsToCancel = [...new Set(visibleJobs
+    .filter((job) => activeStatuses.has(String(job?.status || '').trim().toLowerCase()))
+    .filter((job) => {
+      const jobId = String(job?.id || '').trim();
+      const sessionId = chatSessionIdForJob(job);
+      const syntheticSessionId = jobId ? `job_${jobId}` : '';
+      return safeMemoryId === jobId || safeMemoryId === sessionId || safeMemoryId === syntheticSessionId;
+    })
+    .map((job) => String(job?.workflowParentId || job?.id || '').trim())
+    .filter(Boolean))];
+  for (const rootJobId of rootJobIdsToCancel) {
+    const rootJob = visibleJobs.find((job) => String(job?.id || '').trim() === rootJobId) || null;
+    const relatedActiveJobs = visibleJobs
+      .filter((job) => activeStatuses.has(String(job?.status || '').trim().toLowerCase()))
+      .filter((job) => String(job?.id || '').trim() === rootJobId || String(job?.workflowParentId || '').trim() === rootJobId)
+      .sort((left, right) => Number(Boolean(left?.workflowParentId)) - Number(Boolean(right?.workflowParentId)));
+    for (const job of relatedActiveJobs) {
+      await failJob(
+        job.id,
+        'Cancelled because the linked chat session was deleted.',
+        ['cancelled after linked chat session deletion'],
+        { failureStatus: 'failed', failureCategory: 'user_cancelled', retryable: false, source: 'chat_memory_delete' }
+      );
+    }
+    if (rootJob && !relatedActiveJobs.some((job) => String(job?.id || '').trim() === rootJob.id)) {
+      await failJob(
+        rootJob.id,
+        'Cancelled because the linked chat session was deleted.',
+        ['cancelled after linked chat session deletion'],
+        { failureStatus: 'failed', failureCategory: 'user_cancelled', retryable: false, source: 'chat_memory_delete' }
+      );
+    }
+    await touchEvent('FAILED', `chat-linked work ${rootJobId.slice(0, 6)} cancelled after session delete`, {
+      jobId: rootJobId,
+      source: 'chat_memory_delete',
+      login: current.login
+    });
+  }
   let result = null;
   await storage.mutate(async (draft) => {
     result = hideChatMemoryTranscriptForLoginInState(draft, current.login, safeMemoryId, current.user, current.authProvider);
   });
-  if (!result) return { error: 'Chat memory could not be hidden', statusCode: 400 };
+  if (!result && !rootJobIdsToCancel.length) return { error: 'Chat memory could not be hidden', statusCode: 400 };
+  const refreshedState = await storage.getState();
+  const refreshedAccount = result?.account || accountSettingsForLogin(refreshedState, current.login, current.user, current.authProvider);
   const state = await storage.getState();
   return {
     ok: true,
-    hidden_chat_memory_id: result.transcriptId,
-    account: sanitizeAccountSettingsForClient(result.account),
+    hidden_chat_memory_id: result?.transcriptId || safeMemoryId,
+    cancelled_job_ids: rootJobIdsToCancel,
+    account: sanitizeAccountSettingsForClient(refreshedAccount),
     chatMemory: ownChatMemoryForClient(state, current.login, 20)
   };
 }
@@ -6087,12 +6133,14 @@ async function performSingleJobCreate(req, body, current, options = {}) {
   const executionPrompt = promptOptimization.optimized ? promptOptimization.prompt : body.prompt;
   const inputBase = body.input && typeof body.input === 'object' ? body.input : {};
   const inputSourceBase = mergeProtectedPromptSourceIntoInput(inputBase, promptOptimization);
+  const chatSessionId = String(body.session_id || body.sessionId || inputSourceBase.session_id || inputSourceBase.sessionId || '').trim().slice(0, 160);
   const promptOptimizationMeta = promptOptimization.optimized ? promptOptimization.metadata : null;
   const optimizationLog = promptOptimization.optimized
     ? `prompt optimized mode=${promptOptimization.mode} originalChars=${promptOptimization.originalChars} optimizedChars=${promptOptimization.optimizedChars} outputLanguage=${promptOptimization.outputLanguageCode}`
     : null;
   const input = {
     ...inputSourceBase,
+    ...(chatSessionId && !inputSourceBase.session_id && !inputSourceBase.sessionId ? { session_id: chatSessionId } : {}),
     ...(promptOptimizationMeta && !inputSourceBase.output_language && !inputSourceBase.outputLanguage
       ? { output_language: promptOptimization.outputLanguageCode }
       : {}),
@@ -6100,6 +6148,7 @@ async function performSingleJobCreate(req, body, current, options = {}) {
       ...((inputSourceBase && inputSourceBase._broker) || {}),
       requester,
       billingMode,
+      ...(chatSessionId ? { chatSessionId } : {}),
       ...(promptOptimizationMeta ? { promptOptimization: promptOptimizationMeta } : {}),
       ...(followupConversation ? { conversation: followupConversation } : {})
     }
@@ -6485,9 +6534,11 @@ async function handleCreateWorkflowJob(req, body, current, options = {}) {
   const promptOptimization = optimizeOrderPromptForBroker(body, { taskType });
   const inputBase = body.input && typeof body.input === 'object' ? body.input : {};
   const inputSourceBase = mergeProtectedPromptSourceIntoInput(inputBase, promptOptimization);
+  const chatSessionId = String(body.session_id || body.sessionId || inputSourceBase.session_id || inputSourceBase.sessionId || '').trim().slice(0, 160);
   const promptOptimizationMeta = promptOptimization.optimized ? promptOptimization.metadata : null;
   const parentInput = {
     ...inputSourceBase,
+    ...(chatSessionId && !inputSourceBase.session_id && !inputSourceBase.sessionId ? { session_id: chatSessionId } : {}),
     ...(promptOptimizationMeta && !inputSourceBase.output_language && !inputSourceBase.outputLanguage
       ? { output_language: promptOptimization.outputLanguageCode }
       : {}),
@@ -6495,6 +6546,7 @@ async function handleCreateWorkflowJob(req, body, current, options = {}) {
       ...((inputSourceBase && inputSourceBase._broker) || {}),
       requester,
       billingMode,
+      ...(chatSessionId ? { chatSessionId } : {}),
       ...(promptOptimizationMeta ? { promptOptimization: promptOptimizationMeta } : {}),
       ...(followupConversation ? { conversation: followupConversation } : {})
     }

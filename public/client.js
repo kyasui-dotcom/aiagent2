@@ -2957,6 +2957,12 @@ function normalizeOpenChatSession(session = {}) {
     createdAt,
     updatedAt,
     serverManaged: Boolean(session.serverManaged),
+    sessionId: compactChatText(session.sessionId || '', 120),
+    activeWork: Boolean(session.activeWork),
+    activeJobIds: Array.isArray(session.activeJobIds)
+      ? session.activeJobIds.map((item) => compactChatText(item, 120)).filter(Boolean).slice(0, 24)
+      : [],
+    linkedOrderId: compactChatText(session.linkedOrderId || '', 120),
     openChatMode: normalizeOpenChatMode(session.openChatMode || 'order'),
     openChatPreparedBrief: compactChatText(session.openChatPreparedBrief || '', 9000),
     openChatParallelPlan: Array.isArray(session.openChatParallelPlan) ? session.openChatParallelPlan.slice(0, 8) : [],
@@ -3095,6 +3101,9 @@ function sessionFromServerChatMemory(item = {}) {
   return normalizeOpenChatSession({
     id,
     serverManaged: true,
+    activeWork: Boolean(item.activeWork),
+    activeJobIds: Array.isArray(item.activeJobIds) ? item.activeJobIds.slice(0, 24) : [],
+    linkedOrderId: compactChatText(item.linkedOrderId || '', 120),
     title: prompt,
     createdAt,
     updatedAt,
@@ -3216,11 +3225,12 @@ function renderOpenChatSessionControls() {
     const active = session.id === state.currentOpenChatSessionId;
     const messageCount = Array.isArray(session.messages) ? session.messages.length : 0;
     const hasBrief = isStructuredOrderBrief(session.openChatPreparedBrief || session.jobPrompt || '');
+    const workFlag = session.activeWork ? ' · active work' : '';
     return `
       <div class="chat-session-row ${active ? 'active' : ''}">
         <button type="button" class="chat-session-item" data-open-chat-session-id="${escapeHtml(session.id)}">
           <span class="chat-session-title">${escapeHtml(session.title || 'New chat')}</span>
-          <span class="chat-session-meta">${escapeHtml(openChatSessionTimeLabel(session.updatedAt))} · ${messageCount} msg${hasBrief ? ' · draft' : ''}</span>
+          <span class="chat-session-meta">${escapeHtml(openChatSessionTimeLabel(session.updatedAt))} · ${messageCount} msg${hasBrief ? ' · draft' : ''}${workFlag}</span>
         </button>
         <button type="button" class="mini-btn chat-session-delete" aria-label="Delete chat" data-delete-chat-session-id="${escapeHtml(session.id)}">x</button>
       </div>
@@ -3351,20 +3361,23 @@ async function deleteOpenChatSession(sessionId = '') {
   const targetId = compactChatText(sessionId || '', 160);
   if (!targetId) return;
   const targetSession = readOpenChatSessions().find((session) => session.id === targetId) || null;
-  const transcriptId = targetSession?.serverManaged ? openChatTranscriptIdFromServerSessionId(targetId) : '';
+  const serverMemoryId = targetSession?.serverManaged
+    ? (targetSession?.sessionId || openChatTranscriptIdFromServerSessionId(targetId) || targetSession?.linkedOrderId || targetId)
+    : '';
   writeOpenChatSessions((Array.isArray(state.openChatRuntimeSessions) ? state.openChatRuntimeSessions : [])
     .filter((session) => String(session?.id || '').trim() !== targetId));
   if (state.currentOpenChatSessionId === targetId) startNewOpenChatSession({ silent: true });
-  removeSnapshotChatMemoryItems(transcriptId);
+  removeSnapshotChatMemoryItems(serverMemoryId);
   renderOpenChatSessionControls();
-  if (!transcriptId || !state.snapshot?.auth?.loggedIn) {
-    flash('Saved chat not found in account history.', 'warn');
+  if (!serverMemoryId || !state.snapshot?.auth?.loggedIn) {
+    flash('Saved chat removed from this browser session.', 'info');
     return;
   }
   try {
-    const result = await api(`/api/settings/chat-memory/${encodeURIComponent(transcriptId)}`, { method: 'DELETE' });
+    const result = await api(`/api/settings/chat-memory/${encodeURIComponent(serverMemoryId)}`, { method: 'DELETE' });
     if (Array.isArray(result?.chatMemory) && state.snapshot) state.snapshot.chatMemory = result.chatMemory;
-    flash('Chat deleted from account history.', 'info');
+    const cancelled = Array.isArray(result?.cancelled_job_ids) ? result.cancelled_job_ids.length : 0;
+    flash(cancelled ? 'Chat deleted and linked work stopped.' : 'Chat deleted from account history.', 'info');
   } catch (error) {
     flash(`Chat hidden locally. Account history update failed: ${error.message}`, 'warn');
   }
@@ -23486,6 +23499,12 @@ loadManifestExample();
 window.addEventListener('pageshow', () => {
   closeDepositModal();
   closePlanModal();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state.currentTab === 'work') pauseWorkChatOnTabLeave();
+});
+window.addEventListener('pagehide', () => {
+  if (state.currentTab === 'work') pauseWorkChatOnTabLeave();
 });
 
 function ensureSettingsLogin() {
