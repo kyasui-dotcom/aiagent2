@@ -25,6 +25,8 @@ try {
   assert.equal(email.from, 'support@aiagent-marketplace.net');
   assert.ok(email.subject.includes('CAIt Report Issue'));
   assert.ok(email.raw.includes('Report ID:'));
+  const bulkCreatedAt = new Date(Date.parse(created.createdAt) - (24 * 60 * 60 * 1000)).toISOString();
+  const followupCreatedAt = new Date(Date.parse(created.createdAt) + 1000).toISOString();
 
   await storage.mutate(async (draft) => {
     if (!Array.isArray(draft.feedbackReports)) draft.feedbackReports = [];
@@ -33,21 +35,44 @@ try {
     draft.chatTranscripts.unshift(createChatTranscript({
       prompt: 'hi cait',
       answer: 'Hi. What would you like to do?',
-      answerKind: 'assist'
+      answerKind: 'assist',
+      sessionId: 'guest_session_1'
     }, {
       loggedIn: false,
       authProvider: 'guest',
       now: created.createdAt
     }));
     draft.chatTranscripts.unshift(createChatTranscript({
+      prompt: 'Need pricing details',
+      answer: 'Pricing depends on scope and provider usage.',
+      answerKind: 'assist',
+      sessionId: 'guest_session_1'
+    }, {
+      loggedIn: false,
+      authProvider: 'guest',
+      now: followupCreatedAt
+    }));
+    draft.chatTranscripts.unshift(createChatTranscript({
       prompt: 'Prepare a market research order',
       answer: 'Task: research\nGoal: prepare a market research order\nDeliver: concise summary',
-      answerKind: 'assist'
+      answerKind: 'assist',
+      sessionId: 'member_session_1'
     }, {
       loggedIn: true,
       authProvider: 'google-oauth',
       login: 'yasuikunihiro@gmail.com',
       now: created.createdAt
+    }));
+    draft.chatTranscripts.unshift(createChatTranscript({
+      prompt: 'Include competitor shortlist',
+      answer: 'Please confirm target market and 3 closest competitors first.',
+      answerKind: 'assist',
+      sessionId: 'member_session_1'
+    }, {
+      loggedIn: true,
+      authProvider: 'google-oauth',
+      login: 'yasuikunihiro@gmail.com',
+      now: followupCreatedAt
     }));
     draft.accounts.unshift({
       id: 'acct_tester',
@@ -61,7 +86,7 @@ try {
       createdAt: created.createdAt,
       updatedAt: created.createdAt
     });
-    for (let index = 0; index < 350; index += 1) {
+    for (let index = 0; index < 620; index += 1) {
       draft.chatTranscripts.unshift(createChatTranscript({
         prompt: `bulk transcript ${index}`,
         answer: 'Handled in QA',
@@ -69,7 +94,7 @@ try {
       }, {
         loggedIn: false,
         authProvider: 'guest',
-        now: created.createdAt
+        now: bulkCreatedAt
       }));
     }
   });
@@ -114,15 +139,33 @@ try {
   const adminDashboard = buildAdminDashboard(state, { operator: 'yasuikunihiro@gmail.com' });
   assert.equal(adminDashboard.summary.accounts.total, 1);
   assert.equal(adminDashboard.summary.reports.total, 1);
-  assert.equal(adminDashboard.summary.chats.total, 352);
+  assert.equal(adminDashboard.summary.chats.total, 622);
+  assert.equal(adminDashboard.summary.chats.turnsTotal, 624);
   assert.equal(adminDashboard.summary.chats.mine, 1);
-  assert.equal(adminDashboard.summary.chats.guestUnknown, 351);
+  assert.equal(adminDashboard.summary.chats.guestUnknown, 621);
   assert.equal(adminDashboard.chatHandling.handledNonMine, 1);
-  assert.equal(adminDashboard.chatHandling.needsReviewNonMine, 350);
+  assert.equal(adminDashboard.chatHandling.needsReviewNonMine, 620);
   assert.equal(adminDashboard.chats.length, 300);
-  assert.equal(adminDashboard.chats.some((chat) => chat.prompt === 'hi cait'), false);
-  assert.ok(adminDashboard.chats.every((chat) => String(chat.prompt || '').startsWith('bulk transcript ')));
+  assert.equal(adminDashboard.chats[0].sessionId, 'member_session_1');
+  assert.equal(adminDashboard.chats[0].turnCount, 2);
+  assert.equal(adminDashboard.chats[1].sessionId, 'guest_session_1');
+  assert.equal(adminDashboard.chats[1].turnCount, 2);
+  assert.ok(adminDashboard.chats.slice(2).every((chat) => String(chat.prompt || '').startsWith('bulk transcript ')));
+  assert.equal(adminDashboard.chatHandling.byStatus.faq_answered, 1);
+  assert.equal(adminDashboard.chatHandling.byStatus.needs_review, 620);
   assert.equal(adminDashboard.accounts[0].login, 'tester@example.com');
+  const groupedDashboard = buildAdminDashboard({
+    ...state,
+    chatTranscripts: state.chatTranscripts.filter((chat) => ['guest_session_1', 'member_session_1'].includes(chat.sessionId))
+  }, { operator: 'nobody@example.com' });
+  const groupedGuest = groupedDashboard.chats.find((chat) => chat.sessionId === 'guest_session_1');
+  assert.ok(groupedGuest);
+  assert.equal(groupedGuest.turnCount, 2);
+  assert.equal(groupedGuest.handlingStatus, 'faq_answered');
+  const groupedMember = groupedDashboard.chats.find((chat) => chat.sessionId === 'member_session_1');
+  assert.ok(groupedMember);
+  assert.equal(groupedMember.turnCount, 2);
+  assert.equal(groupedMember.handlingStatus, 'clarified');
 
   console.log('feedback qa passed');
 } finally {

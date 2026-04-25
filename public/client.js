@@ -450,6 +450,8 @@ const els = {
   adminActiveMetric: $('adminActiveMetric'),
   adminDetail: $('adminDetail'),
   adminChatSegmentationCard: $('adminChatSegmentationCard'),
+  adminChatFilterNeedsReviewBtn: $('adminChatFilterNeedsReviewBtn'),
+  adminChatFilterHandledBtn: $('adminChatFilterHandledBtn'),
   adminChatFilterNonMineBtn: $('adminChatFilterNonMineBtn'),
   adminChatFilterGuestBtn: $('adminChatFilterGuestBtn'),
   adminChatFilterOtherBtn: $('adminChatFilterOtherBtn'),
@@ -626,7 +628,7 @@ const state = {
   agentActionFilter: '',
   agentTaskFilter: '',
   agentSort: 'readiness',
-  adminChatFilter: 'nonMine',
+  adminChatFilter: 'needsReview',
   agentOnboarding: {},
   onboardingLoading: {},
   routeAgentId: '',
@@ -14945,6 +14947,8 @@ function renderAdminRows(container, gridClass, headers = [], rows = [], emptyTex
 }
 
 const ADMIN_CHAT_FILTERS = {
+  needsReview: (chat) => chat?.adminSegment !== 'mine' && chat?.handlingStatus === 'needs_review',
+  handled: (chat) => chat?.adminSegment !== 'mine' && chat?.handlingStatus !== 'needs_review',
   nonMine: (chat) => chat?.adminSegment !== 'mine',
   guest: (chat) => chat?.adminSegment === 'guest_unknown',
   other: (chat) => chat?.adminSegment === 'other_account',
@@ -14953,20 +14957,37 @@ const ADMIN_CHAT_FILTERS = {
 };
 
 function activeAdminChatFilter() {
-  return ADMIN_CHAT_FILTERS[state.adminChatFilter] ? state.adminChatFilter : 'nonMine';
+  return ADMIN_CHAT_FILTERS[state.adminChatFilter] ? state.adminChatFilter : 'needsReview';
 }
 
-function renderAdminChatFilterButtons() {
+function adminChatFilterCounts(dashboard = state.snapshot?.adminDashboard || null) {
+  const summary = dashboard?.summary?.chats || {};
+  return {
+    needsReview: Number(summary.needsReviewNonMine || 0),
+    handled: Number(summary.handledNonMine || 0),
+    nonMine: Number(summary.nonMine || 0),
+    guest: Number(summary.guestUnknown || 0),
+    other: Number(summary.otherLoggedIn || 0),
+    mine: Number(summary.mine || 0),
+    all: Number(summary.total || 0)
+  };
+}
+
+function renderAdminChatFilterButtons(dashboard = state.snapshot?.adminDashboard || null) {
   const active = activeAdminChatFilter();
+  const counts = adminChatFilterCounts(dashboard);
   [
-    [els.adminChatFilterNonMineBtn, 'nonMine'],
-    [els.adminChatFilterGuestBtn, 'guest'],
-    [els.adminChatFilterOtherBtn, 'other'],
-    [els.adminChatFilterMineBtn, 'mine'],
-    [els.adminChatFilterAllBtn, 'all']
-  ].forEach(([button, filter]) => {
+    [els.adminChatFilterNeedsReviewBtn, 'needsReview', 'NEEDS REVIEW'],
+    [els.adminChatFilterHandledBtn, 'handled', 'HANDLED'],
+    [els.adminChatFilterNonMineBtn, 'nonMine', 'NON-ME'],
+    [els.adminChatFilterGuestBtn, 'guest', 'GUEST / UNKNOWN'],
+    [els.adminChatFilterOtherBtn, 'other', 'OTHER LOGIN'],
+    [els.adminChatFilterMineBtn, 'mine', 'MY LOGIN'],
+    [els.adminChatFilterAllBtn, 'all', 'ALL']
+  ].forEach(([button, filter, label]) => {
     if (!button) return;
     button.classList.toggle('active', active === filter);
+    button.textContent = `${label} ${counts[filter] ?? 0}`;
   });
 }
 
@@ -14977,8 +14998,8 @@ function adminChatHandlingClass(chat = {}) {
   return 'info';
 }
 
-function setAdminChatFilter(filter = 'nonMine') {
-  state.adminChatFilter = ADMIN_CHAT_FILTERS[filter] ? filter : 'nonMine';
+function setAdminChatFilter(filter = 'needsReview') {
+  state.adminChatFilter = ADMIN_CHAT_FILTERS[filter] ? filter : 'needsReview';
   renderAdminDashboard(state.snapshot?.adminDashboard || null, state.snapshot?.auth || {});
 }
 
@@ -15013,7 +15034,8 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
     { label: 'Generated', value: formatTime(dashboard.generatedAt) },
     { label: 'Operator', value: dashboard.operator || auth.login || '-' },
     { label: 'Accounts 24h / 7d / total', value: `${summary.accounts?.last24h || 0} / ${summary.accounts?.last7d || 0} / ${summary.accounts?.total || 0}` },
-    { label: 'Chats 24h / 7d / total', value: `${summary.chats?.last24h || 0} / ${summary.chats?.last7d || 0} / ${summary.chats?.total || 0}` },
+    { label: 'Chat sessions 24h / 7d / total', value: `${summary.chats?.last24h || 0} / ${summary.chats?.last7d || 0} / ${summary.chats?.total || 0}` },
+    { label: 'Chat turns total', value: `${summary.chats?.turnsTotal || 0}` },
     { label: 'Agents total / user / ready', value: `${summary.agents?.total || 0} / ${summary.agents?.userAgents || 0} / ${summary.agents?.ready || 0}` },
     { label: 'Orders active / completed / failed', value: `${summary.orders?.active || 0} / ${summary.orders?.completed || 0} / ${summary.orders?.failed || 0}` },
     { label: 'Issues open / reviewing / resolved', value: `${summary.reports?.open || 0} / ${summary.reports?.reviewing || 0} / ${summary.reports?.resolved || 0}` },
@@ -15024,15 +15046,15 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
   const chatHandling = dashboard.chatHandling || {};
   const chatStatusCounts = chatHandling.byStatus || {};
   renderSummaryRows(els.adminChatSegmentationCard, [
-    { label: 'My logged-in chats', value: summary.chats?.mine || 0 },
-    { label: 'Other logged-in chats', value: summary.chats?.otherLoggedIn || 0 },
-    { label: 'Guest / unknown chats', value: summary.chats?.guestUnknown || 0 },
+    { label: 'My logged-in sessions', value: summary.chats?.mine || 0 },
+    { label: 'Other logged-in sessions', value: summary.chats?.otherLoggedIn || 0 },
+    { label: 'Guest / unknown sessions', value: summary.chats?.guestUnknown || 0 },
     { label: 'Non-me handled / total', value: `${summary.chats?.handledNonMine || 0} / ${summary.chats?.nonMine || 0}` },
-    { label: 'Needs review', value: summary.chats?.needsReviewNonMine || 0 },
+    { label: 'Needs review sessions', value: summary.chats?.needsReviewNonMine || 0 },
     { label: 'Handling breakdown', value: Object.entries(chatStatusCounts).map(([key, value]) => `${key}:${value}`).join(' · ') || '-' }
   ]);
   els.adminChatSegmentationCard.className = `detail-box action-card ${summary.chats?.needsReviewNonMine ? 'warn' : 'info'} compact-card`;
-  renderAdminChatFilterButtons();
+  renderAdminChatFilterButtons(dashboard);
 
   const accounts = dashboard.accounts || [];
   renderAdminRows(els.adminAccountsTable, 'admin-accounts-grid', ['LOGIN', 'AUTH', 'BALANCE', 'UPDATED'], accounts.slice(0, 80).map((account, index) => ({
@@ -15068,12 +15090,12 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
     kind: 'chats',
     index,
     cells: [
-      `${sinceLabel(chat.createdAt)}<div class="row-muted">${escapeHtml(chat.adminSegmentLabel || chat.authProvider || 'guest')}</div>`,
-      `${escapeHtml((chat.prompt || '-').slice(0, 90))}<div class="row-muted">task ${escapeHtml(chat.taskType || '-')}</div>`,
-      `${escapeHtml((chat.answer || '-').slice(0, 90))}<div class="row-muted">${escapeHtml(chat.answerKind || chat.status || '-')}</div>`,
-      `<span class="status-pill ${adminChatHandlingClass(chat)}">${escapeHtml(String(chat.handlingLabel || chat.handlingStatus || 'needs_review').toUpperCase())}</span><div class="row-muted">review ${escapeHtml(chat.reviewStatus || 'new')} · ${chat.redacted ? 'redacted' : 'plain'}</div>`
+      `${sinceLabel(chat.createdAt)}<div class="row-muted">${escapeHtml(chat.adminSegmentLabel || chat.authProvider || 'guest')} · ${escapeHtml(chat.sessionId || chat.id || '-')}</div>`,
+      `${escapeHtml((chat.prompt || '-').slice(0, 90))}<div class="row-muted">${escapeHtml(`${chat.turnCount || 1} turns`)} · task ${escapeHtml(chat.latestTaskType || chat.taskType || '-')}</div>`,
+      `${escapeHtml((chat.answer || '-').slice(0, 90))}<div class="row-muted">started ${escapeHtml(formatTime(chat.startedAt || chat.createdAt))}${chat.recentPromptPreview ? ` · ${escapeHtml(chat.recentPromptPreview.slice(0, 110))}` : ''}</div>`,
+      `<span class="status-pill ${adminChatHandlingClass(chat)}">${escapeHtml(String(chat.handlingLabel || chat.handlingStatus || 'needs_review').toUpperCase())}</span><div class="row-muted">review ${escapeHtml(chat.latestReviewStatus || chat.reviewStatus || 'new')} · ${chat.redacted ? 'redacted' : 'plain'}</div>`
     ]
-  })), `No chat history for ${chatFilter}.`);
+  })), chatFilter === 'needsReview' ? 'No chats currently need review.' : `No chat history for ${chatFilter}.`);
 
   const agents = dashboard.agents || [];
   renderAdminRows(els.adminAgentsTable, 'admin-agents-grid', ['AGENT', 'OWNER', 'STATUS', 'PRICING'], agents.slice(0, 80).map((agent, index) => ({
@@ -22735,6 +22757,8 @@ if (els.chatTrainingExportBtn) els.chatTrainingExportBtn.onclick = () => {
   });
 };
 [
+  [els.adminChatFilterNeedsReviewBtn, 'needsReview'],
+  [els.adminChatFilterHandledBtn, 'handled'],
   [els.adminChatFilterNonMineBtn, 'nonMine'],
   [els.adminChatFilterGuestBtn, 'guest'],
   [els.adminChatFilterOtherBtn, 'other'],
