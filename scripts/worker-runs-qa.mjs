@@ -279,4 +279,42 @@ assert.ok(metrics.body.event_count >= 5);
 assert.equal(typeof metrics.body.billing_audit_count, 'number');
 assert.ok(metrics.body.billing_audit_count >= 0);
 
+await resetState();
+
+const cronTimeoutCandidate = await request('/api/jobs', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    parent_agent_id: 'qa-runner',
+    task_type: 'research',
+    prompt: 'scheduled timeout sweep qa',
+    budget_cap: 180,
+    deadline_sec: 1
+  })
+});
+assert.equal(cronTimeoutCandidate.status, 201);
+
+await storage.mutate(async (draft) => {
+  const job = draft.jobs.find((item) => item.id === cronTimeoutCandidate.body.job_id);
+  job.status = 'running';
+  job.startedAt = new Date(Date.now() - 5_000).toISOString();
+  job.createdAt = job.startedAt;
+});
+
+await worker.scheduled({ cron: '* * * * *' }, env, {
+  waitUntil(promise) {
+    return promise;
+  }
+});
+
+const cronTimedOut = await request(`/api/jobs/${cronTimeoutCandidate.body.job_id}`);
+assert.equal(cronTimedOut.status, 200);
+assert.equal(cronTimedOut.body.job.status, 'timed_out');
+assert.equal(cronTimedOut.body.job.failureCategory, 'deadline_timeout');
+
+const cronSnapshot = await request('/api/snapshot');
+const cronTimeoutEvent = cronSnapshot.body.events.find((event) => event.type === 'TIMEOUT' && event.meta?.jobId === cronTimeoutCandidate.body.job_id);
+assert.ok(cronTimeoutEvent);
+assert.equal(cronTimeoutEvent.meta.source, 'cron');
+
 console.log('worker runs qa passed');

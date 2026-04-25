@@ -11589,13 +11589,25 @@ async function handleTimeoutSweep(storage, request, env) {
   const staleMs = hasExplicitStaleMs
     ? (Number.isFinite(rawStaleMs) ? Math.max(0, rawStaleMs) : 0)
     : null;
+  const result = await sweepTimedOutJobs(storage, {
+    nowMs: now,
+    staleMs,
+    eventSource: 'dev_api'
+  });
+  return json({ ok: true, swept: result.swept, count: result.swept.length });
+}
+
+async function sweepTimedOutJobs(storage, options = {}) {
+  const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
+  const staleMs = Number.isFinite(Number(options.staleMs)) ? Math.max(0, Number(options.staleMs)) : null;
+  const eventSource = String(options.eventSource || '').trim() || 'timeout_sweep';
   const result = await storage.mutate(async (state) => {
     const swept = [];
     for (const job of state.jobs) {
       if (!['queued', 'claimed', 'running', 'dispatched'].includes(job.status)) continue;
       const deadlineMs = Number(job.deadlineSec || 0) > 0 ? Number(job.deadlineSec) * 1000 : null;
-      const basisMs = Date.parse(job.dispatchedAt || job.startedAt || job.createdAt || '') || now;
-      const ageMs = Math.max(0, now - basisMs);
+      const basisMs = Date.parse(job.lastCallbackAt || job.dispatchedAt || job.startedAt || job.claimedAt || job.createdAt || '') || nowMs;
+      const ageMs = Math.max(0, nowMs - basisMs);
       const attempts = Number(job.dispatch?.attempts || 0);
       const nextAttempt = attempts + 1;
       const expiredByDeadline = deadlineMs != null && ageMs >= deadlineMs;
@@ -11605,14 +11617,14 @@ async function handleTimeoutSweep(storage, request, env) {
       job.timedOutAt = nowIso();
       job.failureReason = 'Run exceeded timeout window';
       job.failureCategory = 'deadline_timeout';
-      job.logs = [...(job.logs || []), 'worker timeout sweep marked run as timed_out'];
+      job.logs = [...(job.logs || []), `worker timeout sweep marked run as timed_out source=${eventSource}`];
       const maxRetries = maxDispatchRetriesForJob(job);
       const retryable = nextAttempt <= maxRetries;
       job.dispatch = {
         ...(job.dispatch || {}),
         attempts,
         retryable,
-        nextRetryAt: retryable ? computeNextRetryAt(nextAttempt, now) : null,
+        nextRetryAt: retryable ? computeNextRetryAt(nextAttempt, nowMs) : null,
         completionStatus: 'timed_out',
         maxRetries
       };
@@ -11640,10 +11652,11 @@ async function handleTimeoutSweep(storage, request, env) {
       retryable: job.retryable,
       attempts: job.attempts,
       maxRetries: job.maxRetries,
-      nextRetryAt: job.nextRetryAt
+      nextRetryAt: job.nextRetryAt,
+      source: eventSource
     });
   }
-  return json({ ok: true, swept: result.swept, count: result.swept.length });
+  return result;
 }
 
 async function handleSeed(storage, request, env) {
@@ -12363,6 +12376,9 @@ export default {
   async scheduled(controller, env, ctx) {
     const storage = runtimeStorage(env);
     const cron = controller?.cron || '';
+    ctx.waitUntil(sweepTimedOutJobs(storage, {
+      eventSource: 'cron'
+    }));
     if (cron !== '* * * * *') {
       ctx.waitUntil(runRecurringOrderSweep(storage, env, {
         source: 'cron',
