@@ -1026,6 +1026,51 @@ function compactProgressLogLine(value = '', max = 160) {
   );
 }
 
+function workflowTaskWorkingNote(taskType = '', phase = '', status = '', options = {}) {
+  const ja = Boolean(options.ja);
+  const task = String(taskType || '').trim().toLowerCase();
+  const normalizedPhase = String(phase || '').trim().toLowerCase();
+  const normalizedStatus = String(status || '').trim().toLowerCase();
+  const running = ['running', 'claimed', 'dispatched'].includes(normalizedStatus);
+  const queued = ['queued', 'created'].includes(normalizedStatus);
+  const blocked = normalizedStatus === 'blocked';
+  const prefix = blocked
+    ? (ja ? 'Waiting:' : 'Waiting:')
+    : queued
+      ? (ja ? 'Next:' : 'Next:')
+      : (ja ? 'Thinking:' : 'Thinking:');
+  const phrases = {
+    cmo_leader: {
+      initial: queued ? 'frame the objective, compare channels, and choose the first lane.' : 'framing the objective, comparing channels, and choosing the first lane.',
+      checkpoint: queued ? 'review research output and decide the next execution lane.' : 'reviewing research output and deciding the next execution lane.',
+      final_summary: queued ? 'merge specialist outputs into one accountable final report.' : 'merging specialist outputs into one accountable final report.'
+    },
+    research: queued ? 'collect comparable market signals and evidence.' : 'collecting comparable market signals and evidence.',
+    teardown: queued ? 'break down competitor positioning, offer, and funnel moves.' : 'breaking down competitor positioning, offer, and funnel moves.',
+    data_analysis: queued ? 'translate evidence into metrics, segments, and decision points.' : 'translating evidence into metrics, segments, and decision points.',
+    media_planner: queued ? 'turn findings into channel priorities, timing, and spend focus.' : 'turning findings into channel priorities, timing, and spend focus.',
+    growth: queued ? 'turn the approved lane into concrete acquisition actions.' : 'turning the approved lane into concrete acquisition actions.',
+    summary: queued ? 'compress the work into a reusable answer-first output.' : 'compressing the work into a reusable answer-first output.',
+    x_post: queued ? 'convert the plan into a post/thread draft for X.' : 'converting the plan into a post/thread draft for X.',
+    writing: queued ? 'turn the approved direction into publishable copy.' : 'turning the approved direction into publishable copy.',
+    seo_gap: queued ? 'compare search intent, gaps, and content opportunities.' : 'comparing search intent, gaps, and content opportunities.',
+    landing: queued ? 'shape the landing page structure and copy direction.' : 'shaping the landing page structure and copy direction.'
+  };
+  let body = '';
+  if (task === 'cmo_leader') {
+    body = phrases.cmo_leader[normalizedPhase] || (queued ? 'review the workflow and decide the next best move.' : 'reviewing the workflow and deciding the next best move.');
+  } else {
+    body = phrases[task] || (queued ? 'prepare the next specialist step.' : 'working through the assigned specialist step.');
+  }
+  if (blocked) {
+    body = 'waiting for the earlier workflow phase to finish.';
+  }
+  if (!running && !queued && !blocked) {
+    body = 'updating status from the latest callback.';
+  }
+  return `${prefix} ${body}`;
+}
+
 function workflowProgressDetails(job = {}, options = {}) {
   const ja = Boolean(options.ja);
   const childRuns = workflowChildRunsFromJob(job)
@@ -1035,7 +1080,8 @@ function workflowProgressDetails(job = {}, options = {}) {
       agentName: String(child?.agentName || child?.agentId || '').trim(),
       sequencePhase: String(child?.sequencePhase || '').trim().toLowerCase(),
       status: String(child?.status || '').trim().toLowerCase(),
-      summary: compactChatText(String(child?.summary || child?.failureReason || '').trim(), 140)
+      summary: compactChatText(String(child?.summary || child?.failureReason || '').trim(), 140),
+      latestLog: compactProgressLogLine(child?.latestLog || '', 140)
     }))
     .sort((left, right) => {
       const phaseCompare = workflowPhaseRank(left.sequencePhase) - workflowPhaseRank(right.sequencePhase);
@@ -1057,17 +1103,15 @@ function workflowProgressDetails(job = {}, options = {}) {
     active.slice(0, 4).forEach((child) => {
       const status = String(child.status || '').toUpperCase();
       const detail = child.summary
-        || (child.status === 'queued' || child.status === 'created'
-          ? (ja ? 'ready to start' : 'ready to start')
-          : child.status === 'blocked'
-            ? (ja ? 'waiting for earlier phase' : 'waiting for earlier phase')
-            : (ja ? 'working now' : 'working now'));
+        || child.latestLog
+        || workflowTaskWorkingNote(child.taskType, child.sequencePhase, child.status, { ja });
       lines.push(`- ${child.taskType || 'task'} (${status})${child.agentName ? ` - ${child.agentName}` : ''}: ${detail}`);
     });
   } else if (blocked.length) {
     lines.push(ja ? 'Current phase: waiting for next workflow handoff' : 'Current phase: waiting for next workflow handoff');
     blocked.slice(0, 3).forEach((child) => {
-      lines.push(`- ${child.taskType || 'task'} (${String(child.status || '').toUpperCase()}): ${ja ? 'waiting for the earlier phase to finish' : 'waiting for the earlier phase to finish'}`);
+      const detail = child.latestLog || workflowTaskWorkingNote(child.taskType, child.sequencePhase, child.status, { ja });
+      lines.push(`- ${child.taskType || 'task'} (${String(child.status || '').toUpperCase()}): ${detail}`);
     });
   }
   if (recentLogs.length) {
@@ -1353,7 +1397,8 @@ function orderProgressKeyFromJob(job = {}) {
       String(child?.taskType || '').trim(),
       String(child?.sequencePhase || '').trim(),
       String(child?.status || '').trim(),
-      compactChatText(String(child?.summary || child?.failureReason || '').trim(), 80)
+      compactChatText(String(child?.summary || child?.failureReason || '').trim(), 80),
+      compactProgressLogLine(child?.latestLog || '', 80)
     ].join(':'))
     .join('|');
   const lastLog = compactProgressLogLine((Array.isArray(job?.logs) ? job.logs : []).slice(-1)[0] || '', 120);

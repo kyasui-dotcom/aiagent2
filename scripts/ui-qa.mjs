@@ -178,6 +178,8 @@ assert.ok(js.includes('This status changes to running after the first agent actu
 assert.ok(js.includes('Progress check stopped. This session could not verify the order.'));
 assert.ok(js.includes('Reload WORK. If it still fails, sign in again and recheck the order.'));
 assert.ok(js.includes('Current phase:'));
+assert.ok(js.includes('Thinking:'));
+assert.ok(js.includes('Next:'));
 assert.ok(js.includes('Recent broker signals:'));
 assert.ok(js.includes('function setOrderStrategyChoice'));
 assert.ok(js.includes('function renderOrderStrategyControls'));

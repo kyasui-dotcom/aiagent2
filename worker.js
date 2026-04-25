@@ -9151,7 +9151,8 @@ function workflowChildSnapshot(children = []) {
     createdAt: job.createdAt,
     completedAt: job.completedAt || null,
     failedAt: job.failedAt || null,
-    failureReason: job.failureReason || null
+    failureReason: job.failureReason || null,
+    latestLog: Array.isArray(job.logs) ? String(job.logs.slice(-1)[0] || '').trim() : ''
   }));
 }
 
