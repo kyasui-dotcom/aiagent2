@@ -24,7 +24,12 @@ async function waitForServer(timeoutMs = 8000) {
 async function main() {
   const child = spawn('node', ['server.js'], {
     cwd: process.cwd(),
-    env: { ...process.env, PORT: String(PORT) },
+    env: {
+      ...process.env,
+      NODE_ENV: 'test',
+      ALLOW_IN_MEMORY_STORAGE: '1',
+      PORT: String(PORT)
+    },
     stdio: ['ignore', 'pipe', 'pipe']
   });
   try {

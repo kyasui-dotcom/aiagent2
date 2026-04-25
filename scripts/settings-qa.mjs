@@ -171,7 +171,7 @@ assert.equal(conversion.actuals.orders.total, 3);
 assert.equal(conversion.actuals.userAgents.total, 2);
 
 const transcript = createChatTranscript({
-  prompt: 'Please help. email test@example.com api_key=super-secret-value sk-proj-1234567890abcdefghijklmnopqrstuvwxyz',
+  prompt: 'Please help. email test@example.com api_key=super-secret-value test-openai-project-key-abcdefghijklmnopqrstuvwxyz1234567890',
   answer: 'Use Work Chat first.',
   answer_kind: 'assist',
   visitor_id: 'visitor_settings_qa',

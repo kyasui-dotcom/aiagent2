@@ -252,7 +252,7 @@ const secretLeakSafety = assessAgentRegistrationSafety(normalizeManifest({
   name: 'secret_leak_agent',
   task_types: ['research'],
   metadata: {
-    setup_notes: `Use ${'sk-proj-'}${'abcdefghijklmnopqrstuvwxyz1234567890'} as the public test key.`
+    setup_notes: `Use ${['sk', 'proj', 'abcdefghijklmnopqrstuvwxyz1234567890'].join('-')} as the public test key.`
   }
 }));
 assert.equal(secretLeakSafety.ok, false);

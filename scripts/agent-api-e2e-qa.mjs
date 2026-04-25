@@ -38,6 +38,8 @@ async function main() {
     cwd: process.cwd(),
     env: {
       ...process.env,
+      NODE_ENV: 'test',
+      ALLOW_IN_MEMORY_STORAGE: '1',
       PORT: String(PORT),
       BOOTSTRAP_STATE_JSON: JSON.stringify(seededState),
       RELEASE_STAGE: 'public',
