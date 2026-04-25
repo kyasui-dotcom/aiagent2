@@ -995,6 +995,91 @@ function workflowChildRunsFromJob(job = {}) {
     : (Array.isArray(job?.workflow?.childRuns) ? job.workflow.childRuns : []);
 }
 
+function workflowPhaseRank(phase = '') {
+  const normalized = String(phase || '').trim().toLowerCase();
+  if (normalized === 'initial') return 1;
+  if (normalized === 'research') return 2;
+  if (normalized === 'checkpoint') return 3;
+  if (normalized === 'action') return 4;
+  if (normalized === 'final_summary') return 5;
+  return 0;
+}
+
+function workflowPhaseLabel(phase = '', options = {}) {
+  const ja = Boolean(options.ja);
+  const normalized = String(phase || '').trim().toLowerCase();
+  if (normalized === 'initial') return ja ? 'leader planning' : 'leader planning';
+  if (normalized === 'research') return ja ? 'research' : 'research';
+  if (normalized === 'checkpoint') return ja ? 'leader checkpoint' : 'leader checkpoint';
+  if (normalized === 'action') return ja ? 'execution' : 'execution';
+  if (normalized === 'final_summary') return ja ? 'leader final summary' : 'leader final summary';
+  return ja ? 'workflow' : 'workflow';
+}
+
+function compactProgressLogLine(value = '', max = 160) {
+  return compactChatText(
+    String(value || '')
+      .replace(/\s+/g, ' ')
+      .replace(/^[a-z_]+:\s*/i, '')
+      .trim(),
+    max
+  );
+}
+
+function workflowProgressDetails(job = {}, options = {}) {
+  const ja = Boolean(options.ja);
+  const childRuns = workflowChildRunsFromJob(job)
+    .map((child) => ({
+      ...child,
+      taskType: String(child?.taskType || '').trim(),
+      agentName: String(child?.agentName || child?.agentId || '').trim(),
+      sequencePhase: String(child?.sequencePhase || '').trim().toLowerCase(),
+      status: String(child?.status || '').trim().toLowerCase(),
+      summary: compactChatText(String(child?.summary || child?.failureReason || '').trim(), 140)
+    }))
+    .sort((left, right) => {
+      const phaseCompare = workflowPhaseRank(left.sequencePhase) - workflowPhaseRank(right.sequencePhase);
+      if (phaseCompare) return phaseCompare;
+      const statusCompare = String(left.status || '').localeCompare(String(right.status || ''));
+      if (statusCompare) return statusCompare;
+      return String(left.taskType || '').localeCompare(String(right.taskType || ''));
+    });
+  const active = childRuns.filter((child) => ['queued', 'created', 'claimed', 'running', 'dispatched'].includes(child.status));
+  const blocked = childRuns.filter((child) => child.status === 'blocked');
+  const recentLogs = (Array.isArray(job?.logs) ? job.logs : [])
+    .map((line) => compactProgressLogLine(line))
+    .filter(Boolean)
+    .slice(-3);
+  const lines = [];
+  if (active.length) {
+    const phase = workflowPhaseLabel(active[0]?.sequencePhase || '', { ja });
+    lines.push(ja ? `Current phase: ${phase}` : `Current phase: ${phase}`);
+    active.slice(0, 4).forEach((child) => {
+      const status = String(child.status || '').toUpperCase();
+      const detail = child.summary
+        || (child.status === 'queued' || child.status === 'created'
+          ? (ja ? 'ready to start' : 'ready to start')
+          : child.status === 'blocked'
+            ? (ja ? 'waiting for earlier phase' : 'waiting for earlier phase')
+            : (ja ? 'working now' : 'working now'));
+      lines.push(`- ${child.taskType || 'task'} (${status})${child.agentName ? ` - ${child.agentName}` : ''}: ${detail}`);
+    });
+  } else if (blocked.length) {
+    lines.push(ja ? 'Current phase: waiting for next workflow handoff' : 'Current phase: waiting for next workflow handoff');
+    blocked.slice(0, 3).forEach((child) => {
+      lines.push(`- ${child.taskType || 'task'} (${String(child.status || '').toUpperCase()}): ${ja ? 'waiting for the earlier phase to finish' : 'waiting for the earlier phase to finish'}`);
+    });
+  }
+  if (recentLogs.length) {
+    lines.push('');
+    lines.push(ja ? 'Recent broker signals:' : 'Recent broker signals:');
+    recentLogs.forEach((line) => {
+      lines.push(`- ${line}`);
+    });
+  }
+  return lines.filter(Boolean);
+}
+
 function orderProgressChildDeliveryLines(job = {}, options = {}) {
   const ja = Boolean(options.ja);
   const childRuns = workflowChildRunsFromJob(job);
@@ -1202,6 +1287,7 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
     : '';
   const route = job?.assignedAgentId || (isWorkflow ? (job?.workflow?.teamName || 'Agent Team') : 'auto-routing');
   const summary = orderProgressSummaryFromJob(job);
+  const workflowDetails = isWorkflow ? workflowProgressDetails(job, options) : [];
   if (status === 'completed') {
     return [
       isWorkflow
@@ -1241,6 +1327,7 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
       ja ? `状態: ${status}` : `Status: ${status}`,
       ja ? `接続先: ${route}` : `Route: ${route}`,
       childLine,
+      ...workflowDetails,
       ja
         ? '最初のエージェントが動き出したら、この表示を実行中に更新します。'
         : 'This status changes to running after the first agent actually starts.'
@@ -1253,12 +1340,23 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
     ja ? `状態: ${status}` : `Status: ${status}`,
     ja ? `接続先: ${route}` : `Route: ${route}`,
     childLine,
+    ...workflowDetails,
     ja ? '完了したらこの表示とDeliveryを更新します。' : 'This status and Delivery will update when it finishes.'
   ].filter(Boolean).join('\n');
 }
 
 function orderProgressKeyFromJob(job = {}) {
   const counts = orderProgressCounts(job);
+  const childFingerprint = workflowChildRunsFromJob(job)
+    .slice(0, 12)
+    .map((child) => [
+      String(child?.taskType || '').trim(),
+      String(child?.sequencePhase || '').trim(),
+      String(child?.status || '').trim(),
+      compactChatText(String(child?.summary || child?.failureReason || '').trim(), 80)
+    ].join(':'))
+    .join('|');
+  const lastLog = compactProgressLogLine((Array.isArray(job?.logs) ? job.logs : []).slice(-1)[0] || '', 120);
   return [
     normalizeOrderProgressStatus(job?.status),
     job?.completedAt || '',
@@ -1271,7 +1369,9 @@ function orderProgressKeyFromJob(job = {}) {
     counts.failed,
     counts.running,
     counts.queued,
-    compactChatText(job?.failureReason || '', 120)
+    compactChatText(job?.failureReason || '', 120),
+    childFingerprint,
+    lastLog
   ].join('|');
 }
 
