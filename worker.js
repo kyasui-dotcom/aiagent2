@@ -8504,6 +8504,167 @@ function computeScore(agent, taskType, budgetCap = 0) {
   ).toFixed(3);
 }
 
+const WORKFLOW_TASK_SOFT_MATCH_MAP = Object.freeze({
+  cmo_leader: ['cmo', 'marketing_leader', 'free_web_growth_leader', 'launch_team_leader', 'agent_team_launch'],
+  research_team_leader: ['research_team_leader', 'research_team', 'analysis_team'],
+  build_team_leader: ['build_team_leader', 'build_team', 'coding_team', 'engineering_team'],
+  cto_leader: ['cto', 'cto_leader', 'technical_leader'],
+  cpo_leader: ['cpo', 'cpo_leader', 'product_leader'],
+  cfo_leader: ['cfo', 'cfo_leader', 'finance_leader'],
+  legal_leader: ['legal', 'legal_leader', 'legal_counsel', 'compliance_leader'],
+  research: ['research', 'analysis', 'summary'],
+  teardown: ['teardown', 'research', 'analysis', 'competitor', 'benchmark'],
+  data_analysis: ['data_analysis', 'analytics', 'data', 'research'],
+  media_planner: ['media_planner', 'channel_planner', 'distribution_strategy', 'channel_fit', 'listing_media_strategy', 'growth', 'marketing', 'research'],
+  citation_ops: ['citation_ops', 'meo', 'local_seo', 'gbp', 'google_business_profile', 'citations', 'local_listing'],
+  seo_gap: ['seo_gap', 'seo', 'content_gap', 'seo_article', 'seo_rewrite', 'seo_monitor'],
+  landing: ['landing', 'writing', 'seo', 'conversion', 'ux', 'marketing'],
+  growth: ['growth', 'marketing', 'sales', 'customer_acquisition', 'lead_generation'],
+  directory_submission: ['directory_submission', 'directory_listing', 'launch_directory', 'startup_directory', 'ai_tool_directory', 'media_listing', 'free_listing'],
+  acquisition_automation: ['acquisition_automation', 'customer_acquisition', 'lead_generation', 'outreach', 'crm', 'automation', 'growth', 'marketing'],
+  email_ops: ['email_ops', 'email', 'email_campaign', 'lifecycle_email', 'newsletter', 'onboarding_email', 'reactivation_email'],
+  list_creator: ['list_creator', 'lead_sourcing', 'lead_qualification', 'company_list_builder', 'prospect_research', 'lead_list', 'prospect_list'],
+  cold_email: ['cold_email', 'outbound_email', 'sales_email', 'prospecting_email', 'email_ops', 'email'],
+  instagram: ['instagram', 'social'],
+  x_post: ['x_post', 'x_ops', 'x_automation', 'x', 'twitter', 'social'],
+  reddit: ['reddit', 'community'],
+  indie_hackers: ['indie_hackers', 'community'],
+  code: ['code', 'debug', 'ops', 'automation'],
+  debug: ['debug', 'code', 'ops'],
+  pricing: ['pricing', 'finance', 'billing', 'unit_economics'],
+  validation: ['validation', 'product', 'research'],
+  diligence: ['diligence', 'research', 'risk'],
+  summary: ['summary', 'research', 'analysis']
+});
+
+function workflowTaskSoftMatchTokens(taskType = '', options = {}) {
+  const task = String(taskType || '').trim().toLowerCase();
+  if (!task) return [];
+  return normalizeAgentTags([
+    task,
+    ...(WORKFLOW_TASK_SOFT_MATCH_MAP[task] || [])
+  ], { max: 24 });
+}
+
+function metadataTaskScoresForAgent(agent = {}) {
+  const sources = [
+    agent?.metadata?.task_type_scores,
+    agent?.metadata?.taskTypeScores,
+    agent?.metadata?.manifest?.task_type_scores,
+    agent?.metadata?.manifest?.taskTypeScores,
+    agent?.metadata?.manifest?.metadata?.task_type_scores,
+    agent?.metadata?.manifest?.metadata?.taskTypeScores
+  ];
+  const scored = new Map();
+  const record = (taskType, score) => {
+    const safeTask = String(taskType || '').trim().toLowerCase();
+    const safeScore = Math.max(0, Math.min(1, Number(score || 0)));
+    if (!safeTask || !Number.isFinite(safeScore)) return;
+    scored.set(safeTask, Math.max(safeScore, scored.get(safeTask) || 0));
+  };
+  for (const source of sources) {
+    if (!source) continue;
+    if (Array.isArray(source)) {
+      for (const item of source) {
+        if (typeof item === 'string') {
+          record(item, 1);
+          continue;
+        }
+        if (!item || typeof item !== 'object') continue;
+        record(item.task_type || item.taskType || item.name || item.id, item.score ?? item.confidence ?? item.weight ?? item.value ?? item.fit ?? 0);
+      }
+      continue;
+    }
+    if (typeof source !== 'object') continue;
+    for (const [taskType, score] of Object.entries(source)) record(taskType, score);
+  }
+  return scored;
+}
+
+function taskMatchForAgent(agent = {}, taskType = '', options = {}) {
+  const requestedTask = String(taskType || '').trim().toLowerCase();
+  const declaredTasks = Array.isArray(agent?.taskTypes)
+    ? agent.taskTypes.map((item) => String(item || '').trim().toLowerCase()).filter(Boolean)
+    : [];
+  if (!requestedTask) {
+    return {
+      matches: true,
+      exact: false,
+      dispatchTaskType: '',
+      compatibility: 1,
+      matchKind: 'none'
+    };
+  }
+  if (declaredTasks.includes(requestedTask)) {
+    return {
+      matches: true,
+      exact: true,
+      dispatchTaskType: requestedTask,
+      compatibility: 1,
+      matchKind: 'exact'
+    };
+  }
+  if (options.allowSoftTaskMatch !== true) {
+    return {
+      matches: false,
+      exact: false,
+      dispatchTaskType: '',
+      compatibility: 0,
+      matchKind: 'none'
+    };
+  }
+  const desiredTokens = workflowTaskSoftMatchTokens(requestedTask, options);
+  if (!desiredTokens.length) {
+    return {
+      matches: false,
+      exact: false,
+      dispatchTaskType: '',
+      compatibility: 0,
+      matchKind: 'none'
+    };
+  }
+  const desiredSet = new Set(desiredTokens);
+  const agentTags = new Set(agentTagsFromRecord(agent));
+  const agentOverlap = desiredTokens.filter((token) => agentTags.has(token)).length;
+  const metadataScores = metadataTaskScoresForAgent(agent);
+  const metadataBoost = Math.max(...desiredTokens.map((token) => Number(metadataScores.get(token) || 0)), 0);
+  let best = null;
+  for (const candidateTask of declaredTasks) {
+    const candidateTokens = normalizeAgentTags([
+      candidateTask,
+      ...(WORKFLOW_TASK_SOFT_MATCH_MAP[candidateTask] || []),
+      ...inferAgentTagsFromSignals({ taskTypes: [candidateTask], name: candidateTask, description: candidateTask, maxTags: 12 })
+    ], { max: 16 });
+    const overlap = candidateTokens.filter((token) => desiredSet.has(token)).length;
+    const directAlias = desiredSet.has(candidateTask) ? 1 : 0;
+    const overlapScore = desiredTokens.length ? overlap / desiredTokens.length : 0;
+    const agentScore = desiredTokens.length ? agentOverlap / desiredTokens.length : 0;
+    const compatibility = Math.max(
+      directAlias ? 0.82 : 0,
+      Math.min(0.92, +(overlapScore * 0.65 + agentScore * 0.25 + metadataBoost * 0.3).toFixed(3))
+    );
+    const acceptable = directAlias || overlap >= 2 || ((directAlias || overlap >= 1) && metadataBoost >= 0.55) || (overlap >= 1 && agentOverlap >= 2);
+    if (!acceptable || compatibility < 0.32) continue;
+    const candidate = {
+      matches: true,
+      exact: false,
+      dispatchTaskType: candidateTask,
+      compatibility,
+      matchKind: 'soft'
+    };
+    if (!best || candidate.compatibility > best.compatibility || (candidate.compatibility === best.compatibility && candidateTask.localeCompare(best.dispatchTaskType) < 0)) {
+      best = candidate;
+    }
+  }
+  return best || {
+    matches: false,
+    exact: false,
+    dispatchTaskType: '',
+    compatibility: 0,
+    matchKind: 'none'
+  };
+}
+
 function agentTagFitScore(agent = {}, tagHints = []) {
   const hints = normalizeAgentTags(tagHints);
   if (!hints.length) return 0;
@@ -8545,28 +8706,39 @@ function pickAgent(agents, taskType, budgetCap = 0, requestedAgentId = '', optio
   const excluded = new Set(Array.isArray(options.excludeAgentIds) ? options.excludeAgentIds : []);
   const requireEndpoint = options.requireEndpoint === true;
   const verified = agents.filter((a) => a.online && isAgentVerified(a) && !isAgentGroupRecord(a) && !excluded.has(a.id) && (!requireEndpoint || resolveAgentJobEndpoint(a)));
-  const scoreAgent = (agent) => +(computeScore(agent, taskType, budgetCap) + agentTagFitScore(agent, options.tagHints || []) + agentPatternFitScore(agent, {
+  const scoreAgent = (agent, match) => +(computeScore(agent, match?.dispatchTaskType || taskType, budgetCap) + agentTagFitScore(agent, options.tagHints || []) + agentPatternFitScore(agent, {
     body: options.body || {},
     scheduled: options.scheduled === true,
     recurring: options.recurring === true
-  })).toFixed(3);
+  }) + (match?.exact ? 0.12 : Number(match?.compatibility || 0) * 0.1)).toFixed(3);
   if (requestedAgentId) {
     const requested = verified.find((a) => a.id === requestedAgentId);
     if (!requested) return { error: 'Requested agent is unavailable or not verified' };
-    if (!requested.taskTypes.includes(taskType)) return { error: 'Requested agent does not support this task type' };
-    return { agent: requested, score: scoreAgent(requested), selectionMode: 'manual' };
+    const requestedMatch = taskMatchForAgent(requested, taskType, options);
+    if (!requestedMatch.matches) return { error: 'Requested agent does not support this task type' };
+    return { agent: requested, score: scoreAgent(requested, requestedMatch), selectionMode: 'manual', ...requestedMatch };
   }
   const ranked = verified
-    .filter((a) => a.taskTypes.includes(taskType))
-    .map((agent) => ({
+    .map((agent) => {
+      const match = taskMatchForAgent(agent, taskType, options);
+      if (!match.matches) return null;
+      return {
       agent,
-      score: scoreAgent(agent),
+      score: scoreAgent(agent, match),
       selectionMode: 'auto',
-      readyForAuto: Boolean(resolveAgentJobEndpoint(agent))
-    }))
+      readyForAuto: Boolean(resolveAgentJobEndpoint(agent)),
+      dispatchTaskType: match.dispatchTaskType || taskType,
+      exact: match.exact,
+      compatibility: Number(match.compatibility || 0),
+      matchKind: match.matchKind || 'exact'
+    };
+    })
+    .filter(Boolean)
     .sort((a, b) => (
       (Number(b.readyForAuto) - Number(a.readyForAuto))
       || (b.score - a.score)
+      || (Number(b.exact) - Number(a.exact))
+      || (b.compatibility - a.compatibility)
       || (Number(isBuiltInAgent(a.agent)) - Number(isBuiltInAgent(b.agent)))
       || String(a.agent.name || a.agent.id || '').localeCompare(String(b.agent.name || b.agent.id || ''))
     ));
@@ -8601,6 +8773,7 @@ function planWorkflowSelections(agents, taskType, prompt, options = {}) {
     const picked = pickAgent(agents, plannedTask, options.budgetCap || 0, '', {
       excludeAgentIds: [...usedAgentIds],
       requireEndpoint: true,
+      allowSoftTaskMatch: true,
       body: { prompt, task_type: plannedTask },
       tagHints,
       scheduled: options.scheduled === true,
@@ -8610,10 +8783,14 @@ function planWorkflowSelections(agents, taskType, prompt, options = {}) {
     usedAgentIds.add(picked.agent.id);
     selections.push({
       taskType: plannedTask,
+      dispatchTaskType: picked.dispatchTaskType || plannedTask,
       agent: picked.agent,
       score: picked.score,
       selectionMode: picked.selectionMode,
-      tagHints
+      tagHints,
+      matchKind: picked.matchKind || 'exact',
+      compatibility: Number(picked.compatibility || 0),
+      exact: picked.exact !== false
     });
   }
   return { plannedTasks, selections, tagHintsByTask, leaderPlanning: options.leaderPlanning || null };
@@ -8941,11 +9118,14 @@ function buildWorkflowParentJob(body, input, plan, options = {}) {
       childJobIds: [],
       childRuns: plan.selections.map((item) => ({
         taskType: item.taskType,
+        dispatchTaskType: item.dispatchTaskType || item.taskType,
         agentId: item.agent.id,
         agentName: item.agent.name,
         status: 'planned',
         score: item.score,
-        tagHints: item.tagHints || []
+        tagHints: item.tagHints || [],
+        matchKind: item.matchKind || 'exact',
+        compatibility: Number(item.compatibility || 0)
       }))
     },
     logs: [
@@ -8953,7 +9133,7 @@ function buildWorkflowParentJob(body, input, plan, options = {}) {
       ...(promptOptimization?.optimized ? [`prompt optimized mode=${promptOptimization.mode} originalChars=${promptOptimization.originalChars} optimizedChars=${promptOptimization.optimizedChars} outputLanguage=${promptOptimization.outputLanguageCode}`] : []),
       ...(plan.leaderPlanning?.source ? [`leader planner=${plan.leaderPlanning.source} confidence=${plan.leaderPlanning.confidence}`] : []),
       `${agentTeamName} planned for ${plan.plannedTasks.join(', ')}`,
-      `planned agents=${plan.selections.map((item) => `${item.agent.name}:${item.taskType}`).join(', ')}`,
+      `planned agents=${plan.selections.map((item) => `${item.agent.name}:${item.taskType}${item.dispatchTaskType && item.dispatchTaskType !== item.taskType ? `->${item.dispatchTaskType}` : ''}`).join(', ')}`,
       `tag hints=${plan.selections.map((item) => `${item.taskType}[${(item.tagHints || []).join('/')}]`).join(', ')}`
     ]
   };
@@ -8963,6 +9143,7 @@ function workflowChildSnapshot(children = []) {
   return children.map((job) => ({
     id: job.id,
     taskType: job.workflowTask || job.taskType,
+    dispatchTaskType: job.taskType || null,
     agentId: job.assignedAgentId || null,
     agentName: job.workflowAgentName || null,
     sequencePhase: workflowSequencePhaseForJob(job) || null,
@@ -10617,7 +10798,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       ...body,
       input: workflowInputForTask(selection.taskType),
       order_strategy: 'single',
-      task_type: selection.taskType,
+      task_type: selection.dispatchTaskType || selection.taskType,
       agent_id: selection.agent.id,
       workflow_parent_id: parentJob.id,
       workflow_task: selection.taskType,
@@ -10632,6 +10813,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
     childRuns.push({
       job_id: childResult.job_id || null,
       task_type: selection.taskType,
+      dispatch_task_type: selection.dispatchTaskType || selection.taskType,
       agent_id: selection.agent.id,
       agent_name: selection.agent.name,
       sequence_phase: workflowSequencePhaseForJob({ input: workflowInputForTask(selection.taskType) }) || null,
@@ -10644,7 +10826,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       ...body,
       input: workflowInputForTask(leaderSelection.taskType, { sequencePhase: 'checkpoint' }),
       order_strategy: 'single',
-      task_type: leaderSelection.taskType,
+      task_type: leaderSelection.dispatchTaskType || leaderSelection.taskType,
       agent_id: leaderSelection.agent.id,
       workflow_parent_id: parentJob.id,
       workflow_task: leaderSelection.taskType,
@@ -10709,6 +10891,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       childRuns.push({
         job_id: checkpointJobId,
         task_type: leaderSelection.taskType,
+        dispatch_task_type: leaderSelection.dispatchTaskType || leaderSelection.taskType,
         agent_id: leaderSelection.agent.id,
         agent_name: leaderSelection.agent.name,
         sequence_phase: 'checkpoint',
@@ -10719,6 +10902,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       childRuns.push({
         job_id: null,
         task_type: leaderSelection.taskType,
+        dispatch_task_type: leaderSelection.dispatchTaskType || leaderSelection.taskType,
         agent_id: leaderSelection.agent.id,
         agent_name: leaderSelection.agent.name,
         sequence_phase: 'checkpoint',
@@ -10730,7 +10914,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       ...body,
       input: workflowInputForTask(leaderSelection.taskType, { sequencePhase: 'final_summary' }),
       order_strategy: 'single',
-      task_type: leaderSelection.taskType,
+      task_type: leaderSelection.dispatchTaskType || leaderSelection.taskType,
       agent_id: leaderSelection.agent.id,
       workflow_parent_id: parentJob.id,
       workflow_task: leaderSelection.taskType,
@@ -10792,6 +10976,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       childRuns.push({
         job_id: finalSummaryJobId,
         task_type: leaderSelection.taskType,
+        dispatch_task_type: leaderSelection.dispatchTaskType || leaderSelection.taskType,
         agent_id: leaderSelection.agent.id,
         agent_name: leaderSelection.agent.name,
         sequence_phase: 'final_summary',
@@ -10802,6 +10987,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       childRuns.push({
         job_id: null,
         task_type: leaderSelection.taskType,
+        dispatch_task_type: leaderSelection.dispatchTaskType || leaderSelection.taskType,
         agent_id: leaderSelection.agent.id,
         agent_name: leaderSelection.agent.name,
         sequence_phase: 'final_summary',

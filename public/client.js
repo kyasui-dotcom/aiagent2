@@ -2405,14 +2405,22 @@ function plannedMultiAgents(taskType = currentRoutingTask(), prompt = String(els
   const used = new Set();
   for (const plannedTask of plannedTasks) {
     const picked = agents
-      .filter((agent) => !used.has(agent.id) && agentTaskFit(agent, plannedTask).matches)
+      .map((agent) => ({ agent, match: clientTaskMatch(agent, plannedTask) }))
+      .filter((item) => !used.has(item.agent.id) && item.match.matches)
       .sort((left, right) => (
-        agentRoutingScore(right, plannedTask) - agentRoutingScore(left, plannedTask)
-        || String(left.name || left.id || '').localeCompare(String(right.name || right.id || ''))
+        agentRoutingScore(right.agent, plannedTask) - agentRoutingScore(left.agent, plannedTask)
+        || Number(right.match.exact) - Number(left.match.exact)
+        || Number(right.match.compatibility || 0) - Number(left.match.compatibility || 0)
+        || String(left.agent.name || left.agent.id || '').localeCompare(String(right.agent.name || right.agent.id || ''))
       ))[0] || null;
     if (!picked) continue;
-    used.add(picked.id);
-    picks.push({ taskType: plannedTask, agent: picked });
+    used.add(picked.agent.id);
+    picks.push({
+      taskType: plannedTask,
+      dispatchTaskType: picked.match.taskType || plannedTask,
+      agent: picked.agent,
+      matchKind: picked.match.matchKind || 'exact'
+    });
   }
   return { plannedTasks, picks };
 }
@@ -14428,12 +14436,124 @@ function clientTaskTagHints(taskType = '') {
   return normalizeClientList([task, ...(map[task] || [])], []);
 }
 
+const WORKFLOW_TASK_SOFT_MATCH_MAP = Object.freeze({
+  cmo_leader: ['cmo', 'marketing_leader', 'free_web_growth_leader', 'launch_team_leader', 'agent_team_launch'],
+  research_team_leader: ['research_team_leader', 'research_team', 'analysis_team'],
+  build_team_leader: ['build_team_leader', 'build_team', 'coding_team', 'engineering_team'],
+  cto_leader: ['cto', 'cto_leader', 'technical_leader'],
+  cpo_leader: ['cpo', 'cpo_leader', 'product_leader'],
+  cfo_leader: ['cfo', 'cfo_leader', 'finance_leader'],
+  legal_leader: ['legal', 'legal_leader', 'legal_counsel', 'compliance_leader'],
+  research: ['research', 'analysis', 'summary'],
+  teardown: ['teardown', 'research', 'analysis', 'competitor', 'benchmark'],
+  data_analysis: ['data_analysis', 'analytics', 'data', 'research'],
+  media_planner: ['media_planner', 'channel_planner', 'distribution_strategy', 'channel_fit', 'listing_media_strategy', 'growth', 'marketing', 'research'],
+  citation_ops: ['citation_ops', 'meo', 'local_seo', 'gbp', 'google_business_profile', 'citations', 'local_listing'],
+  seo_gap: ['seo_gap', 'seo', 'content_gap', 'seo_article', 'seo_rewrite', 'seo_monitor'],
+  landing: ['landing', 'writing', 'seo', 'conversion', 'ux', 'marketing'],
+  growth: ['growth', 'marketing', 'sales', 'customer_acquisition', 'lead_generation'],
+  directory_submission: ['directory_submission', 'directory_listing', 'launch_directory', 'startup_directory', 'ai_tool_directory', 'media_listing', 'free_listing'],
+  acquisition_automation: ['acquisition_automation', 'customer_acquisition', 'lead_generation', 'outreach', 'crm', 'automation', 'growth', 'marketing'],
+  email_ops: ['email_ops', 'email', 'email_campaign', 'lifecycle_email', 'newsletter', 'onboarding_email', 'reactivation_email'],
+  list_creator: ['list_creator', 'lead_sourcing', 'lead_qualification', 'company_list_builder', 'prospect_research', 'lead_list', 'prospect_list'],
+  cold_email: ['cold_email', 'outbound_email', 'sales_email', 'prospecting_email', 'email_ops', 'email'],
+  instagram: ['instagram', 'social'],
+  x_post: ['x_post', 'x_ops', 'x_automation', 'x', 'twitter', 'social'],
+  reddit: ['reddit', 'community'],
+  indie_hackers: ['indie_hackers', 'community'],
+  code: ['code', 'debug', 'ops', 'automation'],
+  debug: ['debug', 'code', 'ops'],
+  pricing: ['pricing', 'finance', 'billing', 'unit_economics'],
+  validation: ['validation', 'product', 'research'],
+  diligence: ['diligence', 'research', 'risk'],
+  summary: ['summary', 'research', 'analysis']
+});
+
+function clientTaskMetadataScores(agent = {}) {
+  const sources = [
+    agent?.metadata?.task_type_scores,
+    agent?.metadata?.taskTypeScores,
+    agent?.metadata?.manifest?.task_type_scores,
+    agent?.metadata?.manifest?.taskTypeScores,
+    agent?.metadata?.manifest?.metadata?.task_type_scores,
+    agent?.metadata?.manifest?.metadata?.taskTypeScores
+  ];
+  const scored = new Map();
+  const record = (taskType, score) => {
+    const safeTask = String(taskType || '').trim().toLowerCase();
+    const safeScore = Math.max(0, Math.min(1, Number(score || 0)));
+    if (!safeTask || !Number.isFinite(safeScore)) return;
+    scored.set(safeTask, Math.max(safeScore, scored.get(safeTask) || 0));
+  };
+  sources.forEach((source) => {
+    if (!source) return;
+    if (Array.isArray(source)) {
+      source.forEach((item) => {
+        if (typeof item === 'string') {
+          record(item, 1);
+          return;
+        }
+        if (!item || typeof item !== 'object') return;
+        record(item.task_type || item.taskType || item.name || item.id, item.score ?? item.confidence ?? item.weight ?? item.value ?? item.fit ?? 0);
+      });
+      return;
+    }
+    if (typeof source !== 'object') return;
+    Object.entries(source).forEach(([taskType, score]) => record(taskType, score));
+  });
+  return scored;
+}
+
+function clientWorkflowTaskTokens(taskType = '') {
+  const task = String(taskType || '').trim().toLowerCase();
+  if (!task) return [];
+  return normalizeClientList([
+    task,
+    ...(WORKFLOW_TASK_SOFT_MATCH_MAP[task] || [])
+  ], []);
+}
+
+function clientTaskMatch(agent = {}, taskType = '') {
+  const normalizedTask = String(taskType || '').trim().toLowerCase();
+  const tasks = (agent?.taskTypes || []).map((task) => String(task).trim().toLowerCase()).filter(Boolean);
+  if (!normalizedTask) return { matches: true, exact: false, taskType: '', compatibility: 1, matchKind: 'none' };
+  if (tasks.includes(normalizedTask)) {
+    return { matches: true, exact: true, taskType: normalizedTask, compatibility: 1, matchKind: 'exact' };
+  }
+  const desiredTokens = clientWorkflowTaskTokens(normalizedTask);
+  if (!desiredTokens.length) return { matches: false, exact: false, taskType: normalizedTask, compatibility: 0, matchKind: 'none' };
+  const desiredSet = new Set(desiredTokens);
+  const tagList = agentTags(agent);
+  const agentOverlap = desiredTokens.filter((token) => tagList.includes(token)).length;
+  const metadataScores = clientTaskMetadataScores(agent);
+  const metadataBoost = Math.max(...desiredTokens.map((token) => Number(metadataScores.get(token) || 0)), 0);
+  let best = null;
+  tasks.forEach((candidateTask) => {
+    const candidateTokens = normalizeClientList([candidateTask, ...(WORKFLOW_TASK_SOFT_MATCH_MAP[candidateTask] || [])], []);
+    const overlap = candidateTokens.filter((token) => desiredSet.has(token)).length;
+    const directAlias = desiredSet.has(candidateTask) ? 1 : 0;
+    const overlapScore = desiredTokens.length ? overlap / desiredTokens.length : 0;
+    const agentScore = desiredTokens.length ? agentOverlap / desiredTokens.length : 0;
+    const compatibility = Math.max(
+      directAlias ? 0.82 : 0,
+      Math.min(0.92, overlapScore * 0.65 + agentScore * 0.25 + metadataBoost * 0.3)
+    );
+    const acceptable = directAlias || overlap >= 2 || ((directAlias || overlap >= 1) && metadataBoost >= 0.55) || (overlap >= 1 && agentOverlap >= 2);
+    if (!acceptable || compatibility < 0.32) return;
+    if (!best || compatibility > best.compatibility || (compatibility === best.compatibility && candidateTask.localeCompare(best.taskType) < 0)) {
+      best = { matches: true, exact: false, taskType: candidateTask, compatibility, matchKind: 'soft' };
+    }
+  });
+  return best || { matches: false, exact: false, taskType: normalizedTask, compatibility: 0, matchKind: 'none' };
+}
+
 function agentRoutingScore(agent = {}, taskType = '') {
   const health = agentHealth(agent);
   const quality = Math.round(Number(agent.successRate || 0) * 220);
   const speed = Math.max(0, 50 - Math.round(Number(agent.avgLatencySec || 20) * 0.4));
   const profile = agentExecutionProfile(agent);
   const tags = agentTags(agent);
+  const taskMatch = clientTaskMatch(agent, taskType);
   const tagFit = clientTaskTagHints(taskType)
     .reduce((total, tag) => total + (tags.includes(tag) ? 18 : 0), 0);
   const inputFit = currentOrderInputTypeHints()
@@ -14443,8 +14563,9 @@ function agentRoutingScore(agent = {}, taskType = '') {
     : 0;
   const riskPenalty = profile.riskLevel === 'restricted' ? -1000 : (profile.riskLevel === 'confirm_required' ? -12 : 0);
   return (health.ready ? 280 : 0)
-    + (agentTaskFit(agent, taskType).matches ? 280 : 0)
-    + Math.round(agentTaskSpecificityScore(agent, taskType) * 1.6)
+    + (taskMatch.matches ? 280 : 0)
+    + Math.round(agentTaskSpecificityScore(agent, taskMatch.taskType || taskType) * 1.6)
+    + (taskMatch.exact ? 28 : Math.round(Number(taskMatch.compatibility || 0) * 20))
     + quality
     + tagFit
     + (isBuiltInAgent(agent) ? 0 : 160)
@@ -14489,7 +14610,7 @@ function parseSearchTokens(raw = '') {
 
 function agentTaskFit(agent, taskType = currentRoutingTask()) {
   const normalizedTask = String(taskType || '').trim().toLowerCase();
-  const tasks = (agent?.taskTypes || []).map((task) => String(task).trim().toLowerCase()).filter(Boolean);
+  const match = clientTaskMatch(agent, normalizedTask);
   if (!normalizedTask) {
     return {
       taskType: '',
@@ -14499,13 +14620,22 @@ function agentTaskFit(agent, taskType = currentRoutingTask()) {
       reason: 'No specific task is selected. Judge this agent by readiness, endpoint, and verification state.'
     };
   }
-  if (tasks.includes(normalizedTask)) {
+  if (match.matches && match.exact) {
     return {
       taskType: normalizedTask,
       matches: true,
       label: 'TASK MATCH',
       tone: 'ok',
       reason: `Supports ${normalizedTask}.`
+    };
+  }
+  if (match.matches) {
+    return {
+      taskType: match.taskType || normalizedTask,
+      matches: true,
+      label: 'WORKFLOW MATCH',
+      tone: 'ok',
+      reason: `Maps ${normalizedTask} to ${match.taskType || normalizedTask} for team routing.`
     };
   }
   return {

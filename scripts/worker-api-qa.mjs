@@ -291,7 +291,8 @@ const checkpointLeaderAfterResearch = asyncAfterNextLayerState.jobs.find((job) =
 assert.equal(checkpointLeaderAfterResearch?.status, 'completed', 'checkpoint leader should complete before specialist dispatch');
 const executionWithPriorAnalysis = asyncAfterNextLayerState.jobs.find((job) => (
   job.workflowParentId === asyncWorkflow.body.workflow_job_id
-  && ['growth', 'directory_submission', 'acquisition_automation'].includes(job.taskType)
+  && job.input?._broker?.workflow?.sequencePhase === 'action'
+  && job.taskType !== 'cmo_leader'
   && Array.isArray(job.input?._broker?.workflow?.leaderHandoff?.priorRuns)
   && job.input._broker.workflow.leaderHandoff.priorRuns.some((run) => ['teardown', 'data_analysis', 'seo_gap', 'landing'].includes(run.taskType))
 ));
@@ -805,7 +806,13 @@ globalThis.fetch = async (input, init) => {
   if (url === 'https://worker-qa.example/health') {
     return new Response(JSON.stringify({ ok: true, service: 'qa-agent' }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
-  if (url === 'https://worker-qa.example/seo/health' || url === 'https://worker-qa.example/research/health' || url === 'https://worker-qa.example/writer/health') {
+  if (
+    url === 'https://worker-qa.example/seo/health'
+    || url === 'https://worker-qa.example/research/health'
+    || url === 'https://worker-qa.example/writer/health'
+    || url === 'https://worker-qa.example/cmo-provider/health'
+    || url === 'https://worker-qa.example/x-provider/health'
+  ) {
     return new Response(JSON.stringify({ ok: true, service: 'qa-multi-agent' }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
   if (url === 'https://worker-qa.example/accepted/health') {
@@ -814,7 +821,13 @@ globalThis.fetch = async (input, init) => {
   if (url === 'https://worker-qa.example/cmo-fail/health') {
     return new Response(JSON.stringify({ ok: true, service: 'qa-cmo-fail' }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
-  if (url === 'https://worker-qa.example/seo/jobs' || url === 'https://worker-qa.example/research/jobs' || url === 'https://worker-qa.example/writer/jobs') {
+  if (
+    url === 'https://worker-qa.example/seo/jobs'
+    || url === 'https://worker-qa.example/research/jobs'
+    || url === 'https://worker-qa.example/writer/jobs'
+    || url === 'https://worker-qa.example/cmo-provider/jobs'
+    || url === 'https://worker-qa.example/x-provider/jobs'
+  ) {
     const requestBody = JSON.parse(String(init?.body || '{}'));
     return new Response(JSON.stringify({
       status: 'completed',
@@ -1246,6 +1259,90 @@ try {
     failingChildRuns.some((run) => run.taskType !== 'cmo_leader' && run.status === 'queued'),
     false,
     'non-leader runs should not remain queued after the leader fails'
+  );
+  await qaStorage.mutate(async (draft) => {
+    const staleFailLeader = draft.agents.find((agent) => agent.id === failingCmoLeader.body.agent.id);
+    if (staleFailLeader) staleFailLeader.online = false;
+  });
+
+  const providerSoftLeader = await request('/api/agents/import-manifest', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      manifest: {
+        schema_version: 'agent-manifest/v1',
+        name: 'qa_cmo_provider',
+        task_types: ['cmo'],
+        tags: ['leader', 'marketing', 'growth', 'strategy'],
+        metadata: {
+          task_type_scores: {
+            cmo_leader: 0.96
+          }
+        },
+        pricing: { premium_rate: 0.01, basic_rate: 0.01 },
+        success_rate: 0.999,
+        avg_latency_sec: 1,
+        healthcheck_url: 'https://worker-qa.example/cmo-provider/health',
+        endpoints: { jobs: 'https://worker-qa.example/cmo-provider/jobs' }
+      }
+    })
+  });
+  assert.equal(providerSoftLeader.status, 201);
+  assert.equal(providerSoftLeader.body.agent.verificationStatus, 'verified');
+  const providerSoftLeaderId = providerSoftLeader.body.agent.id;
+
+  const providerSoftX = await request('/api/agents/import-manifest', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      manifest: {
+        schema_version: 'agent-manifest/v1',
+        name: 'qa_x_provider',
+        task_types: ['twitter'],
+        tags: ['social', 'x', 'marketing'],
+        metadata: {
+          task_type_scores: {
+            x_post: 0.94
+          }
+        },
+        pricing: { premium_rate: 0.01, basic_rate: 0.01 },
+        success_rate: 0.998,
+        avg_latency_sec: 1,
+        healthcheck_url: 'https://worker-qa.example/x-provider/health',
+        endpoints: { jobs: 'https://worker-qa.example/x-provider/jobs' }
+      }
+    })
+  });
+  assert.equal(providerSoftX.status, 201);
+  assert.equal(providerSoftX.body.agent.verificationStatus, 'verified');
+  const providerSoftXId = providerSoftX.body.agent.id;
+
+  const providerWorkflow = await request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      parent_agent_id: 'qa-runner',
+      task_type: 'cmo_leader',
+      prompt: 'CMOとして、AIagent2の無料成長施策を作り、X postまで進めて。競合調査と媒体整理をして、最後は実行候補までまとめて。',
+      order_strategy: 'multi',
+      skip_intake: true,
+      budget_cap: 500
+    })
+  });
+  assert.equal(providerWorkflow.status, 201);
+  assert.equal(providerWorkflow.body.mode, 'workflow');
+  const providerWorkflowState = await request(`/api/jobs/${providerWorkflow.body.workflow_job_id}`);
+  assert.equal(providerWorkflowState.status, 200);
+  const providerChildRuns = Array.isArray(providerWorkflowState.body.job.workflow?.childRuns)
+    ? providerWorkflowState.body.job.workflow.childRuns
+    : [];
+  assert.ok(
+    providerChildRuns.some((run) => run.taskType === 'cmo_leader' && run.agentId === providerSoftLeaderId && run.dispatchTaskType === 'cmo'),
+    'leader workflow should soft-match the provider cmo capability instead of only built-ins'
+  );
+  assert.ok(
+    providerChildRuns.some((run) => run.taskType === 'x_post' && run.agentId === providerSoftXId && run.dispatchTaskType === 'twitter'),
+    'workflow should route semantic x_post work to the provider-declared twitter capability'
   );
 
   const workflow = await request('/api/jobs', {
