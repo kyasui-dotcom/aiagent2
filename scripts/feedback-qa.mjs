@@ -222,6 +222,36 @@ try {
   assert.equal(dashboardCountSummary.orders.length, 410);
   assert.equal(dashboardCountSummary.reports.length, 520);
 
+  const activeOnlyDashboard = buildAdminDashboard({
+    accounts: [],
+    agents: [],
+    feedbackReports: [],
+    events: [],
+    chatTranscripts: [],
+    jobs: [{
+      id: 'job_active_admin_1',
+      status: 'running',
+      taskType: 'research',
+      prompt: 'Investigate pricing page drop-off.',
+      createdAt: created.createdAt,
+      startedAt: followupCreatedAt,
+      lastCallbackAt: followupCreatedAt,
+      input: {
+        _broker: {
+          requester: {
+            login: 'member-active@example.com',
+            authProvider: 'google-oauth'
+          }
+        }
+      }
+    }]
+  }, { operator: 'owner@example.com' });
+  assert.equal(activeOnlyDashboard.summary.chats.total, 1);
+  assert.equal(activeOnlyDashboard.summary.chats.turnsTotal, 0);
+  assert.equal(activeOnlyDashboard.chats[0].activeWork, true);
+  assert.equal(activeOnlyDashboard.chats[0].linkedOrderId, 'job_active_admin_1');
+  assert.equal(activeOnlyDashboard.chats[0].handlingStatus, 'order_brief_prepared');
+
   console.log('feedback qa passed');
 } finally {
 }
