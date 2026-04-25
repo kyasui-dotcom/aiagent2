@@ -142,6 +142,8 @@ async function main() {
     assert.equal(loggedInStatusRes.body.loggedIn, true, 'issued email session should be recognized');
     assert.equal(loggedInStatusRes.body.authProvider, 'email');
     assert.equal(loggedInStatusRes.body.login, 'owner@example.com');
+    const csrfToken = String(loggedInStatusRes.body.csrfToken || '').trim();
+    assert.ok(csrfToken, 'logged-in auth status should expose a CSRF token for browser writes');
 
     const customReturnToken = createEmailAuthToken({
       email: 'owner@example.com',
@@ -162,6 +164,27 @@ async function main() {
     const externalReturnRes = await request(`/auth/email/verify?token=${encodeURIComponent(externalReturnToken)}`);
     assert.equal(externalReturnRes.status, 302);
     assert.equal(String(externalReturnRes.headers.get('location') || ''), '/', 'verify should not allow external redirect targets');
+
+    const logoutRes = await request('/auth/logout', {
+      method: 'POST',
+      headers: {
+        cookie: sessionCookie,
+        origin: BASE,
+        'x-aiagent2-csrf': csrfToken
+      }
+    });
+    assert.equal(logoutRes.status, 200, 'logout should succeed for an active session');
+    assert.equal(logoutRes.body.ok, true);
+    assert.equal(logoutRes.body.redirect_to, '/', 'logout should point back to the public start route');
+    assert.match(String(logoutRes.headers.get('set-cookie') || ''), /aiagent2_session=;/, 'logout should clear the session cookie');
+
+    const loggedOutStatusRes = await request('/auth/status', {
+      headers: {
+        cookie: sessionCookie
+      }
+    });
+    assert.equal(loggedOutStatusRes.status, 200);
+    assert.equal(loggedOutStatusRes.body.loggedIn, false, 'logged out session should no longer authenticate');
 
     console.log('email auth qa passed');
   } finally {

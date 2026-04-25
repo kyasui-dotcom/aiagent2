@@ -22567,13 +22567,9 @@ if (els.draftAgentSkillBtn) els.draftAgentSkillBtn.onclick = () => runAction(els
   flash(`Agent Skill draft JSON created from ${res.skill?.name || 'SKILL.md'}. Review before import.${warning}`, 'ok');
 });
 if (els.logoutBtn) els.logoutBtn.onclick = () => runAction(els.logoutBtn, async () => {
-  await api('/auth/logout', { method: 'POST' });
-  state.repoAutoLoadedFor = '';
-  state.settingsPeriod = currentMonthPeriod();
-  resetRepoPicker();
-  switchTab('start');
-  flash('Logged out.', 'ok');
-  await refresh();
+  const result = await api('/auth/logout', { method: 'POST' });
+  const redirectTo = String(result?.redirect_to || '/').trim() || '/';
+  window.location.href = redirectTo;
 });
 if (els.seedBtn) els.seedBtn.onclick = () => runAction(els.seedBtn, async () => {
   const seeded = await api('/api/seed', { method: 'POST' });

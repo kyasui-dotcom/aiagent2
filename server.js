@@ -7969,7 +7969,7 @@ const server = http.createServer(async (req, res) => {
     const raw = cookies.aiagent2_session;
     const [id] = String(raw || '').split('.');
     if (id) sessions.delete(id);
-    return json(res, 200, { ok: true }, { 'Set-Cookie': clearSessionCookie(req) });
+    return json(res, 200, { ok: true, redirect_to: '/' }, { 'Set-Cookie': clearSessionCookie(req) });
   }
   if (req.method === 'GET' && url.pathname === '/api/connectors/x/status') {
     return handleXConnectorStatus(req, res);

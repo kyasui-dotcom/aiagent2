@@ -43,11 +43,22 @@ function normalizeLocalPath(value = '', fallback = '/?tab=work') {
   }
 }
 
+function postLoginPath(value = '', fallback = '/?tab=work') {
+  const next = normalizeLocalPath(value, fallback);
+  try {
+    const parsed = new URL(next, window.location.origin);
+    if (['/login', '/login.html'].includes(parsed.pathname)) return fallback;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function currentRoute() {
   const url = new URL(window.location.href);
   return {
     source: safeString(url.searchParams.get('source') || 'direct', 40).toLowerCase() || 'direct',
-    next: normalizeLocalPath(url.searchParams.get('next') || '', '/?tab=work'),
+    next: postLoginPath(url.searchParams.get('next') || '', '/?tab=work'),
     authError: safeString(url.searchParams.get('auth_error') || '', 120)
   };
 }
@@ -95,7 +106,7 @@ async function track(event, meta = {}) {
 function buildAuthUrl(provider = 'google', route = currentRoute()) {
   const base = provider === 'github' ? '/auth/github' : '/auth/google';
   const url = new URL(base, window.location.origin);
-  url.searchParams.set('return_to', route.next);
+  url.searchParams.set('return_to', postLoginPath(route.next));
   url.searchParams.set('login_source', route.source);
   url.searchParams.set('visitor_id', visitorId());
   return `${url.pathname}${url.search}`;
@@ -132,17 +143,22 @@ async function loadAuthStatus(route = currentRoute()) {
   try {
     const response = await fetch('/auth/status', { credentials: 'same-origin' });
     const status = await response.json().catch(() => ({}));
+    const nextPath = postLoginPath(route.next);
     authStatusChecked = true;
     if (status?.loggedIn && els.status) {
-      els.status.textContent = 'You are already signed in. Continue when ready. Session checking does not auto-navigate.';
+      els.status.textContent = 'You are already signed in. Redirecting now.';
     } else if (els.status) {
       els.status.textContent = 'Choose one account provider. After login, CAIt opens the requested product area.';
     }
     if (els.continueBtn) {
       els.continueBtn.hidden = !status?.loggedIn;
-      els.continueBtn.onclick = () => { window.location.href = route.next; };
+      els.continueBtn.onclick = () => { window.location.href = nextPath; };
     }
     applyProviderAvailability(status);
+    if (status?.loggedIn) {
+      window.location.href = nextPath;
+      return;
+    }
   } catch {
     authStatusChecked = true;
     if (els.emailInput) els.emailInput.disabled = false;
@@ -176,6 +192,7 @@ function bindProviderButton(button, provider, route = currentRoute()) {
 
 async function requestEmailLink(route = currentRoute()) {
   const email = safeString(els.emailInput?.value || '', 160).toLowerCase();
+  const nextPath = postLoginPath(route.next);
   if (!email || !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(email)) {
     flash('Enter a valid email address first.', 'error');
     els.emailInput?.focus();
@@ -185,7 +202,7 @@ async function requestEmailLink(route = currentRoute()) {
   if (els.status) els.status.textContent = 'Sending your sign-in link. The page stays here.';
   await track('email_login_started', {
     source: `login_page:${route.source}`,
-    action: route.next
+    action: nextPath
   });
   try {
     const response = await fetch('/auth/email/request', {
@@ -194,7 +211,7 @@ async function requestEmailLink(route = currentRoute()) {
       credentials: 'same-origin',
       body: JSON.stringify({
         email,
-        return_to: route.next,
+        return_to: nextPath,
         login_source: route.source,
         visitor_id: visitorId()
       })

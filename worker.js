@@ -8022,7 +8022,7 @@ async function handleInstagramConnectorPost(request, env) {
 }
 
 async function handleLogout(env) {
-  return jsonWithCookies({ ok: true }, 200, [clearCookie(SESSION_COOKIE), clearCookie(OAUTH_STATE_COOKIE)]);
+  return jsonWithCookies({ ok: true, redirect_to: '/' }, 200, [clearCookie(SESSION_COOKIE), clearCookie(OAUTH_STATE_COOKIE)]);
 }
 
 async function handleGithubRepos(request, env) {

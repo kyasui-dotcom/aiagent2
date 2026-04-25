@@ -75,11 +75,14 @@ for (const file of htmlFiles) {
 assert.ok(analyticsLoader.includes("const ANALYTICS_ID = 'G-CDHM437KEX';"));
 assert.ok(analyticsLoader.includes('window.__aiagent2AnalyticsLoaded'));
 assert.ok(loginJs.includes("const base = provider === 'github' ? '/auth/github' : '/auth/google';"));
+assert.ok(loginJs.includes("function postLoginPath(value = '', fallback = '/?tab=work')"));
+assert.ok(loginJs.includes("if (['/login', '/login.html'].includes(parsed.pathname)) return fallback;"));
 assert.ok(loginJs.includes("await fetch('/auth/email/request'"));
 assert.ok(loginJs.includes("await track('email_login_started'"));
 assert.ok(!loginJs.includes('window.location.replace(route.next);'));
-assert.ok(loginJs.includes("els.status.textContent = 'You are already signed in. Continue when ready. Session checking does not auto-navigate.';"));
-assert.ok(loginJs.includes("els.continueBtn.onclick = () => { window.location.href = route.next; };"));
+assert.ok(loginJs.includes("els.status.textContent = 'You are already signed in. Redirecting now.';"));
+assert.ok(loginJs.includes("els.continueBtn.onclick = () => { window.location.href = nextPath; };"));
+assert.ok(loginJs.includes('window.location.href = nextPath;'));
 assert.ok(loginJs.includes("url.searchParams.set('visitor_id', visitorId());"));
 assert.ok(loginJs.includes("await track('sign_in_required_shown'"));
 assert.ok(html.includes('No model-provider setup'));
