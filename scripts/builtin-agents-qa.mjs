@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   BUILT_IN_KINDS,
   builtInAgentHealthPayload,
@@ -18,6 +19,10 @@ import {
 import { assessAgentRegistrationSafety, normalizeManifest } from '../lib/manifest.js';
 import { inferTaskSequence, inferTaskType, DEFAULT_AGENT_SEEDS } from '../lib/shared.js';
 import { isBuiltInSampleAgent, isBuiltInSampleHealthcheckUrl, isBuiltInSampleJobEndpoint, sampleKindFromAgent } from '../lib/verify.js';
+
+const builtInAgentSource = readFileSync(new URL('../lib/builtin-agents.js', import.meta.url), 'utf8');
+assert.ok(builtInAgentSource.includes("required: ['summary', 'report_summary', 'bullets', 'next_action', 'file_markdown', 'confidence', 'authority_request']"));
+assert.ok(builtInAgentSource.includes("If no external authority or source selection is needed, set authority_request to null."));
 
 function builtInSeedManifest(seed = {}) {
   const manifest = seed?.metadata?.manifest && typeof seed.metadata.manifest === 'object'
