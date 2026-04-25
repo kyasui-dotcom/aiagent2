@@ -167,6 +167,61 @@ try {
   assert.equal(groupedMember.turnCount, 2);
   assert.equal(groupedMember.handlingStatus, 'clarified');
 
+  const dashboardCountState = {
+    accounts: Array.from({ length: 240 }, (_, index) => ({
+      id: `acct_${index}`,
+      login: `member${index}@example.com`,
+      profile: { displayName: `Member ${index}` },
+      billing: { depositBalance: index },
+      payout: {},
+      stripe: {},
+      apiAccess: { orderKeys: [] },
+      githubAppAccess: { repos: [] },
+      createdAt: created.createdAt,
+      updatedAt: created.createdAt
+    })),
+    agents: Array.from({ length: 360 }, (_, index) => ({
+      id: `agent_${index}`,
+      name: `Agent ${index}`,
+      owner: index < 12 ? `owner${index}` : 'aiagent2',
+      online: index % 2 === 0,
+      verificationStatus: index % 2 === 0 ? 'verified' : 'pending',
+      createdAt: created.createdAt,
+      updatedAt: created.createdAt
+    })),
+    jobs: Array.from({ length: 410 }, (_, index) => ({
+      id: `job_${index}`,
+      status: index < 7 ? 'running' : (index < 18 ? 'failed' : 'completed'),
+      taskType: 'research',
+      prompt: `job prompt ${index}`,
+      createdAt: created.createdAt
+    })),
+    feedbackReports: Array.from({ length: 520 }, (_, index) => ({
+      id: `report_${index}`,
+      type: 'bug',
+      status: index < 10 ? 'open' : (index < 20 ? 'reviewing' : 'resolved'),
+      title: `Report ${index}`,
+      message: `Report message ${index}`,
+      createdAt: created.createdAt,
+      updatedAt: created.createdAt
+    }))
+  };
+  const dashboardCountSummary = buildAdminDashboard(dashboardCountState, { operator: 'owner@example.com' });
+  assert.equal(dashboardCountSummary.summary.accounts.total, 240);
+  assert.equal(dashboardCountSummary.summary.agents.total, 360);
+  assert.equal(dashboardCountSummary.summary.orders.total, 410);
+  assert.equal(dashboardCountSummary.summary.reports.total, 520);
+  assert.equal(dashboardCountSummary.summary.orders.active, 7);
+  assert.equal(dashboardCountSummary.summary.orders.failed, 11);
+  assert.equal(dashboardCountSummary.summary.orders.completed, 392);
+  assert.equal(dashboardCountSummary.summary.reports.open, 10);
+  assert.equal(dashboardCountSummary.summary.reports.reviewing, 10);
+  assert.equal(dashboardCountSummary.summary.reports.resolved, 500);
+  assert.equal(dashboardCountSummary.accounts.length, 200);
+  assert.equal(dashboardCountSummary.agents.length, 300);
+  assert.equal(dashboardCountSummary.orders.length, 300);
+  assert.equal(dashboardCountSummary.reports.length, 300);
+
   console.log('feedback qa passed');
 } finally {
 }
