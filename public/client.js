@@ -18680,17 +18680,53 @@ function renderDeliveryActionToolbar(run = null, options = {}) {
 
 function renderWorkflowTeamSummary(workflowChildren = []) {
   if (!Array.isArray(workflowChildren) || !workflowChildren.length) return '';
+  const leaderItems = workflowChildren
+    .filter((child) => /(^|_)(leader)$/.test(String(child.taskType || '').trim().toLowerCase()))
+    .sort((left, right) => {
+      const phaseRank = (value) => {
+        const phase = String(value?.sequencePhase || '').trim().toLowerCase();
+        if (phase === 'final_summary') return 3;
+        if (phase === 'checkpoint') return 2;
+        if (phase === 'initial') return 1;
+        return 0;
+      };
+      const leftRank = phaseRank(left);
+      const rightRank = phaseRank(right);
+      if (leftRank !== rightRank) return rightRank - leftRank;
+      const leftCompleted = String(left?.completedAt || '').trim();
+      const rightCompleted = String(right?.completedAt || '').trim();
+      const completedCompare = rightCompleted.localeCompare(leftCompleted);
+      if (completedCompare) return completedCompare;
+      return String(right?.id || '').localeCompare(String(left?.id || ''));
+    });
+  const visibleLeader = leaderItems[0] || null;
+  const visibleChildren = workflowChildren.filter((child) => {
+    const isLeader = /(^|_)(leader)$/.test(String(child.taskType || '').trim().toLowerCase());
+    if (!isLeader) return true;
+    if (!visibleLeader) return true;
+    return child === visibleLeader;
+  });
+  const summaryTextForChild = (child = {}) => {
+    const summary = String(child.summary || child.failureReason || '').trim();
+    if (summary) return summary;
+    const status = String(child.status || '').trim().toLowerCase();
+    if (status === 'blocked') return 'Waiting for the earlier research or action phase to finish.';
+    if (['queued', 'created'].includes(status)) return 'Queued. Specialist summary will appear after the run starts.';
+    if (['claimed', 'running', 'dispatched'].includes(status)) return 'In progress. Summary will update after the run returns.';
+    return 'No specialist summary returned yet.';
+  };
   return `
       <details class="delivery-team-group" open>
         <summary>TEAM LEADER SUMMARY</summary>
         <div class="delivery-team-note">Start here. This merged delivery is the default report. Open individual specialist runs only when you want implementation detail.</div>
         <div class="delivery-team-list">
-          ${workflowChildren.map((child, index) => `
+          ${visibleChildren.map((child, index) => `
             <div class="delivery-team-item">
               <div>
                 <strong>${escapeHtml(`${index + 1}. ${child.taskType || 'task'} - ${child.agentName || child.agentId || 'agent'}`)}</strong>
+                ${child.sequencePhase ? `<div class="row-muted">${escapeHtml(`PHASE ${String(child.sequencePhase || '').toUpperCase()}`)}</div>` : ''}
                 <div class="row-muted">${escapeHtml(String(child.status || 'unknown').toUpperCase())}</div>
-                <div>${escapeHtml(child.summary || child.failureReason || 'No specialist summary returned yet.')}</div>
+                <div>${escapeHtml(summaryTextForChild(child))}</div>
               </div>
               <div class="helper-row">
                 ${child.id ? `<button class="mini-btn" data-open-child-run="${escapeHtml(child.id)}">OPEN DETAIL</button>` : ''}
