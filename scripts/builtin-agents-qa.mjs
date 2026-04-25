@@ -72,7 +72,16 @@ const englishResearch = sampleAgentPayload('research', {
 });
 assert.match(englishResearch.summary, /^Research summary ready:/);
 assert.equal(englishResearch.report.summary, 'Research delivery');
-assert.ok(englishResearch.files[0].content.includes('Extract the key comparison points'));
+assert.ok(englishResearch.report.bullets.some((item) => item.includes('answered first')));
+assert.ok(englishResearch.files[0].content.includes('## Answer first'));
+assert.ok(englishResearch.files[0].content.includes('## Decision or question framing'));
+assert.ok(englishResearch.files[0].content.includes('the one question this research must answer'));
+assert.ok(englishResearch.files[0].content.includes('## Evidence and source status'));
+assert.ok(englishResearch.files[0].content.includes('Current public sources'));
+assert.ok(englishResearch.files[0].content.includes('## Comparison or options'));
+assert.ok(englishResearch.files[0].content.includes('## Recommendation'));
+assert.ok(englishResearch.files[0].content.includes('## Risks and unknowns'));
+assert.ok(englishResearch.files[0].content.includes('## Next check'));
 assert.ok(englishResearch.files[0].content.includes('## First move'));
 assert.ok(englishResearch.files[0].content.includes('Identify the exact decision or question first'));
 assert.ok(englishResearch.files[0].content.includes('## Output contract'));
@@ -115,6 +124,7 @@ assert.ok(englishResearch.runtime.delivery_policy.sensitive_data_policy.includes
 assert.ok(englishResearch.runtime.delivery_policy.cost_control_policy.includes('decision impact'));
 assert.equal(builtInShouldUseWebSearchForKind('research', { prompt: 'What is the highest Rolex price today?' }), true);
 assert.ok(!englishResearch.files[0].content.includes('市場比較の要点を抽出'));
+assert.ok(!englishResearch.files[0].content.includes('Extract the key comparison points'));
 
 const promptBrushupPayload = sampleAgentPayload('prompt_brushup', {
   prompt: '市場調査をしてほしい。抜け漏れない発注文にして、足りない情報があれば質問して。'
@@ -179,8 +189,20 @@ const japaneseResearch = sampleAgentPayload('research', {
 });
 assert.match(japaneseResearch.summary, /^調査サマリーを用意しました:/);
 assert.equal(japaneseResearch.report.summary, '調査結果');
-assert.ok(japaneseResearch.files[0].content.includes('市場比較の要点を抽出'));
+assert.ok(japaneseResearch.report.bullets.some((item) => item.includes('答えを先に提示')));
+assert.ok(japaneseResearch.files[0].content.includes('## 先に結論'));
+assert.ok(japaneseResearch.files[0].content.includes('## Decision or question framing'));
+assert.ok(japaneseResearch.files[0].content.includes('## Evidence and source status'));
+assert.ok(japaneseResearch.files[0].content.includes('## Comparison or options'));
+assert.ok(japaneseResearch.files[0].content.includes('## Recommendation'));
+assert.ok(japaneseResearch.files[0].content.includes('## Risks and unknowns'));
+assert.ok(japaneseResearch.files[0].content.includes('## Next check'));
 assert.ok(japaneseResearch.files[0].content.includes('## 品質チェック'));
+const researchSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_research_01');
+assert.ok(researchSeed?.description.includes('answer-first'));
+assert.ok(researchSeed?.metadata?.manifest?.capabilities?.includes('answer_first_research'));
+assert.ok(researchSeed?.metadata?.manifest?.capabilities?.includes('source_status_note'));
+assert.ok(researchSeed?.metadata?.manifest?.metadata?.connector_behavior.includes('verify current public facts'));
 
 const explicitEnglishWriter = sampleAgentPayload('writer', {
   prompt: '新規SaaSの訴求を考えて。Answer in English.',
