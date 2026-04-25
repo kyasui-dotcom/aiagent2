@@ -851,6 +851,15 @@ function hasActiveLiveJobs(snapshot = state.snapshot || {}) {
   return jobs.some((job) => ['queued', 'claimed', 'running', 'dispatched', 'created'].includes(normalizeOrderProgressStatus(job?.status || '')));
 }
 
+function hasActiveOpenChatOrderProgress() {
+  const messages = Array.isArray(state.orderChatMessages) ? state.orderChatMessages : [];
+  return messages.some((message) => {
+    if (message?.pendingDispatch === true) return true;
+    if (!message?.orderProgressId && !message?.workflowParentId) return false;
+    return ['queued', 'claimed', 'running', 'dispatched', 'created'].includes(normalizeOrderProgressStatus(message?.orderProgressStatus || ''));
+  });
+}
+
 function scheduleLiveSnapshotRefresh(snapshot = state.snapshot || {}) {
   clearLiveSnapshotRefreshTimer();
   if (!hasActiveLiveJobs(snapshot)) return;
@@ -7893,6 +7902,7 @@ function openChatDefaultDecisionOptions(ja = false) {
 
 function openChatComposerDecisionOptions() {
   if (state.openChatDecisionSuppressed) return [];
+  if (hasActiveOpenChatOrderProgress() || hasActiveLiveJobs()) return [];
   const rawOptions = Array.isArray(state.openChatClarifyOptions) ? state.openChatClarifyOptions : [];
   const decisionOptions = rawOptions.filter((option) => ['confirm_preorder_order', 'revise_preorder_order', 'cancel_preorder_order'].includes(String(option?.command || '')));
   const context = `${openChatPreviousAgentMessageBody()}\n${openChatPreviousUserMessageBody()}\n${lastOpenChatPreparedBrief()}`;
