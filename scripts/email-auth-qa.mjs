@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHmac } from 'node:crypto';
 
 const PORT = Number(process.env.PORT || 4324);
 const BASE = `http://127.0.0.1:${PORT}`;
+const EMAIL_AUTH_SECRET = 'qa-email-auth-secret';
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -25,6 +27,30 @@ async function request(path, options = {}) {
   return { status: response.status, headers: response.headers, body };
 }
 
+function createEmailAuthToken({
+  email = 'owner@example.com',
+  returnTo = '/?tab=work',
+  loginSource = 'login_page',
+  visitorId = 'qa-email-success'
+} = {}) {
+  const payload = {
+    kind: 'email-auth',
+    email: String(email || '').trim().toLowerCase(),
+    returnTo: String(returnTo || '/?tab=work').trim() || '/?tab=work',
+    loginSource: String(loginSource || 'login_page').trim().toLowerCase() || 'login_page',
+    visitorId: String(visitorId || '').trim(),
+    exp: Date.now() + 20 * 60 * 1000
+  };
+  const encoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const signature = createHmac('sha256', EMAIL_AUTH_SECRET).update(encoded).digest('base64url');
+  return `${encoded}.${signature}`;
+}
+
+function cookieHeaderFromSetCookie(value = '') {
+  const firstPart = String(value || '').split(';')[0].trim();
+  return firstPart || '';
+}
+
 async function waitForServer(timeoutMs = 8000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -44,6 +70,7 @@ async function main() {
       ...process.env,
       NODE_ENV: 'test',
       ALLOW_IN_MEMORY_STORAGE: '1',
+      EMAIL_AUTH_SECRET,
       PORT: String(PORT)
     },
     stdio: ['ignore', 'pipe', 'pipe']
@@ -93,6 +120,48 @@ async function main() {
     assert.equal(invalidTokenRes.status, 302, 'invalid verify token should redirect back to login');
     assert.match(String(invalidTokenRes.headers.get('location') || ''), /^\/login\.html\?/);
     assert.match(String(invalidTokenRes.headers.get('location') || ''), /auth_error=email_link_invalid/);
+
+    const successToken = createEmailAuthToken({
+      email: 'owner@example.com',
+      returnTo: '/?tab=work',
+      loginSource: 'gate_work',
+      visitorId: 'qa-email-success'
+    });
+    const verifySuccessRes = await request(`/auth/email/verify?token=${encodeURIComponent(successToken)}`);
+    assert.equal(verifySuccessRes.status, 302, 'valid verify token should redirect into the requested route');
+    assert.equal(String(verifySuccessRes.headers.get('location') || ''), '/?tab=work');
+    const sessionCookie = cookieHeaderFromSetCookie(verifySuccessRes.headers.get('set-cookie') || '');
+    assert.match(sessionCookie, /^aiagent2_session=/, 'email verify should issue a session cookie');
+
+    const loggedInStatusRes = await request('/auth/status', {
+      headers: {
+        cookie: sessionCookie
+      }
+    });
+    assert.equal(loggedInStatusRes.status, 200);
+    assert.equal(loggedInStatusRes.body.loggedIn, true, 'issued email session should be recognized');
+    assert.equal(loggedInStatusRes.body.authProvider, 'email');
+    assert.equal(loggedInStatusRes.body.login, 'owner@example.com');
+
+    const customReturnToken = createEmailAuthToken({
+      email: 'owner@example.com',
+      returnTo: '/?tab=agents',
+      loginSource: 'gate_agents',
+      visitorId: 'qa-email-agents'
+    });
+    const customReturnRes = await request(`/auth/email/verify?token=${encodeURIComponent(customReturnToken)}`);
+    assert.equal(customReturnRes.status, 302);
+    assert.equal(String(customReturnRes.headers.get('location') || ''), '/?tab=agents', 'custom in-product return path should be preserved');
+
+    const externalReturnToken = createEmailAuthToken({
+      email: 'owner@example.com',
+      returnTo: 'https://evil.example/steal-session',
+      loginSource: 'gate_work',
+      visitorId: 'qa-email-open-redirect'
+    });
+    const externalReturnRes = await request(`/auth/email/verify?token=${encodeURIComponent(externalReturnToken)}`);
+    assert.equal(externalReturnRes.status, 302);
+    assert.equal(String(externalReturnRes.headers.get('location') || ''), '/', 'verify should not allow external redirect targets');
 
     console.log('email auth qa passed');
   } finally {
