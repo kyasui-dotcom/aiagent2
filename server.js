@@ -4535,16 +4535,46 @@ function accountUserFromSettings(account) {
     accountId: account?.id || ''
   };
 }
+
+async function claimSignupConversionAttempt(account, user = null, authProvider = 'guest') {
+  const safeLogin = String(account?.login || '').trim().toLowerCase();
+  if (!safeLogin) return { claimed: false, account: account || null };
+  const attemptedAt = nowIso();
+  let nextAccount = account || null;
+  let claimed = false;
+  const seedUser = user ? { ...user, login: safeLogin } : { login: safeLogin };
+  await storage.mutate(async (draft) => {
+    const latest = accountSettingsForLogin(draft, safeLogin, seedUser, authProvider);
+    if (String(latest?.billing?.signupWelcomeEmailAttemptedAt || '').trim()) {
+      nextAccount = latest;
+      return;
+    }
+    nextAccount = upsertAccountSettingsInState(draft, safeLogin, seedUser, authProvider, {
+      billing: {
+        ...(latest?.billing || {}),
+        signupWelcomeEmailAttemptedAt: attemptedAt
+      }
+    });
+    claimed = true;
+  });
+  return { claimed, account: nextAccount };
+}
+
 async function persistAccountForIdentity(user, authProvider) {
   let account = null;
   let signupCredits = null;
   await storage.mutate(async (draft) => {
     account = upsertAccountSettingsForIdentityInState(draft, user, authProvider, {});
-    signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, account.login, user, authProvider);
+    signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, account.login, user, authProvider, 0);
     account = accountSettingsForLogin(draft, account.login, user, authProvider);
   });
+  const signupClaim = await claimSignupConversionAttempt(account, user, authProvider);
+  if (signupClaim?.account) account = signupClaim.account;
+  const accountCreated = Boolean(signupClaim?.claimed);
   if (signupCredits?.status === 'granted') {
     await touchEvent('CREDIT', `${account.login} earned ${signupCredits.amount} signup welcome credits`);
+  }
+  if (accountCreated) {
     await trackAuthConversionEvent('signup_completed', {
       loggedIn: true,
       authProvider,
@@ -4556,7 +4586,7 @@ async function persistAccountForIdentity(user, authProvider) {
   }
   await trackAuthLoginCompletion(authProvider, account, {
     source: 'auth_callback',
-    status: signupCredits?.status === 'granted' ? 'created' : 'existing'
+    status: accountCreated ? 'created' : 'existing'
   });
   return account;
 }
@@ -4566,7 +4596,7 @@ async function linkSessionIdentityToAccount(targetLogin, user, authProvider) {
   await storage.mutate(async (draft) => {
     result = linkIdentityToAccountInState(draft, targetLogin, user, authProvider);
     if (result?.ok) {
-      signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, result.account.login, { ...(user || {}), login: result.account.login }, authProvider);
+      signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, result.account.login, { ...(user || {}), login: result.account.login }, authProvider, 0);
       result.account = accountSettingsForLogin(draft, result.account.login, user, authProvider);
       return;
     }
@@ -4580,7 +4610,7 @@ async function linkSessionIdentityToAccount(targetLogin, user, authProvider) {
       account: upsertAccountSettingsForIdentityInState(draft, { ...(user || {}), login: targetLogin }, authProvider, {})
     };
     if (result?.account?.login) {
-      signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, result.account.login, { ...(user || {}), login: result.account.login }, authProvider);
+      signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, result.account.login, { ...(user || {}), login: result.account.login }, authProvider, 0);
       result.account = accountSettingsForLogin(draft, result.account.login, user, authProvider);
     }
   });

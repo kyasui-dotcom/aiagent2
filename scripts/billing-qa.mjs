@@ -186,14 +186,14 @@ assert.equal(builtInResearchEstimate.typical.total, 7.33);
 const signupState = { agents: [], jobs: [], accounts: [] };
 const signupUser = { login: 'signup-qa', name: 'Signup QA' };
 upsertAccountSettingsInState(signupState, signupUser.login, signupUser, 'google-oauth', {});
-const signupGrant = maybeGrantWelcomeCreditsForSignupInState(signupState, signupUser.login, signupUser, 'google-oauth');
-assert.equal(signupGrant.status, 'granted');
-assert.equal(signupGrant.amount, WELCOME_CREDITS_GRANT_AMOUNT);
-const signupGrantAgain = maybeGrantWelcomeCreditsForSignupInState(signupState, signupUser.login, signupUser, 'google-oauth');
-assert.equal(signupGrantAgain.status, 'already_granted');
+const signupGrant = maybeGrantWelcomeCreditsForSignupInState(signupState, signupUser.login, signupUser, 'google-oauth', 0);
+assert.equal(signupGrant.status, 'skipped');
+assert.equal(signupGrant.amount, 0);
+const signupGrantAgain = maybeGrantWelcomeCreditsForSignupInState(signupState, signupUser.login, signupUser, 'google-oauth', 0);
+assert.equal(signupGrantAgain.status, 'skipped');
 const signupProfile = billingProfileForAccount(signupState.accounts[0], '', '2026-04');
-assert.equal(signupProfile.welcomeCreditsAvailable, WELCOME_CREDITS_GRANT_AMOUNT);
-assert.equal(signupProfile.welcomeCreditsSignupGrantedTotal, WELCOME_CREDITS_GRANT_AMOUNT);
+assert.equal(signupProfile.welcomeCreditsAvailable, 0);
+assert.equal(signupProfile.welcomeCreditsSignupGrantedTotal, 0);
 
 const state = { agents: [], jobs: [], accounts: [] };
 const user = { login: 'alice', name: 'Alice Example' };
@@ -371,11 +371,11 @@ combinedWelcomeState.agents.push({
   },
   verificationStatus: 'verified'
 });
-assert.equal(maybeGrantWelcomeCreditsForSignupInState(combinedWelcomeState, 'mika', combinedUser, 'google-oauth').status, 'granted');
+assert.equal(maybeGrantWelcomeCreditsForSignupInState(combinedWelcomeState, 'mika', combinedUser, 'google-oauth', 0).status, 'skipped');
 assert.equal(maybeGrantWelcomeCreditsForVerifiedAgentInState(combinedWelcomeState, 'mika', 'agent_combined_welcome_1').status, 'granted');
 const combinedProfile = billingProfileForAccount(combinedWelcomeState.accounts.find((item) => item.login === 'mika'), '', '2026-04');
-assert.equal(combinedProfile.welcomeCreditsAvailable, WELCOME_CREDITS_GRANT_AMOUNT * 2);
-assert.equal(combinedProfile.welcomeCreditsSignupGrantedTotal, WELCOME_CREDITS_GRANT_AMOUNT);
+assert.equal(combinedProfile.welcomeCreditsAvailable, WELCOME_CREDITS_GRANT_AMOUNT);
+assert.equal(combinedProfile.welcomeCreditsSignupGrantedTotal, 0);
 assert.equal(combinedProfile.welcomeCreditsAgentGrantedTotal, WELCOME_CREDITS_GRANT_AMOUNT);
 
 const thinState = { agents: [], jobs: [], accounts: [] };

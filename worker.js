@@ -3034,19 +3034,15 @@ function accountUserFromSettings(account) {
 
 async function persistAccountForIdentity(storage, env, user, authProvider) {
   let account = null;
-  let accountCreated = false;
   let signupCredits = null;
   await storage.mutate(async (draft) => {
-    const identityLogin = defaultLoginForAuthUser(user, authProvider);
-    const existingIdentityAccount = accountSettingsForIdentity(draft, user, authProvider);
-    const existingLoginAccount = identityLogin
-      ? accountSettingsForLogin(draft, identityLogin, user, authProvider)
-      : null;
-    accountCreated = !existingIdentityAccount?.login && !existingLoginAccount?.login;
     account = upsertAccountSettingsForIdentityInState(draft, user, authProvider, {});
-    signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, account.login, user, authProvider);
+    signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, account.login, user, authProvider, 0);
     account = accountSettingsForLogin(draft, account.login, user, authProvider);
   });
+  const signupWelcomeClaim = await claimSignupWelcomeEmailAttempt(storage, account, user, authProvider);
+  if (signupWelcomeClaim?.account) account = signupWelcomeClaim.account;
+  const accountCreated = Boolean(signupWelcomeClaim?.claimed);
   if (accountCreated) {
     await trackAuthConversionEvent(storage, 'signup_completed', {
       loggedIn: true,
@@ -3056,10 +3052,10 @@ async function persistAccountForIdentity(storage, env, user, authProvider) {
       source: 'auth_callback',
       status: 'created'
     });
+    await maybeSendSignupWelcomeEmail(storage, env, account, user, authProvider, { alreadyClaimed: true });
   }
   if (signupCredits?.status === 'granted') {
     await touchEvent(storage, 'CREDIT', `${account.login} earned ${signupCredits.amount} signup welcome credits`);
-    await maybeSendSignupWelcomeEmail(storage, env, account, user, authProvider);
   }
   await trackAuthLoginCompletion(storage, authProvider, account, {
     source: 'auth_callback',
@@ -3074,7 +3070,7 @@ async function linkSessionIdentityToAccount(storage, env, targetLogin, user, aut
   await storage.mutate(async (draft) => {
     result = linkIdentityToAccountInState(draft, targetLogin, user, authProvider);
     if (result?.ok) {
-      signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, result.account.login, { ...(user || {}), login: result.account.login }, authProvider);
+      signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, result.account.login, { ...(user || {}), login: result.account.login }, authProvider, 0);
       result.account = accountSettingsForLogin(draft, result.account.login, user, authProvider);
       return;
     }
@@ -3088,7 +3084,7 @@ async function linkSessionIdentityToAccount(storage, env, targetLogin, user, aut
       account: accountSettingsForLogin(draft, targetLogin, user, authProvider)
     };
     if (result?.account?.login) {
-      signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, result.account.login, { ...(user || {}), login: result.account.login }, authProvider);
+      signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, result.account.login, { ...(user || {}), login: result.account.login }, authProvider, 0);
       result.account = accountSettingsForLogin(draft, result.account.login, user, authProvider);
     }
   });
@@ -5927,8 +5923,10 @@ async function claimSignupWelcomeEmailAttempt(storage, account, user = null, aut
   return { claimed, account: nextAccount };
 }
 
-async function maybeSendSignupWelcomeEmail(storage, env, account, user = null, authProvider = 'guest') {
-  const claim = await claimSignupWelcomeEmailAttempt(storage, account, user, authProvider);
+async function maybeSendSignupWelcomeEmail(storage, env, account, user = null, authProvider = 'guest', options = {}) {
+  const claim = options?.alreadyClaimed
+    ? { claimed: true, account: account || null }
+    : await claimSignupWelcomeEmailAttempt(storage, account, user, authProvider);
   if (!claim.claimed) {
     return {
       id: crypto.randomUUID(),
