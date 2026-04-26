@@ -45,6 +45,9 @@ const MAX_PROVIDER_MARKUP_RATE = 1;
 const MAX_PENDING_OAUTH_STATES = 8;
 const SESSION_VERSION = 2;
 const APP_SHELL_ASSET_VERSION = '20260424c';
+const BUILT_IN_JOB_TIMEOUT_FLOOR_MS = 10 * 60 * 1000;
+const WORKFLOW_CHILD_TIMEOUT_FLOOR_MS = 15 * 60 * 1000;
+const WORKFLOW_PARENT_TIMEOUT_FLOOR_MS = 45 * 60 * 1000;
 let generatedSessionSecret = '';
 const rateLimitBuckets = new Map();
 
@@ -12005,20 +12008,52 @@ async function handleTimeoutSweep(storage, request, env) {
   return json({ ok: true, swept: result.swept, count: result.swept.length });
 }
 
+function timeoutFloorMsForJob(job = {}, agent = null) {
+  const estimateMs = Number(job?.estimateWindow?.durationMaxSec || 0) > 0
+    ? Number(job.estimateWindow.durationMaxSec) * 1000
+    : 0;
+  if (job?.jobKind === 'workflow') {
+    return Math.max(WORKFLOW_PARENT_TIMEOUT_FLOOR_MS, estimateMs);
+  }
+  if (job?.jobKind === 'workflow_child' || job?.workflowParentId) {
+    return Math.max(WORKFLOW_CHILD_TIMEOUT_FLOOR_MS, estimateMs);
+  }
+  if (agent && sampleKindFromAgent(agent)) {
+    return Math.max(BUILT_IN_JOB_TIMEOUT_FLOOR_MS, estimateMs);
+  }
+  return null;
+}
+
+function effectiveTimeoutDeadlineMs(job = {}, agent = null) {
+  const explicitMs = Number(job?.deadlineSec || 0) > 0 ? Number(job.deadlineSec) * 1000 : null;
+  const floorMs = timeoutFloorMsForJob(job, agent);
+  if (explicitMs == null) return floorMs;
+  if (floorMs == null) return explicitMs;
+  return Math.max(explicitMs, floorMs);
+}
+
+function workflowChildIsQueuedForFutureTurn(job = {}) {
+  if (!(job?.jobKind === 'workflow_child' || job?.workflowParentId)) return false;
+  if (String(job?.status || '').trim().toLowerCase() !== 'queued') return false;
+  return !job?.dispatch?.dispatchRequestedAt && !job?.dispatch?.scheduledAt && !job?.startedAt && !job?.dispatchedAt && !job?.claimedAt;
+}
+
 async function sweepTimedOutJobs(storage, options = {}) {
   const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
-  const staleMs = Number.isFinite(Number(options.staleMs)) ? Math.max(0, Number(options.staleMs)) : null;
+  const staleMs = options.staleMs != null && Number.isFinite(Number(options.staleMs)) ? Math.max(0, Number(options.staleMs)) : null;
   const eventSource = String(options.eventSource || '').trim() || 'timeout_sweep';
   const result = await storage.mutate(async (state) => {
     const swept = [];
     for (const job of state.jobs) {
       if (!['queued', 'claimed', 'running', 'dispatched'].includes(job.status)) continue;
-      const deadlineMs = Number(job.deadlineSec || 0) > 0 ? Number(job.deadlineSec) * 1000 : null;
-      const basisMs = Date.parse(job.lastCallbackAt || job.dispatchedAt || job.startedAt || job.claimedAt || job.createdAt || '') || nowMs;
+      const agent = job.assignedAgentId ? state.agents.find((item) => item.id === job.assignedAgentId) || null : null;
+      const deadlineMs = effectiveTimeoutDeadlineMs(job, agent);
+      const basisMs = Date.parse(job.lastCallbackAt || job.dispatch?.dispatchRequestedAt || job.dispatch?.scheduledAt || job.dispatchedAt || job.startedAt || job.claimedAt || job.createdAt || '') || nowMs;
       const ageMs = Math.max(0, nowMs - basisMs);
       const attempts = Number(job.dispatch?.attempts || 0);
       const nextAttempt = attempts + 1;
-      const expiredByDeadline = deadlineMs != null && ageMs >= deadlineMs;
+      const skipQueuedWorkflowDeadline = staleMs == null && workflowChildIsQueuedForFutureTurn(job);
+      const expiredByDeadline = !skipQueuedWorkflowDeadline && deadlineMs != null && ageMs >= deadlineMs;
       const expiredByManualWindow = staleMs != null && ageMs >= staleMs;
       if (!expiredByDeadline && !expiredByManualWindow) continue;
       job.status = 'timed_out';
@@ -12043,7 +12078,9 @@ async function sweepTimedOutJobs(storage, options = {}) {
         nextRetryAt: job.dispatch.nextRetryAt,
         attempts,
         maxRetries: job.dispatch.maxRetries,
-        workflowParentId: job.workflowParentId || null
+        workflowParentId: job.workflowParentId || null,
+        deadlineMs,
+        ageMs
       });
     }
     return { swept };
@@ -12061,6 +12098,8 @@ async function sweepTimedOutJobs(storage, options = {}) {
       attempts: job.attempts,
       maxRetries: job.maxRetries,
       nextRetryAt: job.nextRetryAt,
+      deadlineMs: job.deadlineMs,
+      ageMs: job.ageMs,
       source: eventSource
     });
   }

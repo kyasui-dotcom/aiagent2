@@ -38,6 +38,9 @@ const runtimeAppVersion = process.env.APP_VERSION || '0.2.0';
 const normalizedAppVersion = String(runtimeAppVersion || '').trim().toLowerCase();
 const isExplicitTestRuntime = normalizedAppVersion.includes('test') || String(process.env.NODE_ENV || '').trim().toLowerCase() === 'test';
 const allowInMemoryStorage = isExplicitTestRuntime && String(process.env.ALLOW_IN_MEMORY_STORAGE || '').trim() === '1';
+const BUILT_IN_JOB_TIMEOUT_FLOOR_MS = 10 * 60 * 1000;
+const WORKFLOW_CHILD_TIMEOUT_FLOOR_MS = 15 * 60 * 1000;
+const WORKFLOW_PARENT_TIMEOUT_FLOOR_MS = 45 * 60 * 1000;
 const storage = createD1LikeStorage(null, { allowInMemory: allowInMemoryStorage });
 if (process.env.BOOTSTRAP_STATE_JSON) {
   try {
@@ -9390,9 +9393,29 @@ const server = http.createServer(async (req, res) => {
       const timedOut = [];
       for (const job of draft.jobs) {
         if (!canTransitionJob(job, 'timeout')) continue;
-        const basis = job.dispatchedAt || job.startedAt || job.createdAt;
+        const agent = job.assignedAgentId ? draft.agents.find((item) => item.id === job.assignedAgentId) || null : null;
+        const estimateMs = Number(job?.estimateWindow?.durationMaxSec || 0) > 0
+          ? Number(job.estimateWindow.durationMaxSec) * 1000
+          : 0;
+        const timeoutFloorMs = job.jobKind === 'workflow'
+          ? Math.max(WORKFLOW_PARENT_TIMEOUT_FLOOR_MS, estimateMs)
+          : (job.jobKind === 'workflow_child' || job.workflowParentId)
+            ? Math.max(WORKFLOW_CHILD_TIMEOUT_FLOOR_MS, estimateMs)
+            : agent && sampleKindFromAgent(agent)
+              ? Math.max(BUILT_IN_JOB_TIMEOUT_FLOOR_MS, estimateMs)
+              : 0;
+        const effectiveMaxAgeMs = Math.max(maxAgeSec * 1000, timeoutFloorMs || 0);
+        const queuedFutureWorkflowTurn = (job.jobKind === 'workflow_child' || job.workflowParentId)
+          && String(job.status || '').trim().toLowerCase() === 'queued'
+          && !job.dispatch?.dispatchRequestedAt
+          && !job.dispatch?.scheduledAt
+          && !job.startedAt
+          && !job.dispatchedAt
+          && !job.claimedAt;
+        if (queuedFutureWorkflowTurn) continue;
+        const basis = job.lastCallbackAt || job.dispatch?.dispatchRequestedAt || job.dispatch?.scheduledAt || job.dispatchedAt || job.startedAt || job.createdAt;
         const ageMs = Math.max(0, now - new Date(basis).getTime());
-        if (ageMs < maxAgeSec * 1000) continue;
+        if (ageMs < effectiveMaxAgeMs) continue;
         const attempts = Number(job.dispatch?.attempts || 0);
         const nextAttempt = attempts + 1;
         const maxRetries = maxDispatchRetriesForJob(job);
@@ -9412,7 +9435,7 @@ const server = http.createServer(async (req, res) => {
           maxRetries
         };
         job.logs.push(`timeout sweep marked timed_out at ${job.timedOutAt}`, `retryable=${retryable}`, `attempts=${attempts}/${maxRetries}`);
-        timedOut.push({ id: job.id, taskType: job.taskType, status: job.status, retryable, nextRetryAt: job.dispatch.nextRetryAt, attempts, maxRetries });
+        timedOut.push({ id: job.id, taskType: job.taskType, status: job.status, retryable, nextRetryAt: job.dispatch.nextRetryAt, attempts, maxRetries, timeoutMs: effectiveMaxAgeMs, ageMs });
       }
       return { ok: true, timedOut };
     });

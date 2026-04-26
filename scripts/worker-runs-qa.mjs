@@ -34,11 +34,18 @@ function buildVerifiedAgents() {
       category: '',
       manifest: {
         ...(agent.metadata?.manifest || {}),
+        sample: false,
+        category: '',
         healthcheckUrl: '',
         healthcheck_url: '',
         jobEndpoint: '',
         job_endpoint: '',
-        endpoints: {}
+        endpoints: {},
+        metadata: {
+          ...((agent.metadata?.manifest && agent.metadata.manifest.metadata) || {}),
+          sample: false,
+          category: ''
+        }
       },
       qaSeed: true
     }
@@ -316,5 +323,79 @@ const cronSnapshot = await request('/api/snapshot');
 const cronTimeoutEvent = cronSnapshot.body.events.find((event) => event.type === 'TIMEOUT' && event.meta?.jobId === cronTimeoutCandidate.body.job_id);
 assert.ok(cronTimeoutEvent);
 assert.equal(cronTimeoutEvent.meta.source, 'cron');
+
+await resetState();
+
+const oldWorkflowAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+await storage.mutate(async (draft) => {
+  draft.jobs.unshift(
+    {
+      id: 'qa-workflow-timeout-parent',
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'workflow timeout floor qa',
+      status: 'running',
+      deadlineSec: 1,
+      createdAt: oldWorkflowAt,
+      startedAt: oldWorkflowAt,
+      estimateWindow: { durationMaxSec: 90 },
+      logs: ['workflow timeout floor qa parent'],
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research', 'growth'],
+        childRuns: []
+      }
+    },
+    {
+      id: 'qa-workflow-timeout-queued-child',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'growth',
+      workflowTask: 'growth',
+      workflowAgentName: 'Growth Operator Agent',
+      prompt: 'queued future workflow child should not timeout before dispatch turn',
+      status: 'queued',
+      assignedAgentId: 'agent_growth_01',
+      deadlineSec: 1,
+      createdAt: oldWorkflowAt,
+      workflowParentId: 'qa-workflow-timeout-parent',
+      estimateWindow: { durationMaxSec: 90 },
+      dispatch: { completionStatus: 'queued_for_workflow_turn' },
+      logs: ['workflow timeout floor qa queued child']
+    },
+    {
+      id: 'qa-workflow-timeout-running-child',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'running workflow child should use workflow timeout floor',
+      status: 'running',
+      assignedAgentId: 'agent_research_01',
+      deadlineSec: 1,
+      createdAt: oldWorkflowAt,
+      startedAt: oldWorkflowAt,
+      workflowParentId: 'qa-workflow-timeout-parent',
+      estimateWindow: { durationMaxSec: 90 },
+      dispatch: { completionStatus: 'dispatch_scheduled', dispatchRequestedAt: oldWorkflowAt },
+      logs: ['workflow timeout floor qa running child']
+    }
+  );
+});
+
+const workflowSweep = await request('/api/dev/timeout-sweep', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({})
+});
+assert.equal(workflowSweep.status, 200);
+assert.equal(workflowSweep.body.count, 0, 'workflow parent/child runs should not be killed by a 1s deadline while inside the workflow timeout floor');
+
+const workflowTimeoutState = await storage.getState();
+const workflowTimeoutJobs = new Map(workflowTimeoutState.jobs.map((job) => [job.id, job]));
+assert.equal(workflowTimeoutJobs.get('qa-workflow-timeout-parent').status, 'running');
+assert.equal(workflowTimeoutJobs.get('qa-workflow-timeout-queued-child').status, 'queued');
+assert.equal(workflowTimeoutJobs.get('qa-workflow-timeout-running-child').status, 'running');
 
 console.log('worker runs qa passed');
