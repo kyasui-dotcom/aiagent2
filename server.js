@@ -2346,6 +2346,33 @@ function authSuccessRedirectPath(req, oauthState = null) {
   return normalizeLocalRedirectPath(req, oauthState?.returnTo || '', '/');
 }
 
+function isLoginPagePath(pathname = '') {
+  return pathname === '/login' || pathname === '/login.html';
+}
+
+function loginPageRedirectPath(req) {
+  const url = new URL(req.url, baseUrl(req));
+  const target = normalizeLocalRedirectPath(req, url.searchParams.get('next') || '', '/?tab=work');
+  try {
+    const parsed = new URL(target, baseUrl(req));
+    if (isLoginPagePath(parsed.pathname)) return '/?tab=work';
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/?tab=work';
+  } catch {
+    return '/?tab=work';
+  }
+}
+
+function handleLoginPageRequest(req, res) {
+  const session = getSession(req);
+  if (!hasOAuthBaseSession(session)) return false;
+  const refreshedCookie = maybeRefreshSessionCookie(req, session);
+  redirect(res, loginPageRedirectPath(req), {
+    ...(refreshedCookie ? { 'Set-Cookie': refreshedCookie } : {}),
+    'Cache-Control': 'no-store'
+  });
+  return true;
+}
+
 function authFailureRedirectPath(req, code = 'auth_failed', oauthState = null) {
   const safeCode = String(code || 'auth_failed').trim() || 'auth_failed';
   if (oauthState?.action === 'login' && oauthState?.loginSource) {
@@ -7441,6 +7468,10 @@ const server = http.createServer(async (req, res) => {
   if (enforceBrowserWriteProtection(req, res, url.pathname)) return;
   if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/app') || url.pathname === '/styles.css' || url.pathname === '/client.js')) {
     if (serveStatic(res, url.pathname === '/' ? '/index.html' : url.pathname)) return;
+  }
+  if (req.method === 'GET' && isLoginPagePath(url.pathname)) {
+    if (handleLoginPageRequest(req, res)) return;
+    if (url.pathname === '/login' && serveStatic(res, '/login.html')) return;
   }
   if (req.method === 'GET' && url.pathname === '/auth/status') {
     const session = getSession(req);

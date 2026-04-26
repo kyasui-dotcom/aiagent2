@@ -115,6 +115,12 @@ async function loginWithEmail() {
   assert.equal(status.body.login, 'leader@example.com');
   assert.ok(String(status.body.csrfToken || '').trim(), 'logged-in session should expose a CSRF token');
   sessionCsrfTokens.set(sessionCookie, status.body.csrfToken);
+
+  const loginPage = await request('/login.html?next=%2F%3Ftab%3Dwork', {}, { sessionCookie });
+  assert.equal(loginPage.status, 302, 'logged-in worker sessions should skip the login HTML');
+  assert.equal(loginPage.headers.location, '/?tab=work');
+  assert.equal(loginPage.headers['cache-control'], 'no-store');
+
   return sessionCookie;
 }
 

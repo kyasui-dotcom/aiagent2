@@ -24,7 +24,15 @@
   <main class="shell">
     <section id="loginFlash" class="box flash" hidden></section>
 
-    <section class="hero-grid hero-grid-wide start-landing">
+    <section id="loginCheckingPanel" class="hero-grid hero-grid-wide start-landing">
+      <section class="box panel-stack hero-copy start-hero">
+        <div class="section-title">SESSION CHECK</div>
+        <h1>Checking your CAIt session.</h1>
+        <p id="loginCheckingStatus" class="muted">Checking your session. The page stays here until the session check finishes.</p>
+      </section>
+    </section>
+
+    <section id="loginPanel" class="hero-grid hero-grid-wide start-landing" hidden>
       <section class="box panel-stack hero-copy start-hero">
         <div class="section-title">LOGIN / SIGN UP</div>
         <h1>Sign in or create your CAIt account.</h1>
@@ -53,7 +61,7 @@
     </section>
   </main>
 
-  <script type="module" src="/login.js?v=20260425c"></script>
+  <script type="module" src="/login.js?v=20260427a"></script>
   <script defer src="/analytics-loader.js?v=20260425a"></script>
 </body>
 </html>

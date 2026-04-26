@@ -6223,6 +6223,32 @@ function authSuccessRedirectPath(request, env, cookieState = null) {
   return normalizeLocalRedirectPath(request, env, cookieState?.returnTo || '', '/');
 }
 
+function isLoginPagePath(pathname = '') {
+  return pathname === '/login' || pathname === '/login.html';
+}
+
+function loginPageRedirectPath(request, env) {
+  const url = new URL(request.url);
+  const target = normalizeLocalRedirectPath(request, env, url.searchParams.get('next') || '', '/?tab=work');
+  try {
+    const parsed = new URL(target, baseUrl(request, env));
+    if (isLoginPagePath(parsed.pathname)) return '/?tab=work';
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/?tab=work';
+  } catch {
+    return '/?tab=work';
+  }
+}
+
+async function handleLoginPageRequest(request, env) {
+  const session = await getSession(request, env);
+  if (!hasOAuthBaseSession(session)) return null;
+  const refreshedCookie = await maybeRefreshSessionCookie(session, env);
+  const headers = { 'cache-control': 'no-store' };
+  return refreshedCookie
+    ? redirectWithCookies(loginPageRedirectPath(request, env), [refreshedCookie], headers)
+    : redirect(loginPageRedirectPath(request, env), headers);
+}
+
 function authFailureRedirectPath(request, env, code = 'auth_failed', cookieState = null) {
   const safeCode = String(code || 'auth_failed').trim() || 'auth_failed';
   if (cookieState?.action === 'login' && cookieState?.loginSource) {
@@ -12084,6 +12110,10 @@ export default {
       const refreshedCookie = await maybeRefreshSessionCookie(session, env);
       return refreshedCookie ? jsonWithCookies(status, 200, [refreshedCookie]) : json(status);
     }
+    if (request.method === 'GET' && isLoginPagePath(url.pathname)) {
+      const loginRedirect = await handleLoginPageRequest(request, env);
+      if (loginRedirect) return loginRedirect;
+    }
     if (url.pathname === '/auth/debug' && request.method === 'GET') {
       const current = await currentUserContext(request, env);
       if (!canUseProductionDebugRoute(current, env)) return json({ error: 'Not found' }, 404);
@@ -12679,6 +12709,10 @@ export default {
 
     if (env.ASSETS) {
       const assetUrl = new URL(request.url);
+      const assetRequest = request.method === 'GET' && assetUrl.pathname === '/login'
+        ? new Request(new URL('/login.html', assetUrl), request)
+        : request;
+      if (request.method === 'GET' && assetUrl.pathname === '/login') assetUrl.pathname = '/login.html';
       const noCacheAssetPaths = new Set([
         '/',
         '/index.html',
@@ -12692,7 +12726,7 @@ export default {
         '/work-intent-resolver.js'
       ]);
       const isNoCacheAsset = request.method === 'GET' && noCacheAssetPaths.has(assetUrl.pathname);
-      const response = await env.ASSETS.fetch(request);
+      const response = await env.ASSETS.fetch(assetRequest);
       if (response.status !== 404) {
         return responseWithCookies(
           response,

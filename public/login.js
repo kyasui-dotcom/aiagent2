@@ -2,6 +2,9 @@ const $ = (id) => document.getElementById(id);
 
 const els = {
   flash: $('loginFlash'),
+  checkingPanel: $('loginCheckingPanel'),
+  checkingStatus: $('loginCheckingStatus'),
+  panel: $('loginPanel'),
   hint: $('loginHint'),
   status: $('loginStatus'),
   emailInput: $('loginEmailInput'),
@@ -76,6 +79,15 @@ function flash(message = '', kind = 'info') {
   els.flash.textContent = safe;
 }
 
+function showLoginPanel(visible = true) {
+  if (els.panel) els.panel.hidden = !visible;
+  if (els.checkingPanel) els.checkingPanel.hidden = Boolean(visible);
+}
+
+function setCheckingStatus(message = '') {
+  if (els.checkingStatus) els.checkingStatus.textContent = safeString(message, 240);
+}
+
 async function track(event, meta = {}) {
   const eventName = safeString(event, 64).toLowerCase().replace(/[^a-z0-9_:-]+/g, '_').replace(/^_+|_+$/g, '');
   if (!eventName) return;
@@ -139,6 +151,8 @@ function applyProviderAvailability(status = {}) {
 
 async function loadAuthStatus(route = currentRoute()) {
   authStatusChecked = false;
+  showLoginPanel(false);
+  setCheckingStatus('Checking your session. The page stays here until the session check finishes.');
   applyProviderAvailability({});
   try {
     const response = await fetch('/auth/status', { credentials: 'same-origin' });
@@ -152,15 +166,19 @@ async function loadAuthStatus(route = currentRoute()) {
     }
     if (els.continueBtn) {
       els.continueBtn.hidden = !status?.loggedIn;
-      els.continueBtn.onclick = () => { window.location.href = nextPath; };
+      els.continueBtn.onclick = () => { window.location.replace(nextPath); };
     }
     applyProviderAvailability(status);
     if (status?.loggedIn) {
-      window.location.href = nextPath;
+      setCheckingStatus('You are already signed in. Opening your workspace.');
+      window.location.replace(nextPath);
       return;
     }
+    showLoginPanel(true);
+    await track('sign_in_required_shown', { source: `login_page:${route.source}`, status: 'visible' });
   } catch {
     authStatusChecked = true;
+    showLoginPanel(true);
     if (els.emailInput) els.emailInput.disabled = false;
     if (els.emailBtn) {
       els.emailBtn.hidden = false;
@@ -175,6 +193,7 @@ async function loadAuthStatus(route = currentRoute()) {
       els.github.disabled = false;
     }
     if (els.status) els.status.textContent = 'Could not verify login provider status. You can still try a provider below.';
+    await track('sign_in_required_shown', { source: `login_page:${route.source}`, status: 'unknown' });
   }
 }
 
@@ -246,7 +265,6 @@ async function init() {
   bindProviderButton(els.google, 'google', route);
   bindProviderButton(els.github, 'github', route);
   await track('page_view', { source: `login_page:${route.source}` });
-  await track('sign_in_required_shown', { source: `login_page:${route.source}`, status: 'visible' });
   await loadAuthStatus(route);
 }
 

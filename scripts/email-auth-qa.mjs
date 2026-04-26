@@ -150,6 +150,23 @@ async function main() {
     const csrfToken = String(loggedInStatusRes.body.csrfToken || '').trim();
     assert.ok(csrfToken, 'logged-in auth status should expose a CSRF token for browser writes');
 
+    const loggedInLoginPageRes = await request('/login.html?next=%2F%3Ftab%3Dwork', {
+      headers: {
+        cookie: sessionCookie
+      }
+    });
+    assert.equal(loggedInLoginPageRes.status, 302, 'logged-in users should not receive the login HTML');
+    assert.equal(String(loggedInLoginPageRes.headers.get('location') || ''), '/?tab=work');
+    assert.equal(String(loggedInLoginPageRes.headers.get('cache-control') || ''), 'no-store');
+
+    const loggedInLoginAliasRes = await request('/login?next=%2F%3Ftab%3Dagents', {
+      headers: {
+        cookie: sessionCookie
+      }
+    });
+    assert.equal(loggedInLoginAliasRes.status, 302, 'logged-in users should also skip the /login alias');
+    assert.equal(String(loggedInLoginAliasRes.headers.get('location') || ''), '/?tab=agents');
+
     const firstSnapshotRes = await request('/api/snapshot', {
       headers: {
         cookie: sessionCookie
