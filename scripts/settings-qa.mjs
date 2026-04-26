@@ -144,8 +144,11 @@ const account = upsertAccountSettingsInState(
 assert.equal(account.id, accountIdForLogin('alice'));
 assert.equal(account.billing.currency, 'USD');
 assert.equal(account.billing.country, 'JP');
-assert.equal(account.billing.mode, 'deposit');
+assert.equal(account.billing.mode, 'monthly_invoice');
 assert.equal(account.billing.depositBalance, 1200);
+assert.equal(account.billing.autoTopupEnabled, false);
+assert.equal(account.billing.autoTopupThreshold, 0);
+assert.equal(account.billing.autoTopupAmount, 0);
 assert.equal(account.payout.entityType, 'company');
 assert.equal(account.payout.providerEnabled, true);
 

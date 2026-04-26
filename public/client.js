@@ -373,14 +373,12 @@ const els = {
   stripeCustomerStatus: $('stripeCustomerStatus'),
   stripeProviderStatus: $('stripeProviderStatus'),
   billingSummaryCard: $('billingSummaryCard'),
-  createStripeDepositSessionBtn: $('createStripeDepositSessionBtn'),
   createStripeSetupSessionBtn: $('createStripeSetupSessionBtn'),
   createStripeSubscriptionSessionBtn: $('createStripeSubscriptionSessionBtn'),
   createStripeConnectOnboardingBtn: $('createStripeConnectOnboardingBtn'),
   runStripeProviderMonthlyChargeBtn: $('runStripeProviderMonthlyChargeBtn'),
   runStripeProviderPayoutBtn: $('runStripeProviderPayoutBtn'),
   payoutWithdrawAmount: $('payoutWithdrawAmount'),
-  runStripeAutoTopupBtn: $('runStripeAutoTopupBtn'),
   stripeCustomerActionResult: $('stripeCustomerActionResult'),
   stripeProviderActionResult: $('stripeProviderActionResult'),
   billingSnapshotCard: $('billingSnapshotCard'),
@@ -396,9 +394,6 @@ const els = {
   billingCurrency: $('billingCurrency'),
   billingMode: $('billingMode'),
   billingTaxId: $('billingTaxId'),
-  billingAutoTopupEnabled: $('billingAutoTopupEnabled'),
-  billingAutoTopupThreshold: $('billingAutoTopupThreshold'),
-  billingAutoTopupAmount: $('billingAutoTopupAmount'),
   billingSubscriptionPlan: $('billingSubscriptionPlan'),
   billingSubscriptionOverageMode: $('billingSubscriptionOverageMode'),
   billingPurchaseOrderRef: $('billingPurchaseOrderRef'),
@@ -474,11 +469,6 @@ const els = {
   adminAgentsPager: $('adminAgentsPager'),
   adminFeedbackPager: $('adminFeedbackPager'),
   adminEventsPager: $('adminEventsPager'),
-  depositModal: $('depositModal'),
-  depositModalAmount: $('depositModalAmount'),
-  depositModalSummary: $('depositModalSummary'),
-  confirmDepositModalBtn: $('confirmDepositModalBtn'),
-  cancelDepositModalBtn: $('cancelDepositModalBtn'),
   planModal: $('planModal'),
   planModalPlan: $('planModalPlan'),
   planModalSummary: $('planModalSummary'),
@@ -573,11 +563,6 @@ const state = {
   agentSetupCompletedId: null,
   showAgentList: false,
   settingsPeriod: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
-  depositDraftAmount: '20',
-  depositIntentArmed: false,
-  depositLaunchInFlight: false,
-  depositReturnTab: 'settings',
-  depositContext: 'settings',
   planIntentArmed: false,
   eventFilter: '',
   currentTab: 'start',
@@ -2943,7 +2928,7 @@ function temporaryInvoiceAccountLabel() {
 async function submitTemporaryInvoiceRequest(options = {}) {
   const kind = String(options.kind || 'payment').trim().toLowerCase();
   const plan = String(options.plan || '').trim().toLowerCase();
-  const context = String(options.context || state.depositContext || state.currentTab || 'settings').trim().toLowerCase();
+  const context = String(options.context || state.currentTab || 'settings').trim().toLowerCase();
   const amount = Number(options.amount || 0);
   const amountLine = amount > 0 ? usdFormatter.format(amount) : '-';
   const email = temporaryInvoiceRequestEmail();
@@ -3005,24 +2990,6 @@ async function submitTemporaryInvoiceRequest(options = {}) {
     promptChars: message.length
   });
   return result;
-}
-
-function openDepositModal(options = {}) {
-  const context = String(options.context || 'settings').trim().toLowerCase() || 'settings';
-  openSettingsSection('payments');
-  safeText(els.stripeCustomerActionResult, [
-    'Prepaid balance checkout has been removed.',
-    'Use REGISTER CARD for month-end billing before sending paid orders.',
-    context === 'order' ? 'After card registration, return to Work Chat and press SEND ORDER again.' : ''
-  ].filter(Boolean).join('\n'));
-  flash('Prepaid balance checkout was removed. Register a card for month-end billing.', 'warn');
-}
-
-function closeDepositModal() {
-  state.depositIntentArmed = false;
-  state.depositContext = 'settings';
-  state.depositReturnTab = 'settings';
-  setElementVisible(els.depositModal, false);
 }
 
 function openPlanModal() {
@@ -13237,7 +13204,7 @@ function orderFundingErrorInfo(error) {
   const configuredMode = String(account?.billing?.mode || billingProfile?.configuredMode || '').trim().toLowerCase();
   const savedCard = Boolean(accountStripe.defaultPaymentMethodId) || String(accountStripe.defaultPaymentMethodStatus || '') === 'ready';
   const paymentLike = Number(error?.status || 0) === 402
-    || ['payment_required', 'insufficient_deposit', 'payment_method_missing', 'stripe_auto_topup_failed', 'auto_topup_not_captured'].includes(code)
+    || ['payment_required', 'payment_method_missing'].includes(code)
     || /payment|required|deposit|funding|balance/i.test(message);
   if (!paymentLike) return null;
   const registerCardRequired = true;
@@ -20142,7 +20109,7 @@ function handleFlexibleToolAction(action = '', actionLabel = '') {
     openSettingsSection('keys');
     return;
   }
-  if (kind === 'open_deposit_modal' || kind === 'register_card') {
+  if (kind === 'register_card') {
     openSettingsSection('payments');
     window.requestAnimationFrame(() => els.createStripeSetupSessionBtn?.focus());
     return;
@@ -21100,25 +21067,17 @@ function toggleSettingsInputs(disabled) {
     els.apiKeyMode,
     els.apiKeyLabel,
     els.createApiKeyBtn,
-    els.createStripeDepositSessionBtn,
-    els.depositModalAmount,
-    els.confirmDepositModalBtn,
-    els.cancelDepositModalBtn,
     els.createStripeSetupSessionBtn,
     els.createStripeSubscriptionSessionBtn,
     els.createStripeConnectOnboardingBtn,
     els.runStripeProviderPayoutBtn,
     els.payoutWithdrawAmount,
-    els.runStripeAutoTopupBtn,
     els.billingMode,
     els.billingLegalName,
     els.billingCompanyName,
     els.billingEmail,
     els.billingCountry,
     els.billingCurrency,
-    els.billingAutoTopupEnabled,
-    els.billingAutoTopupThreshold,
-    els.billingAutoTopupAmount,
     els.billingSubscriptionPlan,
     els.billingSubscriptionOverageMode,
     els.billingTaxId,
@@ -21370,8 +21329,7 @@ function renderStripeTools(account = null, auth = null) {
       'REQUEST PLAN INVOICE does the same for STARTER or PRO.',
       STRIPE_CARD_SETUP_DURING_TEMPORARY_BILLING_ENABLED
         ? 'Payment-method setup opens a hosted setup page only. Orders still use monthly invoice/manual confirmation until automated billing is explicitly re-enabled.'
-        : 'Card setup is paused in this temporary mode.',
-      'Prepaid balance and automatic prepaid charging are removed.'
+        : 'Card setup is paused in this temporary mode.'
     ].join('\n'));
     safeText(els.stripeProviderActionResult, [
       ...temporaryInvoiceNoticeLines('payout'),
@@ -21500,8 +21458,7 @@ function renderStripeTools(account = null, auth = null) {
   safeText(els.stripeCustomerActionResult, [
     'Payment-method setup opens a hosted setup page and enables month-end billing after confirmation.',
     'Month-end billing accrues settled order costs through the month, then charges the saved card after closing.',
-    'OPEN PLAN CHECKOUT opens a popup where you choose STARTER or PRO first.',
-    'Prepaid balance checkout is removed. Use REGISTER CARD for buyer billing.'
+    'OPEN PLAN CHECKOUT opens a popup where you choose STARTER or PRO first.'
   ].join('\n'));
   safeText(els.stripeProviderActionResult, [
     connectReady
@@ -21710,9 +21667,6 @@ function renderSettings(account, monthlySummary, auth) {
   setInputValue(els.billingCountry, billing.country || 'JP');
   setInputValue(els.billingCurrency, billing.currency || 'USD');
   setInputValue(els.billingMode, billing.mode || 'monthly_invoice');
-  setInputValue(els.billingAutoTopupEnabled, 'false');
-  setInputValue(els.billingAutoTopupThreshold, '0');
-  setInputValue(els.billingAutoTopupAmount, '0');
   setInputValue(els.billingSubscriptionPlan, billing.subscriptionPlan || 'none');
   setInputValue(els.billingSubscriptionOverageMode, billing.subscriptionOverageMode || 'monthly_invoice');
   setInputValue(els.billingTaxId, billing.taxId);
@@ -23368,39 +23322,6 @@ if (els.apiKeyTable) els.apiKeyTable.onclick = (event) => {
     await refresh();
   });
 };
-if (els.createStripeDepositSessionBtn) els.createStripeDepositSessionBtn.onclick = () => {
-  if (!ensureSettingsLogin()) return;
-  openSettingsSection('payments');
-  window.requestAnimationFrame(() => els.createStripeSetupSessionBtn?.focus());
-  safeText(els.stripeCustomerActionResult, [
-    'Prepaid balance checkout has been removed.',
-    'Use REGISTER CARD for month-end billing.'
-  ].join('\n'));
-  flash('Use REGISTER CARD for month-end billing.', 'warn');
-};
-if (els.confirmDepositModalBtn) els.confirmDepositModalBtn.onclick = () => {
-  if (!ensureSettingsLogin()) return;
-  runAction(els.confirmDepositModalBtn, async () => {
-    closeDepositModal();
-    openSettingsSection('payments');
-    safeText(els.stripeCustomerActionResult, 'Prepaid balance checkout has been removed. Use REGISTER CARD for month-end billing.');
-    flash('Use REGISTER CARD for month-end billing.', 'warn');
-  });
-};
-if (els.cancelDepositModalBtn) els.cancelDepositModalBtn.onclick = () => closeDepositModal();
-if (els.depositModal) {
-  els.depositModal.onclick = (event) => {
-    if (event.target === els.depositModal) closeDepositModal();
-  };
-}
-if (els.depositModalAmount) {
-  els.depositModalAmount.onkeydown = (event) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      els.confirmDepositModalBtn?.click();
-    }
-  };
-}
 if (els.createStripeSetupSessionBtn) els.createStripeSetupSessionBtn.onclick = () => {
   if (!ensureSettingsLogin()) return;
   runAction(els.createStripeSetupSessionBtn, async () => {
@@ -23558,17 +23479,7 @@ if (els.runStripeProviderPayoutBtn) els.runStripeProviderPayoutBtn.onclick = () 
     await refresh();
   });
 };
-if (els.runStripeAutoTopupBtn) els.runStripeAutoTopupBtn.onclick = () => {
-  if (!ensureSettingsLogin()) return;
-  runAction(els.runStripeAutoTopupBtn, async () => {
-    safeText(els.stripeCustomerActionResult, 'Automatic prepaid charging has been removed. Use REGISTER CARD for month-end billing.');
-    flash('Automatic prepaid charging has been removed.', 'warn');
-  });
-};
 window.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && els.depositModal && !els.depositModal.hidden) {
-    closeDepositModal();
-  }
   if (event.key === 'Escape' && els.planModal && !els.planModal.hidden) {
     closePlanModal();
   }
@@ -23594,9 +23505,6 @@ if (els.saveBillingSettingsBtn) els.saveBillingSettingsBtn.onclick = () => {
       billingEmail: els.billingEmail?.value || '',
       country: els.billingCountry?.value || 'JP',
       currency: els.billingCurrency?.value || 'USD',
-      autoTopupEnabled: false,
-      autoTopupThreshold: 0,
-      autoTopupAmount: 0,
       subscriptionPlan: els.billingSubscriptionPlan?.value || 'none',
       subscriptionOverageMode: els.billingSubscriptionOverageMode?.value || 'monthly_invoice',
       taxId: els.billingTaxId?.value || '',
@@ -23974,7 +23882,6 @@ initAnalytics();
 loadManifestExample();
 {
   const initialRoute = readInitialRouteState();
-  closeDepositModal();
   closePlanModal();
   state.routeAgentId = initialRoute.agentId;
   if (initialRoute.settingsSection) state.settingsSection = initialRoute.settingsSection;
@@ -23993,7 +23900,6 @@ loadManifestExample();
 }
 
 window.addEventListener('pageshow', () => {
-  closeDepositModal();
   closePlanModal();
 });
 document.addEventListener('visibilitychange', () => {

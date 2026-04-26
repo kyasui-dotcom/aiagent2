@@ -6,9 +6,9 @@ import { MANIFEST_CANDIDATE_PATHS, assessAgentRegistrationSafety, buildDraftMani
 import { agentReviewRouteBlockReason, applyAgentReviewToAgentRecord, isAgentReviewApproved, manualAgentReviewFromBody, runAgentAutoReview } from './lib/agent-review.js';
 import { runAgentOnboardingCheck } from './lib/onboarding.js';
 import { isBuiltInSampleAgent, sampleKindFromAgent, verifyAgentByHealthcheck } from './lib/verify.js';
-import { BILLING_DISPLAY_CURRENCY, WELCOME_CREDITS_GRANT_AMOUNT, accountIdForLogin, accountIdentityForProvider, accountSettingsForIdentity, accountSettingsForLogin, agentTagsFromRecord, aliasLoginsForAccount, applyStripeRefundToAccount, applySubscriptionRefillToAccount, authenticateOrderApiKey, billingAuditsForJobIds, billingModeFromJob, billingPeriodId, billingProfileForAccount, buildAdminDashboard, buildAgentId, buildConversionAnalytics, buildFollowupConversationContext, buildIntakeClarification, buildMonthlyAccountSummary, chatSessionIdForJob, chatTrainingExamplesForClient, chatTranscriptsForClient, connectorActionLabel, connectorOAuthActionInstruction, createChatTranscript, createConversionEventPayload, createFeedbackReport, createOrderApiKeyInState, createRecurringOrderInState, defaultLoginForAuthUser, deleteRecurringOrderInState, displayCurrencyToLedgerAmount, dueRecurringOrders, estimateBilling, estimateRunWindow, feedbackReportsForClient, formatFeedbackReportEmail, hideChatMemoryTranscriptForLoginInState, inferAgentTagsFromSignals, inferTaskSequence, inferTaskType, isAgentOwnedByLogin, isBillableJob, isJobVisibleToLogin, isPrivateNetworkHostname, jobsVisibleToLogin, ledgerAmountToDisplayCurrency, linkIdentityToAccountInState, makeEvent, markRecurringOrderRunInState, maybeGrantWelcomeCreditsForSignupInState, maybeGrantWelcomeCreditsForVerifiedAgentInState, mergeAccountsInState, mergeProtectedPromptSourceIntoInput, normalizeAgentTags, normalizeTaskTypes, nowIso, optimizeOrderPromptForBroker, promptInjectionGuardForPrompt, providerMonthlyBillingLedgerForLogin, providerPayoutLedgerForLogin, publicEventView, recordProviderMonthlyChargeInAccount, recurringOrderToJobPayload, recurringOrdersVisibleToLogin, recordStripeTopupInAccount, recoverMissingAccountsInState, releaseBillingReservationInState, requesterContextFromUser, reserveBillingEstimateInState, revokeOrderApiKeyInState, sanitizeAccountSettingsForClient, sanitizeBillingSettingsPatch, sanitizeExecutorPreferencesPatch, sanitizeFeedbackReportForClient, sanitizePayoutSettingsPatch, settleBillingForJobInState, suggestAutoTopupChargeAmount, touchOrderApiKeyUsageInState, updateChatTranscriptReviewInState, updateFeedbackReportInState, updateRecurringOrderInState, upsertAccountSettingsForIdentityInState, upsertAccountSettingsInState } from './lib/shared.js';
+import { BILLING_DISPLAY_CURRENCY, WELCOME_CREDITS_GRANT_AMOUNT, accountIdForLogin, accountIdentityForProvider, accountSettingsForIdentity, accountSettingsForLogin, agentTagsFromRecord, aliasLoginsForAccount, applyStripeRefundToAccount, applySubscriptionRefillToAccount, authenticateOrderApiKey, billingAuditsForJobIds, billingModeFromJob, billingPeriodId, billingProfileForAccount, buildAdminDashboard, buildAgentId, buildConversionAnalytics, buildFollowupConversationContext, buildIntakeClarification, buildMonthlyAccountSummary, chatSessionIdForJob, chatTrainingExamplesForClient, chatTranscriptsForClient, connectorActionLabel, connectorOAuthActionInstruction, createChatTranscript, createConversionEventPayload, createFeedbackReport, createOrderApiKeyInState, createRecurringOrderInState, defaultLoginForAuthUser, deleteRecurringOrderInState, displayCurrencyToLedgerAmount, dueRecurringOrders, estimateBilling, estimateRunWindow, feedbackReportsForClient, formatFeedbackReportEmail, hideChatMemoryTranscriptForLoginInState, inferAgentTagsFromSignals, inferTaskSequence, inferTaskType, isAgentOwnedByLogin, isBillableJob, isJobVisibleToLogin, isPrivateNetworkHostname, jobsVisibleToLogin, ledgerAmountToDisplayCurrency, linkIdentityToAccountInState, makeEvent, markRecurringOrderRunInState, maybeGrantWelcomeCreditsForSignupInState, maybeGrantWelcomeCreditsForVerifiedAgentInState, mergeAccountsInState, mergeProtectedPromptSourceIntoInput, normalizeAgentTags, normalizeTaskTypes, nowIso, optimizeOrderPromptForBroker, promptInjectionGuardForPrompt, providerMonthlyBillingLedgerForLogin, providerPayoutLedgerForLogin, publicEventView, recordProviderMonthlyChargeInAccount, recurringOrderToJobPayload, recurringOrdersVisibleToLogin, recordStripeTopupInAccount, recoverMissingAccountsInState, releaseBillingReservationInState, requesterContextFromUser, reserveBillingEstimateInState, revokeOrderApiKeyInState, sanitizeAccountSettingsForClient, sanitizeBillingSettingsPatch, sanitizeExecutorPreferencesPatch, sanitizeFeedbackReportForClient, sanitizePayoutSettingsPatch, settleBillingForJobInState, touchOrderApiKeyUsageInState, updateChatTranscriptReviewInState, updateFeedbackReportInState, updateRecurringOrderInState, upsertAccountSettingsForIdentityInState, upsertAccountSettingsInState } from './lib/shared.js';
 import { agentPatternFitScore, applyGuestTrialSignupDebitInState, buildAgentTeamDeliveryOutput, deliveryQualityScoreForJob, ensureGuestTrialAccountInState, guestTrialLoginForVisitorId, guestTrialUsageForVisitorInState, isAgentTeamLaunchIntent, isFreeWebGrowthIntent, isLargeAgentTeamIntent, normalizeGuestTrialRequest, orderPreflightForAgent, ownChatMemoryForClient } from './lib/shared.js';
-import { amountFromMinorUnits, createConnectedAccount, createConnectedAccountTransfer, createConnectOnboardingLink, createDepositCheckoutSession, createOffSessionMonthlyInvoicePaymentIntent, createOffSessionProviderMonthlyPaymentIntent, createOffSessionTopupPaymentIntent, createSetupCheckoutSession, createSubscriptionCheckoutSession, ensureStripeCustomer, resolveSubscriptionPlanFromPriceId, retrieveConnectedAccount, retrievePaymentIntent, retrieveSetupIntent, retrieveSubscription, stripeConfigFromEnv, stripeConfigured, stripePublicConfig, updateCustomerDefaultPaymentMethod, verifyStripeWebhookSignature } from './lib/stripe.js';
+import { amountFromMinorUnits, createConnectedAccount, createConnectedAccountTransfer, createConnectOnboardingLink, createOffSessionMonthlyInvoicePaymentIntent, createOffSessionProviderMonthlyPaymentIntent, createSetupCheckoutSession, createSubscriptionCheckoutSession, ensureStripeCustomer, resolveSubscriptionPlanFromPriceId, retrieveConnectedAccount, retrievePaymentIntent, retrieveSetupIntent, retrieveSubscription, stripeConfigFromEnv, stripeConfigured, stripePublicConfig, updateCustomerDefaultPaymentMethod, verifyStripeWebhookSignature } from './lib/stripe.js';
 import { buildXAuthorizeUrl, buildXPkcePair, exchangeXOAuthCode, fetchXProfile, postXTweet, publicXConnectorStatus, validateXPostText, xConnectorFromOAuthToken, xOAuthConfigured, xTokenEncryptionConfigured } from './lib/x-connector.js';
 import { connectorTokenEncryptionConfigured, decryptConnectorSecret, githubConnectorFromOAuthToken, googleConnectorFromOAuthToken } from './lib/connector-secrets.js';
 import {
@@ -4786,14 +4786,6 @@ async function ensureStripeCustomerForCurrent(storage, request, env, current) {
   return { config, account: updated, customerId: created.customerId };
 }
 
-async function createStripeDepositSessionForCurrent(storage, request, env) {
-  return {
-    error: 'Prepaid balance checkout has been removed. Register a card for month-end billing instead.',
-    code: 'prepaid_removed',
-    statusCode: 410
-  };
-}
-
 async function createStripeSetupSessionForCurrent(storage, request, env) {
   const current = await currentUserContext(request, env);
   if (!current.user) return { error: 'Login required', statusCode: 401 };
@@ -5059,22 +5051,6 @@ async function createStripeProviderPayoutForCurrent(storage, request, env) {
     pending_before: pendingBalance,
     pending_after: Math.max(0, pendingBalance - payoutAmount),
     account: sanitizeAccountSettingsForClient(updated)
-  };
-}
-
-async function attemptStripeAutoTopup(storage, request, env, current, neededNow) {
-  return {
-    ok: false,
-    code: 'prepaid_removed',
-    error: 'Automatic prepaid charging has been removed. Register a card for month-end billing instead.'
-  };
-}
-
-async function triggerStripeAutoTopupForCurrent(storage, request, env) {
-  return {
-    error: 'Automatic prepaid charging has been removed. Register a card for month-end billing instead.',
-    code: 'prepaid_removed',
-    statusCode: 410
   };
 }
 
@@ -10496,7 +10472,7 @@ async function performSingleJobCreate(storage, env, current, body, options = {})
   let stripeFunding = null;
   if (current?.login && funding && !funding.ok) {
     await touchUsage();
-    const guestLimitExceeded = current?.guestTrial && ['insufficient_deposit', 'payment_required'].includes(String(funding.code || ''));
+    const guestLimitExceeded = current?.guestTrial && String(funding.code || '') === 'payment_required';
     return {
       error: guestLimitExceeded
         ? `Guest trial covers one order up to ${current.guestTrial.limit || 500} points. Sign in to continue with this larger order.`
@@ -12570,16 +12546,6 @@ export default {
       if (result.error) return json({ error: result.error }, result.statusCode || 400);
       return json(result);
     }
-    if (url.pathname === '/api/stripe/deposit-session' && request.method === 'POST') {
-      try {
-        const result = await createStripeDepositSessionForCurrent(storage, request, env);
-        if (result.error) return json({ error: result.error, code: result.code || null }, result.statusCode || 400);
-        return json(result, 201);
-      } catch (error) {
-        const payload = stripeActionErrorPayload(error);
-        return json(payload, payload.statusCode || 500);
-      }
-    }
     if (url.pathname === '/api/stripe/setup-session' && request.method === 'POST') {
       try {
         const result = await createStripeSetupSessionForCurrent(storage, request, env);
@@ -12621,16 +12587,6 @@ export default {
             minimum_payout_amount: result.minimum_payout_amount ?? null
           }, result.statusCode || 400);
         }
-        return json(result);
-      } catch (error) {
-        const payload = stripeActionErrorPayload(error);
-        return json(payload, payload.statusCode || 500);
-      }
-    }
-    if (url.pathname === '/api/stripe/auto-topup' && request.method === 'POST') {
-      try {
-        const result = await triggerStripeAutoTopupForCurrent(storage, request, env);
-        if (result.error) return json({ error: result.error, code: result.code || null }, result.statusCode || 400);
         return json(result);
       } catch (error) {
         const payload = stripeActionErrorPayload(error);

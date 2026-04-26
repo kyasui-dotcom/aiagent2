@@ -22,7 +22,7 @@ test('live anonymous smoke', async ({ page }) => {
   smokeUrl.searchParams.set('smoke', String(Date.now()));
   await page.goto(smokeUrl.toString(), { waitUntil: 'domcontentloaded' });
 
-  await expect(page.locator('#depositModal')).toBeHidden();
+  await expect(page.locator('#depositModal')).toHaveCount(0);
 
   await expect(page.locator('#topOpenChatBtn')).toBeVisible();
   await expect(page.locator('#mainNavMenu summary')).toContainText('MENU');
@@ -308,5 +308,5 @@ test('live anonymous smoke', async ({ page }) => {
     if (await paymentsTab.isEnabled()) await paymentsTab.click();
   }
   await expect(page.locator('#settingsAccessCard')).toContainText(/Sign in to manage|Signed in as/i);
-  await expect(page.locator('#depositModal')).toBeHidden();
+  await expect(page.locator('#depositModal')).toHaveCount(0);
 });

@@ -117,11 +117,9 @@ Useful local endpoints:
 - `POST /api/agents/:id/verify`
 - `POST /api/agent-callbacks/jobs`
 - `GET /api/stripe/status`
-- `POST /api/stripe/deposit-session`
 - `POST /api/stripe/setup-session`
 - `POST /api/stripe/subscription-session`
 - `POST /api/stripe/connect/onboarding`
-- `POST /api/stripe/auto-topup`
 - `POST /api/stripe/webhook`
 - `GET /auth/x`
 - `GET /auth/x/callback`
@@ -263,20 +261,19 @@ curl -X POST https://aiagent-marketplace.net/api/connectors/x/post \
 After login, open the `SETTINGS` tab and save:
 
 - billing contact details and live billing mode for the customer side
-- deposit / auto top-up / subscription credit settings for self-serve usage
+- saved-card month-end billing and subscription credit settings for self-serve usage
 - provider payout profile details for the supply side
 
 Then use the Stripe actions in `SETTINGS`:
 
-- `Deposit checkout` for balance top-ups
 - `Payment method setup` for saving an off-session payment method
 - `Subscription checkout` for starter/pro plan enrollment
 - `Connect onboarding` for provider payout onboarding
 
 Current subscription defaults:
 
-- `starter`: `$20.00/month` and `$21.00` deposit refill each cycle (`+5%`)
-- `pro`: `$133.33/month` and `$149.33` deposit refill each cycle (`+12%`)
+- `starter`: `$20.00/month` with included monthly credits
+- `pro`: `$133.33/month` with included monthly credits
 
 Sensitive card and bank account data stays in Stripe-hosted flows. CAIt only stores the resulting Stripe IDs and status fields.
 
@@ -293,7 +290,7 @@ Required Stripe env:
 
 ## Public ordering with API key
 
-Issue a CAIt API key in `SETTINGS`, then send it to the public API. Public API usage consumes the same funded deposit or plan balance as Web orders and is included in provider payout settlement when a provider agent completes the work.
+Issue a CAIt API key in `SETTINGS`, then send it to the public API. Public API usage uses the same saved-card month-end billing or subscription credits as Web orders and is included in provider payout settlement when a provider agent completes the work.
 
 OpenClaw-style external chat bridge test:
 
