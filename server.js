@@ -1493,59 +1493,11 @@ async function ensureStripeCustomerForCurrent(current, req) {
   return { config, account: result, customerId: created.customerId };
 }
 async function attemptStripeAutoTopup(current, req, neededNow) {
-  const config = currentStripeConfig(req);
-  if (!stripeConfigured(config)) return { ok: false, code: 'stripe_not_configured', error: 'Stripe is not configured' };
-  const state = await storage.getState();
-  const account = accountSettingsForLogin(state, current.login, current.user, current.authProvider);
-  const ledgerChargeAmount = suggestAutoTopupChargeAmount(account, neededNow, billingPeriodId());
-  if (ledgerChargeAmount <= 0) return { ok: false, code: 'auto_topup_not_needed', error: 'Auto top-up is not needed' };
-  const customerId = account?.stripe?.customerId;
-  const paymentMethodId = account?.stripe?.defaultPaymentMethodId;
-  if (!customerId || !paymentMethodId) {
-    return { ok: false, code: 'payment_method_missing', error: 'Use ADD DEPOSIT or OPEN PLAN CHECKOUT first so Stripe can save a payment method for auto top-up.' };
-  }
-  const intent = await createOffSessionTopupPaymentIntent(config, {
-    account,
-    customerId,
-    paymentMethodId,
-    amount: ledgerAmountToDisplayCurrency(ledgerChargeAmount),
-    currency: BILLING_DISPLAY_CURRENCY,
-    ledgerAmount: ledgerChargeAmount
-  });
-  if (intent.status !== 'succeeded') {
-    return { ok: false, code: 'auto_topup_not_captured', error: `Auto top-up did not complete (${intent.status})`, intent };
-  }
-  let updated = null;
-  await storage.mutate(async (draft) => {
-    const draftAccount = accountSettingsForLogin(draft, current.login, current.user, current.authProvider);
-    const topupHistory = recordStripeTopupInAccount(draftAccount, {
-      kind: 'auto_topup_charge',
-      paymentIntentId: intent.id,
-      amount: ledgerChargeAmount,
-      currency: BILLING_DISPLAY_CURRENCY,
-      createdAt: nowIso(),
-      updatedAt: nowIso()
-    });
-    updated = upsertAccountSettingsInState(draft, current.login, current.user, current.authProvider, {
-      billing: {
-        ...(draftAccount.billing || {}),
-        depositBalance: Number(draftAccount.billing?.depositBalance || 0) + ledgerChargeAmount
-      },
-      stripe: {
-        ...(draftAccount.stripe || {}),
-        customerId,
-        customerStatus: 'ready',
-        lastTopupAmount: ledgerChargeAmount,
-        lastTopupCurrency: BILLING_DISPLAY_CURRENCY,
-        lastTopupAt: nowIso(),
-        topupHistory,
-        lastSyncAt: nowIso(),
-        mode: 'configured'
-      }
-    });
-  });
-  await touchEvent('STRIPE', `${current.login} auto top-up succeeded ${ledgerChargeAmount}`);
-  return { ok: true, amount: ledgerChargeAmount, intent, account: updated };
+  return {
+    ok: false,
+    code: 'prepaid_removed',
+    error: 'Automatic prepaid charging has been removed. Register a card for month-end billing instead.'
+  };
 }
 async function applyStripeWebhookEvent(event) {
   const object = event?.data?.object || {};
@@ -1648,7 +1600,7 @@ async function applyStripeWebhookEvent(event) {
           }
         } catch {}
       }
-      await touchEvent('STRIPE', `${login} deposit top-up completed ${amount}`);
+      await touchEvent('STRIPE', `${login} legacy prepaid balance completed ${amount}`);
       return { ok: true };
     }
     if (metadata.aiagent2_kind === 'payment_method_setup' && object.setup_intent) {
@@ -3175,7 +3127,7 @@ async function appendBillingAudit(job, billing, meta = {}) {
 function billingModeForRequester(current, account = null) {
   if (canViewAdminDashboard(current)) return 'test';
   const profile = billingProfileForAccount(account, current?.apiKey?.mode || '', billingPeriodId());
-  return profile.mode || 'deposit';
+  return profile.mode || 'monthly_invoice';
 }
 
 function billingApiKeyModeForRequester(current) {
@@ -5628,51 +5580,11 @@ async function getStripeStatus(req) {
 }
 
 async function createStripeDepositSessionForCurrent(req) {
-  const current = currentUserContext(req);
-  if (!current.user) return { error: 'Login required', statusCode: 401 };
-  let body;
-  try {
-    body = await parseBody(req);
-  } catch (error) {
-    return { error: error.message, statusCode: 400 };
-  }
-  const ensured = await ensureStripeCustomerForCurrent(current, req);
-  if (ensured.error) return ensured;
-  const displayAmount = Number(body?.amount || 0);
-  const ledgerAmount = displayCurrencyToLedgerAmount(displayAmount);
-  const returnTab = ['work', 'settings'].includes(String(body?.return_tab || body?.returnTab || '').trim().toLowerCase())
-    ? String(body?.return_tab || body?.returnTab || '').trim().toLowerCase()
-    : 'settings';
-  const session = await createDepositCheckoutSession(ensured.config, {
-    account: ensured.account,
-    customerId: ensured.customerId,
-    amount: displayAmount,
-    currency: BILLING_DISPLAY_CURRENCY,
-    baseUrl: baseUrl(req),
-    ledgerAmount,
-    returnTab
-  });
-  await storage.mutate(async (draft) => {
-    const account = accountSettingsForLogin(draft, current.login, current.user, current.authProvider);
-    upsertAccountSettingsInState(draft, current.login, current.user, current.authProvider, {
-      billing: {
-        ...(account.billing || {}),
-        mode: 'monthly_invoice',
-        invoiceEnabled: true,
-        invoiceApproved: false
-      },
-      stripe: {
-        ...(account.stripe || {}),
-        customerId: ensured.customerId,
-        customerStatus: 'ready',
-        pendingTopupCheckoutSessionId: session.id,
-        lastSyncAt: nowIso(),
-        mode: 'configured'
-      }
-    });
-  });
-  await touchEvent('STRIPE', `${current.login} opened deposit checkout`);
-  return { ok: true, checkout_url: session.url, session_id: session.id, amount: ledgerAmount, return_tab: returnTab, stripe: stripeStateForClient(req, ensured.account) };
+  return {
+    error: 'Prepaid balance checkout has been removed. Register a card for month-end billing instead.',
+    code: 'prepaid_removed',
+    statusCode: 410
+  };
 }
 
 async function createStripeSetupSessionForCurrent(req) {
@@ -5944,18 +5856,11 @@ async function createStripeProviderPayoutForCurrent(req) {
 }
 
 async function triggerStripeAutoTopupForCurrent(req) {
-  const current = currentUserContext(req);
-  if (!current.user) return { error: 'Login required', statusCode: 401 };
-  let body;
-  try {
-    body = await parseBody(req);
-  } catch (error) {
-    return { error: error.message, statusCode: 400 };
-  }
-  const amount = displayCurrencyToLedgerAmount(Number(body?.amount || 0));
-  const result = await attemptStripeAutoTopup(current, req, amount);
-  if (!result.ok) return { error: result.error, code: result.code, statusCode: 400 };
-  return { ok: true, amount: result.amount, payment_intent_id: result.intent?.id || null };
+  return {
+    error: 'Automatic prepaid charging has been removed. Register a card for month-end billing instead.',
+    code: 'prepaid_removed',
+    statusCode: 410
+  };
 }
 
 async function triggerStripeMonthlyInvoiceChargeForCurrent(req) {
@@ -6331,25 +6236,13 @@ async function performSingleJobCreate(req, body, current, options = {}) {
         overageMode: null
       };
       if (job.billingReservation.autoTopupAdded > 0) {
-        job.logs.push(`auto top-up added ${job.billingReservation.autoTopupAdded}`);
+        job.logs.push(`legacy auto billing added ${job.billingReservation.autoTopupAdded}`);
       }
       draft.jobs.unshift(job);
     });
   };
   await reserveAndInsert();
   let stripeFunding = null;
-  if (current?.login && funding && !funding.ok && funding.code === 'insufficient_deposit') {
-    const latestState = await storage.getState();
-    const latestAccount = accountSettingsForLogin(latestState, current.login, current.user, current.authProvider);
-    if (latestAccount?.billing?.autoTopupEnabled) {
-      try {
-        stripeFunding = await attemptStripeAutoTopup(current, req, estimatedBilling.total);
-        if (stripeFunding?.ok) await reserveAndInsert();
-      } catch (error) {
-        stripeFunding = { ok: false, code: 'stripe_auto_topup_failed', error: error.message };
-      }
-    }
-  }
   if (current?.login && funding && !funding.ok) {
     await touchUsage();
     const guestLimitExceeded = current?.guestTrial && ['insufficient_deposit', 'payment_required'].includes(String(funding.code || ''));

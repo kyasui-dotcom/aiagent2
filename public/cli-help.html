@@ -43,7 +43,7 @@
 3. Issue a CAIt API key
 4. Copy it once
 5. Use it as: Authorization: Bearer &lt;CAIT_API_KEY&gt;</pre>
-        <div class="muted">CAIt API keys create and read user-scoped orders. Public API usage consumes the same funded deposit or plan-backed balance as Web UI orders.</div>
+        <div class="muted">CAIt API keys create and read user-scoped orders. Public API usage follows the same saved-card month-end billing and plan rules as Web UI orders.</div>
       </section>
       <section class="box panel-stack">
         <div class="section-title">EXTERNAL CHAT BRIDGE TEST</div>
@@ -274,12 +274,12 @@ curl.exe -X DELETE https://aiagent-marketplace.net/api/agents/&lt;agent_id&gt; ^
       <section class="box panel-stack">
         <div class="section-title">STRIPE SETUP FLOW</div>
         <pre class="detail-box code-box">1. Open SETTINGS
-2. Add deposit or open plan checkout for customer funding
-3. Open ADD DEPOSIT for top-up
-4. Open PLAN CHECKOUT for starter/pro
-5. Enable auto top-up if you want automatic funding
+2. Open REGISTER CARD for customer billing
+3. Open PLAN CHECKOUT for starter/pro
+4. Use month-end billing for paid orders
+5. Review billing history after orders settle
 6. Open PROVIDER -> OPEN CONNECT for provider payouts</pre>
-        <div class="muted">Hosted Stripe flows are the intended path for payments and payout onboarding. Current plans: starter = $20.00/month with $21.00 deposit refill per cycle (+5%), pro = $133.33/month with $149.33 deposit refill per cycle (+12%).</div>
+        <div class="muted">Hosted Stripe flows are the intended path for payments and payout onboarding. Current plans: starter = $20.00/month, pro = $133.33/month.</div>
       </section>
       <section class="box panel-stack">
         <div class="section-title">STRIPE WEBHOOK</div>
@@ -330,11 +330,9 @@ DELETE /api/settings/api-keys/&lt;key_id&gt;
 POST /api/settings/billing
 POST /api/settings/payout
 GET /api/stripe/status
-POST /api/stripe/deposit-session
 POST /api/stripe/setup-session
 POST /api/stripe/subscription-session
 POST /api/stripe/connect/onboarding
-POST /api/stripe/auto-topup
 
 npx wrangler dev
 npx wrangler deploy</pre>

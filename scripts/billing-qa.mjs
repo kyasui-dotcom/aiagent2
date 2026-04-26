@@ -212,7 +212,9 @@ upsertAccountSettingsInState(state, 'alice', user, 'github-app', {
   },
   stripe: {
     subscriptionStatus: 'active',
-    subscriptionPlan: 'starter'
+    subscriptionPlan: 'starter',
+    defaultPaymentMethodId: 'pm_alice_ready',
+    defaultPaymentMethodStatus: 'ready'
   }
 });
 
@@ -220,9 +222,10 @@ const reserved = reserveBillingEstimateInState(state, 'alice', user, 'github-app
 assert.equal(reserved.ok, true);
 assert.equal(reserved.reservation.mode, 'subscription');
 assert.equal(reserved.reservation.reservedCredits, 100);
-assert.equal(reserved.reservation.reservedDeposit, 80);
+assert.equal(reserved.reservation.reservedDeposit, 0);
+assert.equal(reserved.reservation.overageMode, 'monthly_invoice');
 assert.equal(reserved.profile.subscriptionCreditsReserved, 100);
-assert.equal(reserved.profile.depositReserved, 80);
+assert.equal(reserved.profile.depositReserved, 0);
 
 const job = {
   id: 'job_sub_1',
@@ -232,23 +235,26 @@ const job = {
 };
 const settled = settleBillingForJobInState(state, job, { total: 150 });
 assert.equal(settled.creditsApplied, 100);
-assert.equal(settled.depositApplied, 50);
+assert.equal(settled.depositApplied, 0);
+assert.equal(settled.invoiceApplied, 50);
 assert.equal(job.actualBilling?.funding?.creditsApplied, 100);
-assert.equal(job.actualBilling?.funding?.depositApplied, 50);
+assert.equal(job.actualBilling?.funding?.invoiceApplied, 50);
 const settledProfile = billingProfileForAccount(state.accounts[0], '', '2026-04');
 assert.equal(settledProfile.subscriptionCreditsUsed, 100);
 assert.equal(settledProfile.subscriptionCreditsAvailable, 0);
-assert.equal(settledProfile.depositBalance, 450);
+assert.equal(settledProfile.depositBalance, 500);
 assert.equal(settledProfile.depositReserved, 0);
+assert.equal(settledProfile.arrearsTotal, 50);
 
-const reservedDeposit = reserveBillingEstimateInState(state, 'alice', user, 'github-app', 500, { period: '2026-04', allowSyntheticTopup: true });
-assert.equal(reservedDeposit.ok, true);
-assert.ok(reservedDeposit.reservation.autoTopupAdded >= 300);
+const reservedOverage = reserveBillingEstimateInState(state, 'alice', user, 'github-app', 500, { period: '2026-04', allowSyntheticTopup: true });
+assert.equal(reservedOverage.ok, true);
+assert.equal(reservedOverage.reservation.reservedDeposit, 0);
+assert.equal(reservedOverage.reservation.autoTopupAdded, 0);
 const failedJob = {
   id: 'job_fail_1',
   status: 'failed',
-  input: { _broker: { requester: requesterContextFromUser(user, 'github-app'), billingMode: 'deposit' } },
-  billingReservation: reservedDeposit.reservation
+  input: { _broker: { requester: requesterContextFromUser(user, 'github-app'), billingMode: 'subscription' } },
+  billingReservation: reservedOverage.reservation
 };
 releaseBillingReservationInState(state, failedJob);
 const releasedProfile = billingProfileForAccount(state.accounts[0], '', '2026-04');
@@ -284,12 +290,11 @@ upsertAccountSettingsInState(inactiveState, 'carol', inactiveUser, 'github-app',
   }
 });
 const inactiveReserved = reserveBillingEstimateInState(inactiveState, 'carol', inactiveUser, 'github-app', 120, { period: '2026-04' });
-assert.equal(inactiveReserved.ok, true);
-assert.equal(inactiveReserved.reservation.mode, 'deposit');
-assert.equal(inactiveReserved.reservation.reservedCredits, 0);
-assert.equal(inactiveReserved.reservation.reservedDeposit, 120);
+assert.equal(inactiveReserved.ok, false);
+assert.equal(inactiveReserved.code, 'payment_method_missing');
+assert.equal(inactiveReserved.reservation.mode, 'monthly_invoice');
 const inactiveProfile = billingProfileForAccount(inactiveState.accounts[0], '', '2026-04');
-assert.equal(inactiveProfile.mode, 'deposit');
+assert.equal(inactiveProfile.mode, 'monthly_invoice');
 assert.equal(inactiveProfile.subscriptionPlan, 'none');
 assert.equal(inactiveProfile.subscriptionIncludedCredits, 0);
 assert.equal(inactiveProfile.subscriptionCreditsAvailable, 0);
@@ -305,7 +310,7 @@ upsertAccountSettingsInState(paymentRequiredState, 'dave', paymentRequiredUser, 
 });
 const paymentRequired = reserveBillingEstimateInState(paymentRequiredState, 'dave', paymentRequiredUser, 'github-app', 120, { period: '2026-04' });
 assert.equal(paymentRequired.ok, false);
-assert.equal(paymentRequired.code, 'payment_required');
+assert.equal(paymentRequired.code, 'payment_method_missing');
 
 const welcomeState = { agents: [], jobs: [], accounts: [] };
 const welcomeUser = { login: 'hana', name: 'Hana Example' };
@@ -416,7 +421,7 @@ upsertAccountSettingsInState(invoiceFallbackState, 'erin', invoiceFallbackUser, 
 const invoiceFallback = reserveBillingEstimateInState(invoiceFallbackState, 'erin', invoiceFallbackUser, 'github-app', 120, { period: '2026-04' });
 assert.equal(invoiceFallback.ok, false);
 assert.equal(invoiceFallback.code, 'payment_method_missing');
-assert.equal(invoiceFallback.profile.mode, 'deposit');
+assert.equal(invoiceFallback.profile.mode, 'monthly_invoice');
 
 const approvedInvoiceState = { agents: [], jobs: [], accounts: [] };
 const approvedInvoiceUser = { login: 'fran', name: 'Fran Example' };
@@ -456,21 +461,28 @@ upsertAccountSettingsInState(providerState, 'gina', providerUser, 'github-app', 
     mode: 'deposit',
     depositBalance: 500,
     autoTopupEnabled: false
+  },
+  stripe: {
+    defaultPaymentMethodId: 'pm_gina_ready',
+    defaultPaymentMethodStatus: 'ready'
   }
 });
 const providerReserved = reserveBillingEstimateInState(providerState, 'gina', providerUser, 'github-app', 120, { period: '2026-04' });
 assert.equal(providerReserved.ok, true);
+assert.equal(providerReserved.reservation.mode, 'monthly_invoice');
 const providerJob = {
   id: 'job_provider_1',
   status: 'completed',
   assignedAgentId: 'agent_provider_1',
-  input: { _broker: { requester: requesterContextFromUser(providerUser, 'github-app'), billingMode: 'deposit' } },
+  input: { _broker: { requester: requesterContextFromUser(providerUser, 'github-app'), billingMode: 'monthly_invoice' } },
   billingReservation: providerReserved.reservation
 };
 const providerSettled = settleBillingForJobInState(providerState, providerJob, { total: 120, agentPayout: 15 });
-assert.equal(providerSettled.depositApplied, 120);
+assert.equal(providerSettled.depositApplied, 0);
+assert.equal(providerSettled.invoiceApplied, 120);
 const providerCustomerProfile = billingProfileForAccount(providerState.accounts.find((account) => account.login === 'gina'), '', '2026-04');
-assert.equal(providerCustomerProfile.depositBalance, 380);
+assert.equal(providerCustomerProfile.depositBalance, 500);
+assert.equal(providerCustomerProfile.arrearsTotal, 120);
 const providerAccount = providerState.accounts.find((account) => account.login === 'samurai');
 assert.equal(Number(providerAccount?.payout?.pendingBalance || 0), 15);
 

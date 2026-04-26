@@ -790,6 +790,20 @@ globalThis.fetch = async (input, init) => {
       })
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   }
+  if (url === 'https://api.stripe.com/v1/setup_intents/seti_worker_qa_card_1') {
+    return new Response(JSON.stringify({
+      id: 'seti_worker_qa_card_1',
+      object: 'setup_intent',
+      payment_method: 'pm_worker_qa_dave'
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+  if (url === 'https://api.stripe.com/v1/customers/cus_worker_qa_dave') {
+    return new Response(JSON.stringify({
+      id: 'cus_worker_qa_dave',
+      object: 'customer',
+      invoice_settings: { default_payment_method: 'pm_worker_qa_dave' }
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
   if (url === 'https://worker-qa.example/manifest.json') {
     return new Response(JSON.stringify({
       schema_version: 'agent-manifest/v1',
@@ -1465,64 +1479,39 @@ try {
   }, { sessionCookie: daveSession });
   assert.equal(unfundedOrder.status, 402);
   assert.equal(unfundedOrder.body.code, 'payment_method_missing');
-  assert.equal(unfundedOrder.body.billing_profile.mode, 'deposit');
+  assert.equal(unfundedOrder.body.billing_profile.mode, 'monthly_invoice');
 
-  const daveDepositMode = await request('/api/settings/billing', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      mode: 'deposit',
-      depositBalance: 0,
-      autoTopupEnabled: false
-    })
-  }, { sessionCookie: daveSession });
-  assert.equal(daveDepositMode.status, 200);
-  assert.equal(daveDepositMode.body.account.billing.mode, 'deposit');
-
-  const depositUnfundedOrder = await request('/api/jobs', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      parent_agent_id: 'qa-runner',
-      agent_id: imported.body.agent.id,
-      task_type: 'ops',
-      prompt: 'Run the ops task without deposit funding.'
-    })
-  }, { sessionCookie: daveSession });
-  assert.equal(depositUnfundedOrder.status, 402);
-  assert.equal(depositUnfundedOrder.body.code, 'payment_required');
-  assert.equal(depositUnfundedOrder.body.billing_profile.mode, 'deposit');
-
-  const topupPayload = JSON.stringify({
-    id: 'evt_worker_qa_topup_1',
+  const setupPayload = JSON.stringify({
+    id: 'evt_worker_qa_setup_1',
     type: 'checkout.session.completed',
     data: {
       object: {
-        id: 'cs_worker_qa_topup_1',
-        payment_status: 'paid',
+        id: 'cs_worker_qa_setup_1',
+        customer: 'cus_worker_qa_dave',
+        setup_intent: 'seti_worker_qa_card_1',
         metadata: {
-          aiagent2_kind: 'deposit_topup',
-          aiagent2_account_login: 'dave',
-          aiagent2_currency: 'USD',
-          aiagent2_ledger_amount: '1000'
+          aiagent2_kind: 'payment_method_setup',
+          aiagent2_account_login: 'dave'
         }
       }
     }
   });
-  const topupWebhook = await request('/api/stripe/webhook', {
+  const setupWebhook = await request('/api/stripe/webhook', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'stripe-signature': stripeSignatureForPayload(topupPayload)
+      'stripe-signature': stripeSignatureForPayload(setupPayload)
     },
-    body: topupPayload
+    body: setupPayload
   });
-  assert.equal(topupWebhook.status, 200);
-  assert.equal(topupWebhook.body.ok, true);
+  assert.equal(setupWebhook.status, 200);
+  assert.equal(setupWebhook.body.ok, true);
 
-  const daveSettingsFunded = await request('/api/settings', {}, { sessionCookie: daveSession });
-  assert.equal(daveSettingsFunded.status, 200);
-  assert.equal(daveSettingsFunded.body.account.billing.depositBalance, 1000);
+  const daveSettingsCardReady = await request('/api/settings', {}, { sessionCookie: daveSession });
+  assert.equal(daveSettingsCardReady.status, 200);
+  assert.equal(daveSettingsCardReady.body.account.billing.depositBalance, 0);
+  assert.equal(daveSettingsCardReady.body.account.billing.mode, 'monthly_invoice');
+  assert.equal(daveSettingsCardReady.body.account.stripe.defaultPaymentMethodId, 'pm_worker_qa_dave');
 
   const issuedOrderKey = await request('/api/settings/api-keys', {
     method: 'POST',
@@ -1557,9 +1546,9 @@ try {
   const daveSettingsAfterApiKeyOrder = await request('/api/settings', {}, { sessionCookie: daveSession });
   assert.equal(daveSettingsAfterApiKeyOrder.status, 200);
   assert.equal(
-    daveSettingsAfterApiKeyOrder.body.account.billing.depositBalance,
-    1000 - apiKeyOrderTotal,
-    'CAIt API key usage should consume the same customer deposit balance as Web UI usage'
+    daveSettingsAfterApiKeyOrder.body.account.billing.arrearsTotal,
+    apiKeyOrderTotal,
+    'CAIt API key usage should accrue to the same customer month-end billing as Web UI usage'
   );
 
   const fundedOrder = await request('/api/jobs', {
@@ -1669,8 +1658,9 @@ try {
 
   const daveSettingsAfter = await request('/api/settings', {}, { sessionCookie: daveSession });
   assert.equal(daveSettingsAfter.status, 200);
-  const expectedDaveDeposit = +(1000 - apiKeyOrderTotal - Number(fundedJob.body.job.actualBilling.total || 0) - asyncDispatchOrderTotal - Number(longPromptJob.body.job.actualBilling.total || 0) - Number(followupJob.body.job.actualBilling.total || 0)).toFixed(2);
-  assert.equal(daveSettingsAfter.body.account.billing.depositBalance, expectedDaveDeposit);
+  const expectedDaveArrears = +(apiKeyOrderTotal + Number(fundedJob.body.job.actualBilling.total || 0) + asyncDispatchOrderTotal + Number(longPromptJob.body.job.actualBilling.total || 0) + Number(followupJob.body.job.actualBilling.total || 0)).toFixed(2);
+  assert.equal(daveSettingsAfter.body.account.billing.depositBalance, 0);
+  assert.equal(daveSettingsAfter.body.account.billing.arrearsTotal, expectedDaveArrears);
 
   const providerSettingsAfter = await request('/api/settings', {}, { sessionCookie: aliceSession });
   assert.equal(providerSettingsAfter.status, 200);

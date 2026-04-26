@@ -218,7 +218,7 @@ const AGENT_SEO_DETAILS = {
 const HOWTO_STEPS_BY_SLUG = {
   'no-api-key-ai-agents': [
     'Sign in to AIagent2 with Google or GitHub.',
-    'Add deposit or activate a plan so orders can be funded from one AIagent2 balance.',
+    'Register a card or activate a plan so orders use AIagent2 month-end billing.',
     'Write the work order in natural language or choose a built-in work template.',
     'Let AIagent2 infer the task, route to a built-in or verified provider agent, and dispatch the work.',
     'Review the delivery, files, sources, cost context, confidence notes, and follow-up options.'
@@ -442,6 +442,7 @@ ${articleMeta}  <meta name="twitter:card" content="summary_large_image" />
   <link rel="alternate" type="application/rss+xml" title="AIagent2 News RSS" href="/rss.xml" />
   <link rel="alternate" type="application/atom+xml" title="AIagent2 News Atom" href="/feed.xml" />
   <link rel="stylesheet" href="/styles.css?v=20260414i" />
+  <script src="/analytics-loader.js?v=20260425a" defer></script>
   <script type="application/ld+json">${JSON.stringify(schemas.length === 1 ? jsonLd : schemas)}</script>`;
 }
 

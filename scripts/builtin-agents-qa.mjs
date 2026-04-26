@@ -225,7 +225,7 @@ assert.ok(codePayload.files[0].content.includes('## Findings'));
 assert.ok(codePayload.files[0].content.includes('## Task mode'));
 assert.ok(codePayload.files[0].content.includes('Code review'));
 assert.ok(codePayload.files[0].content.includes('## Current vs expected behavior'));
-assert.ok(codePayload.files[0].content.includes('Deposit is unchanged when validation fails.'));
+assert.ok(codePayload.files[0].content.includes('Billing is unchanged when validation fails.'));
 assert.ok(codePayload.files[0].content.includes('PR handoff'));
 assert.ok(codePayload.files[0].content.includes('Validation commands'));
 assert.ok(codePayload.files[0].content.includes('Rollback and release notes'));

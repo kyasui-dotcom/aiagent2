@@ -372,7 +372,7 @@ const els = {
   apiKeyTable: $('apiKeyTable'),
   stripeCustomerStatus: $('stripeCustomerStatus'),
   stripeProviderStatus: $('stripeProviderStatus'),
-  depositBalanceCard: $('depositBalanceCard'),
+  billingSummaryCard: $('billingSummaryCard'),
   createStripeDepositSessionBtn: $('createStripeDepositSessionBtn'),
   createStripeSetupSessionBtn: $('createStripeSetupSessionBtn'),
   createStripeSubscriptionSessionBtn: $('createStripeSubscriptionSessionBtn'),
@@ -2910,13 +2910,13 @@ function setElementVisible(el, visible) {
 
 function temporaryInvoiceNoticeLines(kind = 'payment') {
   const target = String(kind || 'payment').trim().toLowerCase();
-  const label = target === 'plan' ? 'plan invoice' : (target === 'payout' ? 'manual payout' : 'deposit invoice');
+  const label = target === 'plan' ? 'plan invoice' : (target === 'payout' ? 'manual payout' : 'billing invoice');
   return [
     `Temporary ${label} notice: hosted payment checkout is paused.`,
     `For now, request ${label === 'manual payout' ? 'manual payout handling' : 'an invoice/manual payment'}.`,
     label === 'manual payout'
       ? `Support will confirm provider payout details at ${TEMPORARY_INVOICE_SUPPORT_EMAIL}.`
-      : `CAIt will add credits manually after payment confirmation.`,
+      : `CAIt will confirm billing manually after payment confirmation.`,
     `Support: ${TEMPORARY_INVOICE_SUPPORT_EMAIL}`
   ];
 }
@@ -2941,7 +2941,7 @@ function temporaryInvoiceAccountLabel() {
 }
 
 async function submitTemporaryInvoiceRequest(options = {}) {
-  const kind = String(options.kind || 'deposit').trim().toLowerCase();
+  const kind = String(options.kind || 'payment').trim().toLowerCase();
   const plan = String(options.plan || '').trim().toLowerCase();
   const context = String(options.context || state.depositContext || state.currentTab || 'settings').trim().toLowerCase();
   const amount = Number(options.amount || 0);
@@ -2953,7 +2953,7 @@ async function submitTemporaryInvoiceRequest(options = {}) {
     '',
     `Account: ${temporaryInvoiceAccountLabel()}`,
     email ? `Billing email: ${email}` : 'Billing email: not provided',
-    `Kind: ${kind || 'deposit'}`,
+    `Kind: ${kind || 'payment'}`,
     plan ? `Plan: ${plan}` : '',
     `Amount: ${amountLine}`,
     `Context: ${context || '-'}`,
@@ -2978,14 +2978,14 @@ async function submitTemporaryInvoiceRequest(options = {}) {
           kind,
           plan,
           amount_usd: amount > 0 ? amount : 0,
-          deposit_context: context
+          billing_context: context
         }
       }
     })
   });
   const lines = [
     kind === 'payout' ? 'Manual payout request saved.' : 'Invoice request saved.',
-    `Kind: ${kind || 'deposit'}`,
+    `Kind: ${kind || 'payment'}`,
     plan ? `Plan: ${plan}` : '',
     amount > 0 ? `Amount: ${amountLine}` : '',
     `Email: ${result.email_forwarded ? `forwarded to ${TEMPORARY_INVOICE_SUPPORT_EMAIL}` : `not forwarded (${result.email_status || 'not_configured'})`}`,
@@ -2994,62 +2994,28 @@ async function submitTemporaryInvoiceRequest(options = {}) {
       : 'This is a temporary manual billing flow while hosted checkout is paused.',
     kind === 'payout'
       ? 'Support will follow up about payout handling.'
-      : 'Credits are added manually after payment confirmation.'
+      : 'Billing is confirmed manually after payment confirmation.'
   ].filter(Boolean);
   safeText(kind === 'payout' ? els.stripeProviderActionResult : els.stripeCustomerActionResult, lines.join('\n'));
   flash(kind === 'payout' ? 'Manual payout request saved. Support will follow up.' : 'Invoice request saved. Support will follow up manually.', 'ok');
   void trackConversionEvent('invoice_request_submitted', {
     source: context || 'settings',
     status: result.report?.status || 'open',
-    mode: kind || 'deposit',
+    mode: kind || 'payment',
     promptChars: message.length
   });
   return result;
 }
 
 function openDepositModal(options = {}) {
-  if (!els.depositModal) return;
-  const suggestedAmount = Number(options.amount || 0);
   const context = String(options.context || 'settings').trim().toLowerCase() || 'settings';
-  state.depositIntentArmed = true;
-  state.depositContext = context;
-  state.depositReturnTab = ['work', 'settings'].includes(String(options.returnTab || '').trim().toLowerCase())
-    ? String(options.returnTab || '').trim().toLowerCase()
-    : (context === 'order' ? 'work' : 'settings');
-  if (els.depositModalAmount) {
-    els.depositModalAmount.value = String(suggestedAmount > 0 ? suggestedAmount : (state.depositDraftAmount || els.depositModalAmount.value || '20'));
-  }
-  if (els.depositModalSummary) {
-    const missingLine = Number(options.missingAmount || 0) > 0
-      ? `Missing for this order estimate: ${usdFormatter.format(Number(options.missingAmount || 0))}`
-      : '';
-    if (TEMPORARY_INVOICE_BILLING_ENABLED) {
-      safeText(els.depositModalSummary, [
-        context === 'order'
-          ? 'This order needs more deposit before dispatch.'
-          : 'Enter the deposit amount in USD.',
-        missingLine,
-        ...temporaryInvoiceNoticeLines('deposit'),
-        context === 'order'
-          ? 'After payment confirmation, return to Work Chat and press SEND ORDER again.'
-          : 'Built-in orders do not require your own model-provider API key.'
-      ].filter(Boolean).join('\n'));
-      setElementVisible(els.depositModal, true);
-      window.requestAnimationFrame(() => els.depositModalAmount?.focus());
-      return;
-    }
-    safeText(els.depositModalSummary, [
-      context === 'order'
-        ? 'This order needs more deposit before dispatch.'
-        : 'Enter the deposit amount in USD.',
-      missingLine,
-      'Stripe Checkout opens in a new tab.',
-      `When Stripe confirms the payment, the paid amount is added to your ${PRODUCT_NAME} funding balance.`,
-      context === 'order' ? 'After payment confirmation, return to Work Chat and press SEND ORDER again.' : 'Built-in orders do not require your own model-provider API key.'
-    ].filter(Boolean).join('\n'));
-  }
-  setElementVisible(els.depositModal, true);
-  window.requestAnimationFrame(() => els.depositModalAmount?.focus());
+  openSettingsSection('payments');
+  safeText(els.stripeCustomerActionResult, [
+    'Prepaid balance checkout has been removed.',
+    'Use REGISTER CARD for month-end billing before sending paid orders.',
+    context === 'order' ? 'After card registration, return to Work Chat and press SEND ORDER again.' : ''
+  ].filter(Boolean).join('\n'));
+  flash('Prepaid balance checkout was removed. Register a card for month-end billing.', 'warn');
 }
 
 function closeDepositModal() {
@@ -3085,15 +3051,15 @@ function renderPlanModalSummary() {
     safeText(els.planModalSummary, [
       `Selected plan: ${label}`,
       ...temporaryInvoiceNoticeLines('plan'),
-      'The plan refill will be handled manually after invoice payment confirmation.'
+      'The plan activation will be handled manually after invoice payment confirmation.'
     ].join('\n'));
     return;
   }
   safeText(els.planModalSummary, [
     `Selected plan: ${label}`,
     'Stripe Checkout opens in a new tab.',
-    'When payment is confirmed, the recurring plan becomes active and refills funding each billing cycle.',
-    'The refill can fund built-in AI agent work without separate buyer-side model API contracts.'
+    'When payment is confirmed, the recurring plan becomes active for each billing cycle.',
+    'The plan can cover built-in AI agent work without separate buyer-side model API contracts.'
   ].join('\n'));
 }
 
@@ -3799,7 +3765,7 @@ async function scheduleCurrentOrderDraft() {
     });
     appendOrderChatExchange(prepPrompt, {
       ...prepAnswer,
-      status: 'Draft prepared for scheduling.\n\nReview the brief, then press SCHEDULE DRAFT. No order was created and no deposit was charged.'
+      status: 'Draft prepared for scheduling.\n\nReview the brief, then press SCHEDULE DRAFT. No order was created and no billing occurred.'
     });
     flash('Draft prepared. Review it, then schedule it from the left panel.', 'info');
     return;
@@ -4728,7 +4694,7 @@ function buildOpenChatIntentClarification(prompt = '', candidates = []) {
         '',
         'Reply with the number, or a short phrase like “payments”, “list my agent”, or “API keys”. No order or billing happens yet.'
       ].join('\n'),
-    status: 'Clarification needed.\n\nNo order was created and no deposit was charged.'
+    status: 'Clarification needed.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -4837,7 +4803,7 @@ function buildOpenChatCommandAnswer(prompt = '') {
         ? 'キャンセルしました。下書きと確認状態をクリアしました。別件があればそのまま書いてください。'
         : 'Canceled. I cleared the draft and confirmation state. Write a new request when ready.',
       nextPrompt: '',
-      status: 'Order prep canceled.\n\nNo order was created and no deposit was charged.'
+      status: 'Order prep canceled.\n\nNo order was created and no billing occurred.'
     };
   }
   if (command === 'show_commands') {
@@ -4847,7 +4813,7 @@ function buildOpenChatCommandAnswer(prompt = '') {
       tone: 'info',
       body: openChatCommandHelpText(ja),
       nextPrompt: '',
-      status: 'Command help shown.\n\nNo order was created and no deposit was charged.'
+      status: 'Command help shown.\n\nNo order was created and no billing occurred.'
     };
   }
   if (command === 'reset_chat') {
@@ -4859,7 +4825,7 @@ function buildOpenChatCommandAnswer(prompt = '') {
         ? 'チャットをリセットしました。入力欄と発注前ブリーフも空にしました。別件をそのまま書いてください。'
         : 'Open chat reset. I cleared the input and prepared brief. Write the next topic when ready.',
       nextPrompt: '',
-      status: 'Open chat reset.\n\nNo order was created and no deposit was charged.'
+      status: 'Open chat reset.\n\nNo order was created and no billing occurred.'
     };
   }
   if (command === 'restore_brief') {
@@ -4872,7 +4838,7 @@ function buildOpenChatCommandAnswer(prompt = '') {
           ? '戻せる発注文がまだありません。先に「発注ブラッシュアップ: ...」のように依頼内容を整理してください。'
           : 'No prepared brief is available yet. First ask me to refine a rough request into a work order.',
         nextPrompt: '',
-        status: 'No prepared brief to restore.\n\nNo order was created and no deposit was charged.'
+        status: 'No prepared brief to restore.\n\nNo order was created and no billing occurred.'
       };
     }
     return {
@@ -4884,7 +4850,7 @@ function buildOpenChatCommandAnswer(prompt = '') {
         : 'I restored the saved order draft behind the chat. If it looks right, press SEND ORDER; otherwise write the correction here. I will also copy it to the clipboard when the browser allows it.',
       nextPrompt: preparedBrief,
       copyText: preparedBrief,
-      status: 'Prepared brief restored.\n\nNo order was created and no deposit was charged.'
+      status: 'Prepared brief restored.\n\nNo order was created and no billing occurred.'
     };
   }
   if (command === 'queue_parallel_plan') {
@@ -4898,7 +4864,7 @@ function buildOpenChatCommandAnswer(prompt = '') {
           ? '並列キューに入れる発注文がまだありません。先に依頼をブラッシュアップしてから「並列に分けて」と送ってください。'
           : 'No parallel-ready work order is available yet. First refine the request, then ask me to split it for parallel work.',
         nextPrompt: '',
-        status: 'No parallel plan to queue.\n\nNo order was created and no deposit was charged.'
+        status: 'No parallel plan to queue.\n\nNo order was created and no billing occurred.'
       };
     }
     return {
@@ -4914,7 +4880,7 @@ function buildOpenChatCommandAnswer(prompt = '') {
           '次の動き: ORDER SETTINGS の並列キューを確認し、実行する場合だけログインして CREATE ALL してください。'
         ].join('\n')
         : [
-          `Queued ${plan.length} parallel drafts. No order was created and no deposit was charged.`,
+          `Queued ${plan.length} parallel drafts. No order was created and no billing occurred.`,
           '',
           ...plan.map((item, index) => `${index + 1}. ${item.taskType}: ${item.title}`),
           '',
@@ -4922,7 +4888,7 @@ function buildOpenChatCommandAnswer(prompt = '') {
         ].join('\n'),
       parallelPlan: plan,
       nextPrompt: preparedBrief,
-      status: 'Parallel drafts queued.\n\nNo order was created and no deposit was charged. Review them before paid dispatch.'
+      status: 'Parallel drafts queued.\n\nNo order was created and no billing occurred. Review them before paid dispatch.'
     };
   }
   const commandCopy = commandCopyForWorkAction(command);
@@ -5450,7 +5416,7 @@ function openChatParallelPlanBlock(brief = '', inputCounts = {}, options = {}) {
       `Parallel work plan: ${plan.length} drafts`,
       ...plan.map((item, index) => `${index + 1}. ${item.taskType}: ${item.title}`),
       '',
-      'Next: send “add to parallel queue” to place these drafts in ORDER SETTINGS. No order is created and no deposit is charged.'
+      'Next: send “add to parallel queue” to place these drafts in ORDER SETTINGS. No order is created and no billing occurs.'
     ];
   return { plan, body: lines.join('\n') };
 }
@@ -5550,7 +5516,7 @@ function buildOpenChatPendingChoiceReminder(prompt = '') {
         '',
         'No order or billing happens yet.'
       ].join('\n'),
-    status: 'Choose a path first.\n\nNo order was created and no deposit was charged.'
+    status: 'Choose a path first.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -5686,7 +5652,7 @@ function buildOpenChatIdeaOperatorFollowup(prompt = '', inputCounts = {}) {
           'Next: I put this brief back into the input box. Press SEND ORDER only when you want paid execution.'
         ].join('\n'),
       nextPrompt: brief,
-      status: 'CEO idea brief prepared.\n\nNo order was created and no deposit was charged.'
+      status: 'CEO idea brief prepared.\n\nNo order was created and no billing occurred.'
     };
   }
   if (mode === 'backlog') {
@@ -5720,7 +5686,7 @@ function buildOpenChatIdeaOperatorFollowup(prompt = '', inputCounts = {}) {
           '',
           'Next time, ask to prioritize this backlog or reply “2” to turn it into a work brief.'
         ].join('\n'),
-      status: 'CEO idea backlog organized.\n\nNo order was created and no deposit was charged.'
+      status: 'CEO idea backlog organized.\n\nNo order was created and no billing occurred.'
     };
   }
   return {
@@ -5752,7 +5718,7 @@ function buildOpenChatIdeaOperatorFollowup(prompt = '', inputCounts = {}) {
         '',
         'Recommended next step: reply “2” to turn the strongest one into a work-order brief. No order or billing happens yet.'
       ].join('\n'),
-    status: 'CEO idea priorities explained.\n\nNo order was created and no deposit was charged.'
+    status: 'CEO idea priorities explained.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -5835,7 +5801,7 @@ function buildOpenChatRepairAnswer(prompt = '') {
           'If this now matches, press SEND ORDER. If not, reply with “not that, ...” and I will keep adjusting it.'
         ].join('\n'),
       nextPrompt: nextBrief,
-      status: 'Correction applied to draft.\n\nNo order was created and no deposit was charged.'
+      status: 'Correction applied to draft.\n\nNo order was created and no billing occurred.'
     };
   }
   return {
@@ -5862,7 +5828,7 @@ function buildOpenChatRepairAnswer(prompt = '') {
         'No order or billing happens yet.'
       ].join('\n'),
     nextPrompt: previousBrief || '',
-    status: 'Correction needed.\n\nNo order was created and no deposit was charged.'
+    status: 'Correction needed.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -5895,7 +5861,7 @@ function buildOpenChatPauseAnswer(prompt = '') {
         'No action is being taken now.'
       ].join('\n'),
     nextPrompt: previousBrief || '',
-    status: 'Chat paused.\n\nNo order was created and no deposit was charged.'
+    status: 'Chat paused.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -5937,7 +5903,7 @@ function buildOpenChatStatusAnswer(prompt = '') {
     suppressTrio: true,
     body: (ja ? linesJa : linesEn).join('\n'),
     nextPrompt: previousBrief || '',
-    status: 'Chat status summarized.\n\nNo order was created and no deposit was charged.'
+    status: 'Chat status summarized.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -5971,7 +5937,7 @@ function buildOpenChatNoLoginAnswer(prompt = '') {
     actions: [
       { action: 'connect_google', label: ja ? 'Googleでログインして500Ptを受け取る' : 'SIGN IN AND GET 500 POINTS' }
     ],
-    status: 'No-login path explained.\n\nNo order was created and no deposit was charged.'
+    status: 'No-login path explained.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -6006,7 +5972,7 @@ function buildOpenChatExamplesAnswer(prompt = '') {
         '',
         'If unsure, write it roughly. I will turn it into a brief and pause for confirmation before execution.'
       ].join('\n'),
-    status: 'Order examples shown.\n\nNo order was created and no deposit was charged.'
+    status: 'Order examples shown.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -6037,7 +6003,7 @@ function buildOpenChatAcknowledgementAnswer(prompt = '') {
           : 'Next, describe the work, ask a question, add URL/files, or ask about listing an agent.'
       ].join('\n'),
     nextPrompt: previousBrief || '',
-    status: 'Acknowledgement handled.\n\nNo order was created and no deposit was charged.'
+    status: 'Acknowledgement handled.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -6078,7 +6044,7 @@ function buildOpenChatDirectResearchQuestionAnswer(prompt = '', inputCounts = {}
         'Press SEND ORDER to run it, or add constraints/budget limits if you only want a lighter pass.'
       ].join('\n'),
     nextPrompt: brief,
-    status: 'Direct research question prepared.\n\nNo order was created and no deposit was charged.'
+    status: 'Direct research question prepared.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -7154,7 +7120,7 @@ function buildOpenChatPendingQuestionFollowupAnswer(prompt = '', inputCounts = {
           '',
           'Once concrete enough, I will confirm: this instruction will be handed to the agent; tell me if anything should change.'
         ].join('\n'),
-      status: 'Order intent received, but more context is needed.\n\nNo order was created and no deposit was charged.'
+      status: 'Order intent received, but more context is needed.\n\nNo order was created and no billing occurred.'
     };
   }
   const usefulShortAnswer = /(なし|特になし|任せ|おまかせ|日本|英語|日本語|表|箇条|無料|広告費|https?:\/\/|\d|none|n\/a|up to you|japan|english|table|free|organic)/i.test(answer);
@@ -7232,7 +7198,7 @@ function buildOpenChatPendingQuestionFollowupAnswer(prompt = '', inputCounts = {
         '',
         'Add more constraints here if needed, or sign in and press SEND ORDER only when you want paid dispatch.'
       ].join('\n'),
-    status: 'Question answer merged into draft.\n\nNo order was created and no deposit was charged.'
+    status: 'Question answer merged into draft.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -7586,7 +7552,7 @@ function buildOpenChatFollowupAnswer(prompt = '', inputCounts = {}) {
         ].join('\n'),
       nextPrompt: previousBrief,
       parallelPlan: parallel.plan,
-      status: 'Parallel work plan created.\n\nNo order was created and no deposit was charged. Send "add to parallel queue" to queue drafts for review.'
+      status: 'Parallel work plan created.\n\nNo order was created and no billing occurred. Send "add to parallel queue" to queue drafts for review.'
     };
   }
   const nextBrief = catCompactDispatchBrief(previousBrief, taskType, inputCounts, {
@@ -8390,7 +8356,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
           '',
           'After that, I will use this chat context and update the SEND ORDER-ready draft. No order or billing happens yet.'
         ].join('\n'),
-      status: 'Waiting for revised conditions.\n\nNo order was created and no deposit was charged.'
+      status: 'Waiting for revised conditions.\n\nNo order was created and no billing occurred.'
     };
   }
   if (decisionCommand === 'cancel_preorder_order') {
@@ -8403,7 +8369,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
         ? 'キャンセルしました。下書きと確認状態をクリアしました。別件があればそのまま書いてください。'
         : 'Canceled. I cleared the draft and confirmation state. Write a new request when ready.',
       nextPrompt: '',
-      status: 'Order prep canceled.\n\nNo order was created and no deposit was charged.'
+      status: 'Order prep canceled.\n\nNo order was created and no billing occurred.'
     };
   }
   if (!mode && openChatLooksLikeNaturalChoiceDetails(prompt)) {
@@ -8435,7 +8401,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
           '',
           'Choose the next action from the buttons below.'
         ].join('\n'),
-      status: 'Natural-language details converted to a dispatch preview.\n\nNo order was created and no deposit was charged.'
+      status: 'Natural-language details converted to a dispatch preview.\n\nNo order was created and no billing occurred.'
     };
   }
   if (!mode) return null;
@@ -8470,7 +8436,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
         naturalChoiceIntent: 'natural_ai_beginner_examples',
         vagueChoicePrompt: original,
         clearClarifyOptions: true,
-        status: 'Beginner examples shown.\n\nNo order was created and no deposit was charged.'
+        status: 'Beginner examples shown.\n\nNo order was created and no billing occurred.'
       };
     }
     if (mode === 'beginner_organize') {
@@ -8501,7 +8467,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
         clearVagueChoice: true,
         clearNaturalChoice: true,
         clearClarifyOptions: true,
-        status: 'Waiting for a simple problem statement.\n\nNo order was created and no deposit was charged.'
+        status: 'Waiting for a simple problem statement.\n\nNo order was created and no billing occurred.'
       };
     }
     if (mode === 'beginner_chat_only') {
@@ -8534,7 +8500,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
         clearVagueChoice: true,
         clearNaturalChoice: true,
         clearClarifyOptions: true,
-        status: 'Chat-only guidance shown.\n\nNo order was created and no deposit was charged.'
+        status: 'Chat-only guidance shown.\n\nNo order was created and no billing occurred.'
       };
     }
   }
@@ -8584,7 +8550,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
       clearVagueChoice: true,
       clearNaturalChoice: true,
       clearClarifyOptions: true,
-      status: 'Beginner path selected.\n\nNo order was created and no deposit was charged.'
+      status: 'Beginner path selected.\n\nNo order was created and no billing occurred.'
     };
   }
   if (mode === 'source' || mode === 'narrow') {
@@ -8613,7 +8579,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
       clearVagueChoice: true,
       clearNaturalChoice: true,
       clearClarifyOptions: true,
-      status: 'Waiting for concrete source material.\n\nNo order was created and no deposit was charged.'
+      status: 'Waiting for concrete source material.\n\nNo order was created and no billing occurred.'
     };
   }
   const brief = buildOpenChatNaturalChoiceBrief(original, intent, mode, inputCounts);
@@ -8641,7 +8607,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
         '次の動き: 入力欄にこの発注文を入れました。内容を確認し、実行する場合だけログインして SEND ORDER してください。'
       ].join('\n')
       : [
-        'I organized this so it can be handed to the right agent. This is still chat only; no order was created and no deposit was charged.',
+        'I organized this so it can be handed to the right agent. This is still chat only; no order was created and no billing occurred.',
         '',
         `Confirmed intent: ${intentLabel}`,
         `Narrowed direction: ${choiceLabel}`,
@@ -8661,7 +8627,7 @@ function buildOpenChatNaturalChoiceFollowup(prompt = '', inputCounts = {}) {
     clearVagueChoice: true,
     clearNaturalChoice: true,
     clearClarifyOptions: true,
-    status: 'Context-specific work order prepared.\n\nNo order was created and no deposit was charged.'
+    status: 'Context-specific work order prepared.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -8689,7 +8655,7 @@ function buildOpenChatVagueChoiceFollowup(prompt = '', inputCounts = {}) {
           '次の動き: 入力欄にこの発注文を入れました。内容を確認し、実行する場合だけログインして SEND ORDER してください。'
         ].join('\n')
         : [
-          'I converted this into a research-first work order. This is still chat only; no order was created and no deposit was charged.',
+          'I converted this into a research-first work order. This is still chat only; no order was created and no billing occurred.',
           '',
           'Market research can use more tokens/API calls than a simple chat answer. Review the estimate and max reserve before dispatch.',
           '',
@@ -8702,7 +8668,7 @@ function buildOpenChatVagueChoiceFollowup(prompt = '', inputCounts = {}) {
         ].join('\n'),
       nextPrompt: brief,
       clearVagueChoice: true,
-      status: 'Research-first order brief prepared.\n\nNo order was created and no deposit was charged. Review the estimate before paid dispatch.'
+      status: 'Research-first order brief prepared.\n\nNo order was created and no billing occurred. Review the estimate before paid dispatch.'
     };
   }
   return {
@@ -8735,7 +8701,7 @@ function buildOpenChatVagueChoiceFollowup(prompt = '', inputCounts = {}) {
       ].join('\n'),
     clearVagueChoice: true,
     clearClarifyOptions: true,
-    status: 'Waiting for narrower inputs.\n\nNo order was created and no deposit was charged.'
+    status: 'Waiting for narrower inputs.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -8930,7 +8896,7 @@ function buildOpenChatResearchOrNarrowChoice(prompt = '', inputCounts = {}) {
         '',
         'Reply with “1” / “Research options first” or “2” / “I will narrow it”. No order or billing happens yet.'
       ].join('\n'),
-    status: 'Choose research or narrow scope.\n\nNo order was created and no deposit was charged.'
+    status: 'Choose research or narrow scope.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -9109,7 +9075,7 @@ function openChatNaturalConversationAnswerLines(intent = '', prompt = '') {
         'Prompt/依頼文: その担当者へのお願い文です。雑でも大丈夫です。',
         'Delivery/納品: 作業後に受け取る結果です。文章、表、ファイル、要約などです。',
         'Verify/検証: そのagentが本当に使えるか事前確認することです。',
-        'Deposit/残高: 注文するときに使う前払い残高です。',
+        'Billing/請求: 実作業の注文だけ月締め請求として扱います。',
         '',
         'まずは用語を覚えるより、「何をしてほしいか」を1文で書く方が早いです。まだ注文も課金も発生しません。'
       ],
@@ -9120,7 +9086,7 @@ function openChatNaturalConversationAnswerLines(intent = '', prompt = '') {
         'Prompt/request: the instruction you give it. Rough wording is okay.',
         'Delivery: the result you receive, such as text, tables, files, or summaries.',
         'Verify: checking that an agent actually works before routing work to it.',
-        'Deposit/balance: prepaid balance used when you order paid work.',
+        'Billing: paid work uses month-end billing after you send an order.',
         '',
         'You do not need to memorize the terms. Start by writing one sentence about what you want done. No order or billing happens yet.'
       ]
@@ -9585,7 +9551,7 @@ function openChatPatternAnswer(patternId = '', kind = 'clarify', tone = 'info', 
     tone,
     patternId,
     body: (ja ? jaLines : enLines).join('\n'),
-    status: extra.status || 'Handled in chat.\n\nNo order was created and no deposit was charged.',
+    status: extra.status || 'Handled in chat.\n\nNo order was created and no billing occurred.',
     ...extra
   };
 }
@@ -9752,7 +9718,7 @@ function buildOpenChatRequirementHubAnswer(prompt = '', inputCounts = {}) {
           '',
           'Next: provide the required connection, permission, or source. Once ready, CAIt will turn it into an execution brief and pause before SEND ORDER. No order or billing happens yet.'
         ].filter((line) => line !== '').join('\n'),
-    status: 'Requirement hub check.\n\nNo order was created and no deposit was charged.'
+    status: 'Requirement hub check.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -9867,7 +9833,7 @@ function buildOpenChatPromptInjectionAnswer(prompt = '') {
       ],
       {
         blockReason: guard.code,
-        status: 'Prohibited category blocked.\n\nNo order was created and no deposit was charged.'
+        status: 'Prohibited category blocked.\n\nNo order was created and no billing occurred.'
       }
     );
   }
@@ -9896,7 +9862,7 @@ function buildOpenChatPromptInjectionAnswer(prompt = '') {
     ],
     {
       blockReason: guard.code,
-      status: 'Prompt injection blocked.\n\nNo order was created and no deposit was charged.'
+      status: 'Prompt injection blocked.\n\nNo order was created and no billing occurred.'
     }
   );
 }
@@ -9945,7 +9911,7 @@ function buildOpenChatShortPromptSourceAnswer(prompt = '', inputCounts = {}) {
     {
       nextPrompt: brief,
       sourceFiles: sourceSummary.files,
-      status: 'Prompt-like source separated.\n\nNo order was created and no deposit was charged. Review the safe brief before dispatch.'
+      status: 'Prompt-like source separated.\n\nNo order was created and no billing occurred. Review the safe brief before dispatch.'
     }
   );
 }
@@ -9982,7 +9948,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
           '',
           'I will not turn this input into an order. Remove the secret and resend only the goal.'
         ],
-        { status: 'Potential secret blocked.\n\nNo order was created and no deposit was charged.' }
+        { status: 'Potential secret blocked.\n\nNo order was created and no billing occurred.' }
       );
     }
     if (openChatLooksUnsafeRequest(compact)) {
@@ -10005,7 +9971,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
           '',
           'Rewrite it as a defensive, authorized request.'
         ],
-        { status: 'Unsafe request blocked.\n\nNo order was created and no deposit was charged.' }
+        { status: 'Unsafe request blocked.\n\nNo order was created and no billing occurred.' }
       );
     }
     if (openChatLooksShortPromptSource(compact)) {
@@ -10034,7 +10000,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
         '',
         'If you want that, say “proceed as research/comparison”. The delivery will separate evidence, assumptions, and limitations.'
       ],
-      { status: 'High-stakes request kept in chat.\n\nNo order was created and no deposit was charged.' }
+      { status: 'High-stakes request kept in chat.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10047,20 +10013,20 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
       [
         '支払いと受け取りは分けて考える必要があります。',
         '',
-        '1. Buyer balance: 注文する側のデポジット/プラン残高です。ここから注文費用が消費されます。',
+        '1. Buyer billing: 注文する側のカード登録と月締め請求です。',
         '2. Provider payout: エージェント提供者の売上受け取りです。外部の受け取り設定が必要です。',
         '',
-        '買い手の残高は提供者の出金口座ではありません。支払い管理なら PAYMENTS、提供者の受け取りなら PROVIDER を開いてください。'
+        '買い手の請求設定は提供者の出金口座ではありません。支払い管理なら PAYMENTS、提供者の受け取りなら PROVIDER を開いてください。'
       ],
       [
         'Payments and payouts are separate.',
         '',
-        '1. Buyer balance: deposit/plan balance used to pay for orders.',
+        '1. Buyer billing: saved-card month-end billing for orders.',
         '2. Provider payout: earnings paid to agent providers through external payout setup.',
         '',
-        'A buyer balance is not a provider withdrawal account. Open PAYMENTS for buyer funding, or PROVIDER for earnings and Connect status.'
+        'Buyer billing is not a provider withdrawal account. Open PAYMENTS for buyer billing, or PROVIDER for earnings and Connect status.'
       ],
-      { status: 'Payment/payout distinction explained.\n\nNo order was created and no deposit was charged.' }
+      { status: 'Payment/payout distinction explained.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10089,7 +10055,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
         '',
         'If you need a strict ceiling, write constraints like “max $X”, “optimize for low cost”, or “shallow research only”. Budget caps can also remain in ORDER SETTINGS/API parameters.'
       ],
-      { status: 'Cost guidance answered.\n\nNo order was created and no deposit was charged.' }
+      { status: 'Cost guidance answered.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10116,7 +10082,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
         '',
         'No order or billing happens yet.'
       ],
-      { status: 'Source required before order prep.\n\nNo order was created and no deposit was charged.' }
+      { status: 'Source required before order prep.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10149,7 +10115,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
         '',
         'Reply with a number or short phrase. No order or billing happens yet.'
       ],
-      { status: 'Source goal clarification needed.\n\nNo order was created and no deposit was charged.' }
+      { status: 'Source goal clarification needed.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10173,7 +10139,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
         '',
         'No order or billing happens yet.'
       ],
-      { status: 'Ambiguous reference blocked.\n\nNo order was created and no deposit was charged.' }
+      { status: 'Ambiguous reference blocked.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10193,7 +10159,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
         '',
         'Paste the content or write the task first. Once a brief exists, instructions like “in English” or “make it short” can update it.'
       ],
-      { status: 'Format-only message needs source.\n\nNo order was created and no deposit was charged.' }
+      { status: 'Format-only message needs source.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10224,7 +10190,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
         '',
         'I will prepare a brief and estimate before execution. No order or billing happens yet.'
       ],
-      { status: 'Urgent request needs scope.\n\nNo order was created and no deposit was charged.' }
+      { status: 'Urgent request needs scope.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10253,7 +10219,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
         '',
         'No order or billing happens yet.'
       ],
-      { status: 'Capability question answered.\n\nNo order was created and no deposit was charged.' }
+      { status: 'Capability question answered.\n\nNo order was created and no billing occurred.' }
     );
   }
 
@@ -10379,7 +10345,7 @@ function buildOpenChatLongPromptGuardAnswer(prompt = '', inputCounts = {}) {
       ].join('\n'),
     nextPrompt: brief,
     sourceFiles: sourceSummary.files,
-    status: 'Long prompt separated as source.\n\nNo order was created and no deposit was charged. Review the safe brief before dispatch.'
+    status: 'Long prompt separated as source.\n\nNo order was created and no billing occurred. Review the safe brief before dispatch.'
   };
 }
 
@@ -10491,7 +10457,7 @@ function buildOpenChatLowInfoTestAnswer(prompt = '') {
           '',
           'No order or billing happens here.'
         ].join('\n'),
-    status: 'Test message handled in chat.\n\nNo order was created and no deposit was charged.'
+    status: 'Test message handled in chat.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -10542,7 +10508,7 @@ function buildOpenChatGreetingAnswer(prompt = '') {
           '',
           'You can ask a quick question about pricing, login, GitHub connection, payments, or delivery here. If you want real work done, I will prepare a work-order brief first and only dispatch it after SEND ORDER.'
         ].join('\n'),
-    status: 'Greeting answered in chat.\n\nNo order was created and no deposit was charged.'
+    status: 'Greeting answered in chat.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -10589,7 +10555,7 @@ function buildOpenChatGeneralHelpAnswer(prompt = '') {
           'This screen is for work orders. I turn the request into a work-order brief and only dispatch after SEND ORDER.'
         ].join('\n'),
     nextPrompt: previousBrief || '',
-    status: 'Help answered in chat.\n\nNo order was created and no deposit was charged.'
+    status: 'Help answered in chat.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -10661,7 +10627,7 @@ function buildOpenChatMarketingAgentListAnswer(prompt = '') {
           '',
           'If unsure, start with CMO TEAM LEADER. No order or billing happened here.'
         ].join('\n'),
-    status: 'Marketing agent list answered in chat.\n\nNo order was created and no deposit was charged.'
+    status: 'Marketing agent list answered in chat.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -10702,7 +10668,7 @@ function buildOpenChatRecurringWorkAnswer(prompt = '', inputCounts = {}) {
           '',
           'まず発注ブリーフに整理しました。下書きを確認して、左側の SCHEDULED WORK で頻度を選び、SCHEDULE DRAFT を押してください。',
           '',
-          '重要: スケジュール作成時には課金しません。各実行タイミングで通常の注文として残高確認、ルーティング、デポジット予約を行います。',
+          '重要: スケジュール作成時には課金しません。各実行タイミングで通常の注文として請求確認、ルーティング、予約を行います。',
           '',
           brief
         ].join('\n')
@@ -10711,11 +10677,11 @@ function buildOpenChatRecurringWorkAnswer(prompt = '', inputCounts = {}) {
           '',
           'I prepared a work-order brief. Review it, choose the cadence in SCHEDULED WORK beside Chat History, then press SCHEDULE DRAFT.',
           '',
-          'Important: scheduling itself is not billed. Each run becomes a normal order at run time, so balance, routing, and deposit reservation still apply.',
+          'Important: scheduling itself is not billed. Each run becomes a normal order at run time, so billing readiness, routing, and reservation still apply.',
           '',
           brief
         ].join('\n'),
-    status: 'Recurring work draft prepared.\n\nNo order was created and no deposit was charged. Use SCHEDULED WORK to save the schedule.'
+    status: 'Recurring work draft prepared.\n\nNo order was created and no billing occurred. Use SCHEDULED WORK to save the schedule.'
   };
 }
 
@@ -10734,11 +10700,11 @@ function buildOpenChatPaymentQuestionAnswer(prompt = '') {
     patternId: 'pattern_payment_question',
     body: ja
       ? [
-          '支払い・残高まわりの質問として受け取りました。',
+          '支払い・請求まわりの質問として受け取りました。',
           '',
           TEMPORARY_INVOICE_BILLING_ENABLED
-            ? '現在、外部決済の画面表示は一時的に隠しています。注文用の残高追加は、SETTINGS -> PAYMENTS の REQUEST INVOICE から請求書対応で進めます。支払い確認後にクレジットを手動追加する運用です。'
-            : '注文は月締め請求、デポジット、またはプラン補充で支払えます。SETTINGS -> PAYMENTS から Stripe Checkout、カード登録、プラン課金に進めます。',
+            ? '現在、外部決済の画面表示は一時的に隠しています。SETTINGS -> PAYMENTS の REQUEST INVOICE から請求書対応で進めます。'
+            : '注文はカード登録後の月締め請求で支払えます。SETTINGS -> PAYMENTS からカード登録、プラン課金に進めます。',
           '',
           'FAQ回答や発注準備だけでは課金されません。実作業として送る場合だけ、見積もりと最大予約額を確認して SEND ORDER します。'
         ].join('\n')
@@ -10746,12 +10712,12 @@ function buildOpenChatPaymentQuestionAnswer(prompt = '') {
           'I read this as a payment or balance question.',
           '',
           TEMPORARY_INVOICE_BILLING_ENABLED
-            ? 'Hosted checkout is temporarily hidden. To add order balance, use SETTINGS -> PAYMENTS -> REQUEST INVOICE. Credits are added manually after payment confirmation.'
-            : 'Orders can use month-end billing, deposit, or plan refill. Open SETTINGS -> PAYMENTS to use Stripe Checkout, card setup, or plan billing.',
+            ? 'Hosted checkout is temporarily hidden. Use SETTINGS -> PAYMENTS -> REQUEST INVOICE for manual billing follow-up.'
+            : 'Orders use saved-card month-end billing. Open SETTINGS -> PAYMENTS for card setup or plan billing.',
           '',
           'FAQ replies and order prep are not billed. Paid work only starts when you review the estimate and press SEND ORDER.'
         ].join('\n'),
-    status: 'Payment question answered in chat.\n\nNo order was created and no deposit was charged.'
+    status: 'Payment question answered in chat.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -10844,7 +10810,7 @@ function buildOpenChatLowInfoAmbiguousAnswer(prompt = '', inputCounts = {}) {
           '',
           'No order or billing happens here.'
         ]).join('\n'),
-    status: 'Low-information message kept in chat.\n\nNo order was created and no deposit was charged.'
+    status: 'Low-information message kept in chat.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -10936,17 +10902,17 @@ function quickOrderChatAnswer(prompt = '', inputCounts = {}) {
   if (/(料金|課金|支払|デポジット|残高|プラン|billing|payment|deposit|balance|plan|stripe)/i.test(matchText)) {
     if (TEMPORARY_INVOICE_BILLING_ENABLED) {
       return ja
-        ? `注文は ${PRODUCT_NAME} の残高から支払います。現在、外部決済の画面表示は一時的に隠しているため、SETTINGS -> PAYMENTS の REQUEST INVOICE で請求書を依頼し、支払い確認後に手動でクレジットが追加されます。FAQ回答や発注準備だけなら課金されません。`
-        : `Orders are funded from your ${PRODUCT_NAME} balance. Hosted checkout is temporarily hidden, so use SETTINGS -> PAYMENTS -> REQUEST INVOICE; credits are added manually after payment confirmation. Quick FAQ replies and order prep are not billed.`;
+        ? `注文は ${PRODUCT_NAME} の月締め請求として扱います。現在、外部決済の画面表示は一時的に隠しているため、SETTINGS -> PAYMENTS の REQUEST INVOICE で請求書を依頼してください。FAQ回答や発注準備だけなら課金されません。`
+        : `Orders use ${PRODUCT_NAME} month-end billing. Hosted checkout is temporarily hidden, so use SETTINGS -> PAYMENTS -> REQUEST INVOICE. Quick FAQ replies and order prep are not billed.`;
     }
     return ja
-      ? `注文は月締め請求、残高、またはプラン補充で支払えます。SETTINGS -> PAYMENTS から Stripe Checkout、カード登録、プラン課金に進めます。FAQ回答や発注準備だけなら課金されません。実作業の注文時だけ、見積もりと最大予約額を確認して進みます。`
-      : `Orders can use month-end billing, account balance, or plan refill. Open SETTINGS -> PAYMENTS for Stripe Checkout, card setup, and plan billing. Quick FAQ replies and order prep are not billed. Paid work shows an estimate and max reserve before dispatch.`;
+      ? `注文はカード登録後の月締め請求で支払えます。SETTINGS -> PAYMENTS からカード登録とプラン課金に進めます。FAQ回答や発注準備だけなら課金されません。実作業の注文時だけ、見積もりと最大予約額を確認して進みます。`
+      : `Orders use saved-card month-end billing. Open SETTINGS -> PAYMENTS for card setup and plan billing. Quick FAQ replies and order prep are not billed. Paid work shows an estimate and max reserve before dispatch.`;
   }
   if (/(api key|apiキー|openai|anthropic|serp|model provider|モデル|プロバイダー|契約)/i.test(matchText)) {
     return ja
-      ? `Built-in agent を使う場合、買い手側で OpenAI、Anthropic、検索APIなどを個別契約する必要はありません。${PRODUCT_NAME} の残高で注文できます。自分の外部システムから注文したい場合は SETTINGS で CAIt API key を発行します。`
-      : `For built-in agents, buyers do not need separate OpenAI, Anthropic, search, or model-provider API contracts. Use one ${PRODUCT_NAME} balance. For external systems, issue a CAIt API key in SETTINGS.`;
+      ? `Built-in agent を使う場合、買い手側で OpenAI、Anthropic、検索APIなどを個別契約する必要はありません。${PRODUCT_NAME} の月締め請求で注文できます。自分の外部システムから注文したい場合は SETTINGS で CAIt API key を発行します。`
+      : `For built-in agents, buyers do not need separate OpenAI, Anthropic, search, or model-provider API contracts. Use ${PRODUCT_NAME} month-end billing. For external systems, issue a CAIt API key in SETTINGS.`;
   }
   if (/(github|git hub|agent.*登録|登録|publish|list|manifest|verify|verification|ベリファイ|検証|マニフェスト|公開)/i.test(matchText)) {
     return ja
@@ -11352,7 +11318,7 @@ function preorderIntentLlmAnswerFromResult(prompt = '', result = {}, fallbackAns
           '',
           'CAIt clarified the intent. No order or billing happens yet.'
         ].join('\n'),
-    status: 'Pre-order intent check.\n\nNo order was created and no deposit was charged.'
+    status: 'Pre-order intent check.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -11617,7 +11583,7 @@ function appendOrderChatExchange(prompt, answer, options = {}) {
   state.intakeAnswer = '';
   if (els.intakeAnswer) els.intakeAnswer.value = '';
   applyOpenChatCommand(answer);
-  state.openChatLastStatus = openChatStatusDisplayText(options.status || answer?.status || 'Answered in chat.\n\nNo order was created and no deposit was charged.');
+  state.openChatLastStatus = openChatStatusDisplayText(options.status || answer?.status || 'Answered in chat.\n\nNo order was created and no billing occurred.');
   state.openChatLastStatusTone = tone;
   void trackChatTranscript(prompt, displayAnswer, {
     ...inputCounts,
@@ -11630,7 +11596,7 @@ function appendOrderChatExchange(prompt, answer, options = {}) {
     els.runCreateStatus.className = `detail-box action-card ${tone} compact-card`;
   }
   const statusParts = String(state.openChatLastStatus || '').split(/\n\n+/);
-  updateWorkChatStatusCard(statusParts.shift() || 'Answered in chat.', statusParts.join('\n\n') || 'No order was created and no deposit was charged.', tone);
+  updateWorkChatStatusCard(statusParts.shift() || 'Answered in chat.', statusParts.join('\n\n') || 'No order was created and no billing occurred.', tone);
   syncCreateJobButtonForCurrentPrompt();
   if (answerCommand === 'reset_chat') {
     state.currentOpenChatSessionId = '';
@@ -12137,7 +12103,7 @@ async function handleOpenChatChoiceCommand(command = '') {
       body: ja
         ? 'WORK TIMELINE ポップアップを開きました。保存済みの run、draft、今後の scheduled action をここで確認できます。'
         : 'Opened the WORK TIMELINE popup. You can inspect stored runs, drafts, and upcoming scheduled actions here.',
-      status: 'Work timeline opened.\n\nNo order was created and no deposit was charged.'
+      status: 'Work timeline opened.\n\nNo order was created and no billing occurred.'
     });
     return;
   }
@@ -12198,7 +12164,7 @@ async function handleChatActionButton(action = '', detail = {}) {
           ? 'キャンセルしました。下書きと確認状態をクリアしました。別件があればそのまま書いてください。'
           : 'Canceled. I cleared the draft and confirmation state. Write a new request when ready.',
         nextPrompt: '',
-        status: 'Order prep canceled.\n\nNo order was created and no deposit was charged.'
+        status: 'Order prep canceled.\n\nNo order was created and no billing occurred.'
       });
     },
     connect_github: async () => { window.location.href = githubAuthActionUrl(state.snapshot?.auth || {}); },
@@ -12423,7 +12389,7 @@ async function handleAgentSkillMarkdownFromChat(skillMd = '') {
       warning
     ].filter(Boolean).join('\n')
     : [
-      `${skillName} was converted into a ${PRODUCT_NAME} manifest draft. This is not an order and no deposit was charged.`,
+      `${skillName} was converted into a ${PRODUCT_NAME} manifest draft. This is not an order and no billing occurred.`,
       '',
       'I opened AGENTS -> PASTE MANIFEST.',
       '',
@@ -12438,7 +12404,7 @@ async function handleAgentSkillMarkdownFromChat(skillMd = '') {
   appendOrderChatExchange(skillMd, {
     kind: 'assist',
     body,
-    status: 'Agent Skill manifest draft created.\n\nNo order was created and no deposit was charged. Review the JSON in AGENTS before importing.'
+    status: 'Agent Skill manifest draft created.\n\nNo order was created and no billing occurred. Review the JSON in AGENTS before importing.'
   }, {
     tone: 'ok',
     steps: openChatPreviewSteps('skill', skillMd),
@@ -13252,14 +13218,12 @@ function ensureOrderFunding() {
   const hasFunding = Number(billingProfile.fundingAvailable || 0) > 0
     || Number(billingProfile.welcomeCreditsAvailable || 0) > 0
     || Number(billingProfile.subscriptionCreditsAvailable || 0) > 0
-    || Number(billingProfile.depositAvailable || 0) > 0
-    || monthlyBillingReady
-    || (Boolean(billingProfile.autoTopupEnabled) && Number(billingProfile.autoTopupAmount || 0) > 0);
+    || monthlyBillingReady;
   if (!hasFunding) {
     openSettingsSection('payments');
     throw new Error(TEMPORARY_INVOICE_BILLING_ENABLED
       ? 'Payment required. Open PAYMENTS and use REQUEST INVOICE before ordering.'
-      : 'Payment required. Open PAYMENTS to confirm available billing or funding before ordering.');
+      : 'Payment required. Open PAYMENTS and register a card before ordering.');
   }
 }
 
@@ -13276,22 +13240,17 @@ function orderFundingErrorInfo(error) {
     || ['payment_required', 'insufficient_deposit', 'payment_method_missing', 'stripe_auto_topup_failed', 'auto_topup_not_captured'].includes(code)
     || /payment|required|deposit|funding|balance/i.test(message);
   if (!paymentLike) return null;
-  const registerCardRequired = code === 'payment_method_missing'
-    || (configuredMode === 'monthly_invoice' && !savedCard && ['payment_required', 'insufficient_deposit'].includes(code));
+  const registerCardRequired = true;
   const missingLedger = Number(data?.missing_amount ?? data?.missingAmount ?? 0);
   const estimatedLedger = Number(data?.estimated_cost?.total ?? data?.estimatedCost?.total ?? 0);
   const requiredLedger = missingLedger > 0 ? missingLedger : estimatedLedger;
   const missingUsd = Math.max(0, ledgerAmountToDisplayCurrency(requiredLedger));
-  const fallbackUsd = Number(state.depositDraftAmount || 20);
-  const suggestedUsd = missingUsd > 0
-    ? Math.max(5, Math.ceil(missingUsd * 1.15 * 100) / 100)
-    : (Number.isFinite(fallbackUsd) && fallbackUsd > 0 ? fallbackUsd : 20);
   return {
     code,
     message,
     action: registerCardRequired ? 'register_card' : 'funding',
     missingUsd,
-    suggestedUsd,
+    suggestedUsd: 0,
     estimatedBilling: data?.estimated_cost || null
   };
 }
@@ -13307,7 +13266,7 @@ function handleOrderFundingPrompt(error, draft = {}, options = {}) {
       body: [
         'Card registration is required before I can send this order.',
         '',
-        'This account is set to month-end billing, so the correct next step is REGISTER CARD, not deposit top-up.',
+        'The correct next step is REGISTER CARD for month-end billing.',
         info.missingUsd > 0 ? `Order estimate: ${usdFormatter.format(info.missingUsd)}` : '',
         '',
         'Register a card in SETTINGS > PAYMENTS, then return to Work Chat and press SEND ORDER again.'
@@ -13319,7 +13278,7 @@ function handleOrderFundingPrompt(error, draft = {}, options = {}) {
       status: 'Card registration required before dispatch.'
     }, { tone: 'warn', nextPrompt: prompt });
     openSettingsSection('payments');
-    flash('Register a card before dispatch. Deposit top-up is not required for month-end billing.', 'warn');
+    flash('Register a card before dispatch.', 'warn');
     void trackConversionEvent('payment_required_shown', {
       ...(options.analytics || summarizeOrderDraftForAnalytics(draft, options.source || 'work_chat')),
       status: 'register_card_required',
@@ -13327,47 +13286,6 @@ function handleOrderFundingPrompt(error, draft = {}, options = {}) {
     });
     return true;
   }
-  const missingLine = info.missingUsd > 0
-    ? `Estimated missing deposit: ${usdFormatter.format(info.missingUsd)}`
-    : 'Deposit is required before this order can be dispatched.';
-  const suggestedLine = `Suggested deposit now: ${usdFormatter.format(info.suggestedUsd)}`;
-  appendOrderChatExchange(prompt, {
-    kind: 'clarify',
-    tone: 'warn',
-    body: [
-      'Payment is needed before I can send this order to an agent.',
-      missingLine,
-      suggestedLine,
-      '',
-      TEMPORARY_INVOICE_BILLING_ENABLED
-        ? 'I opened the REQUEST INVOICE popup here, so you can request temporary manual billing from the order flow.'
-        : 'I opened the billing popup here. If you prefer month-end billing, open PAYMENTS and confirm billing readiness instead.',
-      TEMPORARY_INVOICE_BILLING_ENABLED
-        ? 'CAIt will add credits manually after payment confirmation while hosted checkout is hidden.'
-        : 'Hosted checkout can save a payment method from the first deposit payment when payment actions are available.',
-      '',
-      TEMPORARY_INVOICE_BILLING_ENABLED
-        ? 'After credits are added, return to Work Chat and press SEND ORDER again.'
-        : 'After checkout finishes, return to Work Chat and press SEND ORDER again.'
-    ].join('\n'),
-    status: 'Payment required before dispatch.'
-  }, { tone: 'warn', nextPrompt: prompt });
-  openDepositModal({
-    context: 'order',
-    returnTab: 'work',
-    amount: info.suggestedUsd.toFixed(2).replace(/\.00$/, ''),
-    missingAmount: info.missingUsd
-  });
-  flash(TEMPORARY_INVOICE_BILLING_ENABLED
-    ? 'Deposit required before dispatch. Request an invoice, then send the order again after credits are added.'
-    : 'Funding is required before dispatch. Complete payment setup, then send the order again.', 'warn');
-  void trackConversionEvent('payment_required_shown', {
-    ...(options.analytics || summarizeOrderDraftForAnalytics(draft, options.source || 'work_chat')),
-    status: 'deposit_modal_opened',
-    missingUsd: info.missingUsd,
-    suggestedUsd: info.suggestedUsd
-  });
-  return true;
 }
 
 function preflightFromError(error = null) {
@@ -13430,14 +13348,14 @@ function handleOrderPreflightPrompt(error, draft = {}, options = {}) {
         '',
         `Reason: ${required}`,
         '',
-        'No order was created and no deposit was charged.',
+        'No order was created and no billing occurred.',
         '',
         'If this is intentional, press CONFIRM AND SEND. Otherwise edit the request or choose another agent.'
       ].join('\n'),
       actions: [
         { action: 'confirm_order', label: 'CONFIRM AND SEND', agentId: preflight.agent?.id || draft.agent_id || '' }
       ],
-      status: 'Confirmation required before dispatch.\n\nNo order was created and no deposit was charged.'
+      status: 'Confirmation required before dispatch.\n\nNo order was created and no billing occurred.'
     }, { tone: 'warn', nextPrompt: prompt });
     void trackConversionEvent('order_confirmation_required', {
       ...(options.analytics || summarizeOrderDraftForAnalytics(draft, 'order_preflight')),
@@ -13458,12 +13376,12 @@ function handleOrderPreflightPrompt(error, draft = {}, options = {}) {
         `Missing: ${missing.length ? missing.join(', ') : 'connector access'}`,
         ...(capabilities.length ? ['', `Required authority: ${capabilities.join(', ')}`] : []),
         '',
-        'No order was created and no deposit was charged.',
+        'No order was created and no billing occurred.',
         '',
         'Connect the required account, then SEND again.'
       ].join('\n'),
       actions: missing.slice(0, 3).map(connectorActionForChat),
-      status: 'Connector setup required before dispatch.\n\nNo order was created and no deposit was charged.'
+      status: 'Connector setup required before dispatch.\n\nNo order was created and no billing occurred.'
     }, { tone: 'warn', nextPrompt: prompt });
     void trackConversionEvent('order_connector_required', {
       ...(options.analytics || summarizeOrderDraftForAnalytics(draft, 'order_preflight')),
@@ -13481,9 +13399,9 @@ function handleOrderPreflightPrompt(error, draft = {}, options = {}) {
         '',
         preflight.error || 'Finish onboarding a compatible agent or adjust the request.',
         '',
-        'No order was created and no deposit was charged.'
+        'No order was created and no billing occurred.'
       ].join('\n'),
-      status: 'No ready agent available before dispatch.\n\nNo order was created and no deposit was charged.'
+      status: 'No ready agent available before dispatch.\n\nNo order was created and no billing occurred.'
     }, { tone: 'warn', nextPrompt: prompt });
     void trackConversionEvent('order_agent_unavailable', {
       ...(options.analytics || summarizeOrderDraftForAnalytics(draft, 'order_preflight')),
@@ -15605,13 +15523,13 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
 
   const accounts = dashboard.accounts || [];
   const pagedAccounts = paginateAdminItems('accounts', accounts.map((account, index) => ({ account, index })));
-  renderAdminRows(els.adminAccountsTable, 'admin-accounts-grid', ['LOGIN', 'AUTH', 'BALANCE', 'UPDATED'], pagedAccounts.items.map(({ account, index }) => ({
+  renderAdminRows(els.adminAccountsTable, 'admin-accounts-grid', ['LOGIN', 'AUTH', 'BILLING', 'UPDATED'], pagedAccounts.items.map(({ account, index }) => ({
     kind: 'accounts',
     index,
     cells: [
       `${escapeHtml(account.login || '-')}<div class="row-muted">${escapeHtml(account.email || account.displayName || '-')}</div>`,
       `${escapeHtml((account.linkedProviders || []).join(', ') || account.authProvider || '-')}<div class="row-muted">keys ${account.apiKeys?.active || 0}/${account.apiKeys?.total || 0} · repos ${account.githubRepos || 0}</div>`,
-      `${yen(account.depositBalance || 0)}<div class="row-muted">reserved ${yen(account.depositReserved || 0)} · welcome ${yen(account.welcomeCreditsBalance || 0)}</div>`,
+      `${yen(account.arrearsTotal || 0)} due<div class="row-muted">welcome ${yen(account.welcomeCreditsBalance || 0)}</div>`,
       `${sinceLabel(account.updatedAt || account.createdAt)}<div class="row-muted">${escapeHtml(formatTime(account.createdAt))} · provider retry ${escapeHtml(String(account.providerMonthlyRetryCount || 0))}${account.providerMonthlyLastNotificationPeriod ? ` · notified ${escapeHtml(account.providerMonthlyLastNotificationPeriod)}` : ''}</div>`
     ]
   })), 'No member registrations yet.');
@@ -15896,7 +15814,7 @@ function buildOpenChatTimelineIntentChoiceAnswer(prompt = '') {
           '',
           'Reply with a number. No order or billing happens yet.'
         ].join('\n'),
-    status: 'Timeline intent needs one choice.\n\nNo order was created and no deposit was charged.'
+    status: 'Timeline intent needs one choice.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -15929,7 +15847,7 @@ function buildOpenChatTimelinePlanClarifyAnswer(prompt = '') {
           '',
           'Then I can turn it into a timeline-planning brief. No order or billing happens yet.'
         ].join('\n'),
-    status: 'Timeline planning details needed.\n\nNo order was created and no deposit was charged.'
+    status: 'Timeline planning details needed.\n\nNo order was created and no billing occurred.'
   };
 }
 
@@ -16344,11 +16262,11 @@ function fundingBreakdownLines(value) {
   const funding = fundingBreakdown(value);
   if (!funding) return [];
   const lines = [];
-  if (Number(funding.depositApplied || 0) > 0) lines.push(`Deposit charged: ${yen(funding.depositApplied)}`);
+  if (Number(funding.depositApplied || 0) > 0) lines.push(`Legacy balance used: ${yen(funding.depositApplied)}`);
   if (Number(funding.welcomeCreditsApplied || 0) > 0) lines.push(`Welcome credits used: ${pointsLabel(funding.welcomeCreditsApplied)}`);
   if (Number(funding.creditsApplied || 0) > 0) lines.push(`Plan credits used: ${yen(funding.creditsApplied)}`);
   if (Number(funding.invoiceApplied || 0) > 0) lines.push(`Invoice / arrears: ${yen(funding.invoiceApplied)}`);
-  if (Number(funding.autoTopupAdded || 0) > 0) lines.push(`Auto top-up added: ${yen(funding.autoTopupAdded)}`);
+  if (Number(funding.autoTopupAdded || 0) > 0) lines.push(`Legacy auto billing added: ${yen(funding.autoTopupAdded)}`);
   return lines;
 }
 
@@ -16356,11 +16274,11 @@ function fundingBreakdownCompact(value) {
   const funding = fundingBreakdown(value);
   if (!funding) return '';
   const parts = [];
-  if (Number(funding.depositApplied || 0) > 0) parts.push(`deposit ${yen(funding.depositApplied)}`);
+  if (Number(funding.depositApplied || 0) > 0) parts.push(`legacy balance ${yen(funding.depositApplied)}`);
   if (Number(funding.welcomeCreditsApplied || 0) > 0) parts.push(`welcome ${pointsLabel(funding.welcomeCreditsApplied)}`);
   if (Number(funding.creditsApplied || 0) > 0) parts.push(`plan ${yen(funding.creditsApplied)}`);
   if (Number(funding.invoiceApplied || 0) > 0) parts.push(`invoice ${yen(funding.invoiceApplied)}`);
-  if (Number(funding.autoTopupAdded || 0) > 0) parts.push(`top-up ${yen(funding.autoTopupAdded)}`);
+  if (Number(funding.autoTopupAdded || 0) > 0) parts.push(`legacy auto ${yen(funding.autoTopupAdded)}`);
   return parts.join(' · ');
 }
 
@@ -20049,11 +19967,11 @@ function flexibleToolCandidates(prompt = String(els.jobPrompt?.value || ''), inp
         : 'This looks related to buyer balance, billing, provider payouts, or payment setup. CAIt should route you to the right settings section instead of burying payment state in chat.',
       requirements: TEMPORARY_INVOICE_BILLING_ENABLED
         ? 'Buyer side: request invoice/manual payment. Provider side: earnings stay tracked; manual payout follow-up is temporary.'
-        : 'Buyer side: month-end billing, deposit, or plan balance. Provider side: provider profile before withdrawal handling.',
+        : 'Buyer side: month-end billing and card registration. Provider side: provider profile before withdrawal handling.',
       actions: [
         { action: 'open_payments', label: 'PAYMENTS' },
         { action: 'open_provider', label: 'PROVIDER' },
-        { action: 'open_deposit_modal', label: TEMPORARY_INVOICE_BILLING_ENABLED ? 'REQUEST INVOICE' : 'ADD DEPOSIT' }
+        { action: 'register_card', label: 'REGISTER CARD' }
       ]
     });
   }
@@ -20224,8 +20142,9 @@ function handleFlexibleToolAction(action = '', actionLabel = '') {
     openSettingsSection('keys');
     return;
   }
-  if (kind === 'open_deposit_modal') {
-    openDepositModal({ context: 'order', returnTab: 'work' });
+  if (kind === 'open_deposit_modal' || kind === 'register_card') {
+    openSettingsSection('payments');
+    window.requestAnimationFrame(() => els.createStripeSetupSessionBtn?.focus());
     return;
   }
   if (kind === 'open_connect') {
@@ -20343,10 +20262,9 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
   const savedCard = Boolean(accountStripe.defaultPaymentMethodId) || String(accountStripe.defaultPaymentMethodStatus || '') === 'ready';
   const monthlyBillingSelected = configuredBillingMode === 'monthly_invoice';
   const monthlyBillingReady = monthlyBillingSelected && savedCard;
-  const depositAvailable = Number(billingProfile.depositAvailable || 0);
-  const autoTopupReady = Boolean(billingProfile.autoTopupEnabled) && Number(billingProfile.autoTopupAmount || 0) > 0;
+  const nonCardCreditsReady = Number(billingProfile.welcomeCreditsAvailable || 0) > 0 || Number(billingProfile.subscriptionCreditsAvailable || 0) > 0;
   const adminBillingBypass = Boolean(auth?.isPlatformAdmin);
-  const billingReady = adminBillingBypass || monthlyBillingReady || depositAvailable > 0 || autoTopupReady;
+  const billingReady = adminBillingBypass || monthlyBillingReady || nonCardCreditsReady;
   const dispatchReady = isOpenChatDispatchReadyPrompt(prompt);
   const skillDraft = looksLikeAgentSkillMarkdown(prompt);
   const quickAnswer = skillDraft || dispatchReady ? null : quickOrderChatAnswer(prompt, sourceCounts);
@@ -20403,7 +20321,7 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
     if (lastStatus) {
       const statusParts = lastStatus.split(/\n\n+/);
       title = statusParts.shift() || 'Answered in chat.';
-      body = statusParts.join('\n\n') || 'No order was created and no deposit was charged.';
+      body = statusParts.join('\n\n') || 'No order was created and no billing occurred.';
       tone = state.openChatLastStatusTone || 'info';
     } else {
       title = 'Write the request first.';
@@ -20440,10 +20358,8 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
     body = `Using ${sourceCounts.urlCount} URL(s) and ${sourceCounts.fileCount} file(s). Add a prompt if you want explicit instructions.`;
     tone = 'ok';
   } else if (!billingReady) {
-    title = monthlyBillingSelected ? 'Register card before sending.' : 'Payment required.';
-    body = monthlyBillingSelected
-      ? `Month-end billing is selected. Open PAYMENTS and use REGISTER CARD before pressing ${uiLabels.sendOrder}.`
-      : `Open PAYMENTS and add deposit or activate a plan before pressing ${uiLabels.sendOrder}. That balance funds built-in agents without separate buyer-side model API contracts.`;
+    title = 'Register card before sending.';
+    body = `Open PAYMENTS and use REGISTER CARD before pressing ${uiLabels.sendOrder}. Paid orders use month-end billing; built-in agents do not require separate buyer-side model API contracts.`;
     tone = 'warn';
     buttonText = uiLabels.sendOrder;
   } else if (strategy === 'multi' && pinnedAgent) {
@@ -20474,7 +20390,7 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
   } else {
     title = 'Ready to send order.';
     body = adminBillingBypass
-      ? `Admin test billing is active for this account. ${uiLabels.sendOrder} will run without consuming deposit, welcome credits, or monthly billing.`
+      ? `Admin test billing is active for this account. ${uiLabels.sendOrder} will run without consuming credits or monthly billing.`
       : 'The prepared brief will be dispatched as a paid order. Max reserve and delivery expectations are shown in ORDER SETTINGS.';
     tone = 'ok';
     buttonText = uiLabels.sendOrder;
@@ -20575,7 +20491,7 @@ function renderRunEstimateCard() {
   if (routingDecision.strategy === 'multi') {
     const planned = routingDecision.plan;
     if (planned.picks.length < 2) {
-      els.runEstimateCard.textContent = `Agent Team plan: ${planned.plannedTasks.join(', ') || taskType}\nNeed at least 2 ready agents to estimate an Agent Team order.\nNo deposit is reserved until a valid order can be created.`;
+      els.runEstimateCard.textContent = `Agent Team plan: ${planned.plannedTasks.join(', ') || taskType}\nNeed at least 2 ready agents to estimate an Agent Team order.\nNo billing is reserved until a valid order can be created.`;
       els.runEstimateCard.className = 'detail-box action-card warn compact-card';
       return;
     }
@@ -21349,10 +21265,8 @@ function renderStripeTools(account = null, auth = null) {
   if (!els.stripeCustomerStatus || !els.stripeProviderStatus || !els.stripeCustomerActionResult || !els.stripeProviderActionResult) return;
   if (!PAYMENT_PROVIDER_UI_VISIBLE) {
     [
-      els.createStripeDepositSessionBtn,
       els.createStripeSetupSessionBtn,
       els.createStripeSubscriptionSessionBtn,
-      els.runStripeAutoTopupBtn,
       els.createStripeConnectOnboardingBtn,
       els.runStripeProviderMonthlyChargeBtn,
       els.runStripeProviderPayoutBtn,
@@ -21399,7 +21313,7 @@ function renderStripeTools(account = null, auth = null) {
   const connectStarted = Boolean(accountStripe.connectedAccountId) || connectDetailsSubmitted || ['pending', 'started'].includes(payoutStatus) || ['pending', 'started'].includes(connectOnboardingStatus);
   const connectActionLabel = connectReady ? 'CONNECT READY' : (connectStarted ? 'RESUME CONNECT' : 'OPEN CONNECT');
   const configuredMode = account?.billing?.mode || billingProfile?.mode || 'monthly_invoice';
-  const mode = billingProfile?.mode || configuredMode || 'deposit';
+  const mode = billingProfile?.mode || configuredMode || 'monthly_invoice';
   const monthlyBillingSelected = configuredMode === 'monthly_invoice';
   const monthlyBillingReady = monthlyBillingSelected && mode === 'monthly_invoice' && savedCard;
   const displayMode = monthlyBillingSelected
@@ -21424,15 +21338,12 @@ function renderStripeTools(account = null, auth = null) {
   const providerMonthlyLastFailureMessage = String(providerSummary.providerSubscriptionLastFailureMessage || accountStripe.providerMonthlyLastFailureMessage || '').trim();
   const providerMonthlyLastNotificationAt = String(providerSummary.providerSubscriptionLastNotificationAt || accountStripe.providerMonthlyLastNotificationAt || '').trim();
   const providerMonthlyLastNotificationPeriod = String(providerSummary.providerSubscriptionLastNotificationPeriod || accountStripe.providerMonthlyLastNotificationPeriod || '').trim();
-  const autoTopupAmount = Number(els.billingAutoTopupAmount?.value || billingProfile?.autoTopupAmount || 0);
-  const autoTopupEnabled = String(els.billingAutoTopupEnabled?.value || String(Boolean(billingProfile?.autoTopupEnabled))) === 'true';
   const stripeReady = Boolean(stripe?.configured);
   if (TEMPORARY_INVOICE_BILLING_ENABLED) {
     const cardSetupReady = STRIPE_CARD_SETUP_DURING_TEMPORARY_BILLING_ENABLED && canManagePayments && stripeReady;
     const customerLines = [
       'Platform: temporary invoice/manual billing',
       `Charge model: ${displayMode}`,
-      `Deposit available: ${yen(billingProfile?.depositAvailable || 0)}`,
       `Saved payment method: ${savedCard ? 'yes' : 'no'}${STRIPE_CARD_SETUP_DURING_TEMPORARY_BILLING_ENABLED ? ' (payment-method setup is available for future month-end billing)' : ''}`,
       `Plan: ${subscriptionPlanLabel(activePlan)} (${accountStripe.subscriptionStatus || 'manual_or_not_started'})`,
       `Payment-method setup: ${cardSetupReady ? 'available' : (stripeReady ? 'sign in required' : 'platform incomplete')}`,
@@ -21453,14 +21364,14 @@ function renderStripeTools(account = null, auth = null) {
     safeText(els.stripeCustomerStatus, customerLines.join('\n'));
     safeText(els.stripeProviderStatus, providerLines.join('\n'));
     safeText(els.stripeCustomerActionResult, [
-      ...temporaryInvoiceNoticeLines('deposit'),
+      ...temporaryInvoiceNoticeLines('payment'),
       '',
       'REQUEST INVOICE saves a support request and forwards it by email.',
       'REQUEST PLAN INVOICE does the same for STARTER or PRO.',
       STRIPE_CARD_SETUP_DURING_TEMPORARY_BILLING_ENABLED
         ? 'Payment-method setup opens a hosted setup page only. Orders still use monthly invoice/manual confirmation until automated billing is explicitly re-enabled.'
         : 'Card setup is paused in this temporary mode.',
-      'Auto top-up is paused until automated charging is explicitly re-enabled.'
+      'Prepaid balance and automatic prepaid charging are removed.'
     ].join('\n'));
     safeText(els.stripeProviderActionResult, [
       ...temporaryInvoiceNoticeLines('payout'),
@@ -21468,10 +21379,6 @@ function renderStripeTools(account = null, auth = null) {
       'Provider earnings remain tracked in the ledger.',
       'CONNECT and automated withdrawals are disabled until the payment processor path is restored or replaced.'
     ].join('\n'));
-    if (els.createStripeDepositSessionBtn) {
-      els.createStripeDepositSessionBtn.textContent = 'REQUEST INVOICE';
-      els.createStripeDepositSessionBtn.title = canManagePayments ? '' : 'Sign in first to request an invoice.';
-    }
     if (els.createStripeSubscriptionSessionBtn) {
       els.createStripeSubscriptionSessionBtn.textContent = 'REQUEST PLAN INVOICE';
       els.createStripeSubscriptionSessionBtn.title = canManagePayments ? '' : 'Sign in first to request a plan invoice.';
@@ -21481,10 +21388,6 @@ function renderStripeTools(account = null, auth = null) {
       els.createStripeSetupSessionBtn.title = cardSetupReady
         ? 'Open hosted payment-method setup for future month-end billing.'
         : (stripeReady ? 'Sign in first to register a payment method.' : 'Payment provider is not ready on the platform.');
-    }
-    if (els.runStripeAutoTopupBtn) {
-      els.runStripeAutoTopupBtn.textContent = 'AUTO TOP-UP PAUSED';
-      els.runStripeAutoTopupBtn.title = 'Auto top-up is paused during temporary invoice billing.';
     }
     if (els.createStripeConnectOnboardingBtn) {
       els.createStripeConnectOnboardingBtn.textContent = 'CONNECT PAUSED';
@@ -21499,10 +21402,8 @@ function renderStripeTools(account = null, auth = null) {
       els.runStripeProviderPayoutBtn.title = 'Automated provider withdrawal is paused. Contact support for manual payout handling.';
     }
     const manualPayoutReady = canManagePayouts && providerEnabled && providerPending >= providerMinimum && providerPending > 0;
-    setButtonAccess(els.createStripeDepositSessionBtn, canManagePayments);
     setButtonAccess(els.createStripeSubscriptionSessionBtn, canManagePayments);
     setButtonAccess(els.createStripeSetupSessionBtn, cardSetupReady && !savedCard);
-    setButtonAccess(els.runStripeAutoTopupBtn, false);
     setButtonAccess(els.createStripeConnectOnboardingBtn, false);
     setButtonAccess(els.runStripeProviderMonthlyChargeBtn, false);
     setButtonAccess(els.runStripeProviderPayoutBtn, manualPayoutReady);
@@ -21515,7 +21416,6 @@ function renderStripeTools(account = null, auth = null) {
   }
   const subscriptionCheckoutReady = canManagePayments && stripeReady;
   const cardSetupReady = canManagePayments && stripeReady && !savedCard;
-  const autoTopupReady = canManagePayments && stripeReady && autoTopupEnabled && autoTopupAmount > 0 && savedCard;
   if (els.payoutWithdrawAmount) {
     const nextSuggestedWithdrawal = providerPending > 0 ? moneyInputValueFromLedger(providerPending) : '';
     if (document.activeElement !== els.payoutWithdrawAmount && !String(els.payoutWithdrawAmount.value || '').trim()) {
@@ -21527,8 +21427,6 @@ function renderStripeTools(account = null, auth = null) {
   else if (monthlyBillingSelected && !savedCard) nextStep = 'Use REGISTER CARD to enable month-end billing. No order is charged until it is dispatched and settled.';
   else if (monthlyBillingSelected && !monthlyBillingReady) nextStep = 'Card registration is needed before month-end billing can dispatch paid work.';
   else if (monthlyBillingReady) nextStep = 'Month-end billing is ready. Orders accrue through the month and are charged after closing.';
-  else if ((mode === 'deposit' || billingProfile?.subscriptionOverageMode === 'deposit') && Number(billingProfile?.depositAvailable || 0) <= 0) nextStep = 'Use ADD DEPOSIT before ordering. The first deposit checkout also saves a card for optional auto top-up.';
-  else if (billingProfile?.autoTopupEnabled && !savedCard) nextStep = 'Use funding or plan setup once so a payment method can be saved before auto top-up.';
   else if (activePlan !== 'none' && String(accountStripe.subscriptionStatus || 'not_started') === 'not_started') nextStep = `Use OPEN PLAN CHECKOUT to activate ${activePlan}.`;
   else if (providerEnabled && !connectReady) nextStep = `Use ${connectActionLabel} to finish provider onboarding.`;
   let providerNextStep = 'Enable provider profile only if this account receives revenue share.';
@@ -21565,7 +21463,6 @@ function renderStripeTools(account = null, auth = null) {
     `Charge model: ${displayMode}`,
     `Active settlement mode: ${mode}`,
     `Month-end amount due: ${yen(billingProfile?.arrearsTotal || 0)}`,
-    `Deposit available: ${yen(billingProfile?.depositAvailable || 0)}`,
     `Saved payment method: ${savedCard ? 'yes' : 'no'} (payment-method setup enables month-end billing)`,
     `Plan: ${subscriptionPlanLabel(activePlan)} (${accountStripe.subscriptionStatus || 'not_started'})`,
     `Next renewal: ${accountStripe.subscriptionCurrentPeriodEnd ? formatTime(accountStripe.subscriptionCurrentPeriodEnd) : '-'}`,
@@ -21603,13 +21500,8 @@ function renderStripeTools(account = null, auth = null) {
   safeText(els.stripeCustomerActionResult, [
     'Payment-method setup opens a hosted setup page and enables month-end billing after confirmation.',
     'Month-end billing accrues settled order costs through the month, then charges the saved card after closing.',
-    'Funding setup opens a popup first, then hosted checkout. The first funding checkout can also save the payment method for optional future auto top-up.',
     'OPEN PLAN CHECKOUT opens a popup where you choose STARTER or PRO first.',
-    'Starter refills deposit with a 5% bonus. Pro refills deposit with a 12% bonus.',
-    autoTopupReady
-      ? 'RUN AUTO TOP-UP NOW is ready.'
-      : 'RUN AUTO TOP-UP NOW requires auto top-up on, a positive amount, and a saved card from ADD DEPOSIT or OPEN PLAN CHECKOUT.',
-    'Refunds are blocked if current deposit is lower than the refund amount.'
+    'Prepaid balance checkout is removed. Use REGISTER CARD for buyer billing.'
   ].join('\n'));
   safeText(els.stripeProviderActionResult, [
     connectReady
@@ -21629,17 +21521,11 @@ function renderStripeTools(account = null, auth = null) {
     'Leave the amount blank to withdraw the full available balance.',
     'Use these only if this account receives revenue share.'
   ].join('\n'));
-  setButtonAccess(els.createStripeDepositSessionBtn, canManagePayments && stripeReady);
   setButtonAccess(els.createStripeSetupSessionBtn, cardSetupReady);
   setButtonAccess(els.createStripeSubscriptionSessionBtn, subscriptionCheckoutReady);
-  setButtonAccess(els.runStripeAutoTopupBtn, autoTopupReady);
   setButtonAccess(els.createStripeConnectOnboardingBtn, canManagePayouts && stripeReady && !connectReady);
   setButtonAccess(els.runStripeProviderMonthlyChargeBtn, providerMonthlyChargeReady);
   setButtonAccess(els.runStripeProviderPayoutBtn, withdrawReady);
-  if (els.createStripeDepositSessionBtn) {
-    els.createStripeDepositSessionBtn.textContent = 'ADD DEPOSIT';
-    els.createStripeDepositSessionBtn.title = canManagePayments && stripeReady ? '' : 'Sign in first to manage payments.';
-  }
   if (els.createStripeSetupSessionBtn) {
     els.createStripeSetupSessionBtn.textContent = savedCard ? 'CARD REGISTERED' : 'REGISTER CARD';
     els.createStripeSetupSessionBtn.title = cardSetupReady
@@ -21649,10 +21535,6 @@ function renderStripeTools(account = null, auth = null) {
   if (els.createStripeSubscriptionSessionBtn) {
     els.createStripeSubscriptionSessionBtn.textContent = 'OPEN PLAN CHECKOUT';
     els.createStripeSubscriptionSessionBtn.title = subscriptionCheckoutReady ? '' : (canManagePayments ? 'Payment provider is not ready on the platform.' : 'Sign in first to manage payments.');
-  }
-  if (els.runStripeAutoTopupBtn) {
-    els.runStripeAutoTopupBtn.textContent = 'RUN AUTO TOP-UP NOW';
-    els.runStripeAutoTopupBtn.title = autoTopupReady ? '' : (canManagePayments ? 'Requires auto top-up on, a positive amount, and a saved card.' : 'Sign in first to manage payments.');
   }
   if (els.createStripeConnectOnboardingBtn) {
     els.createStripeConnectOnboardingBtn.textContent = connectActionLabel;
@@ -21794,7 +21676,7 @@ function renderSettings(account, monthlySummary, auth) {
       els.settingsAccessCard.textContent = [
         'Sign in to manage account actions.',
         '',
-        'Google login: order work, add deposit, manage CAIt API keys.',
+        'Google login: order work, register a card, manage CAIt API keys.',
         'GitHub login: publish agents, receive provider payouts, and authorize repo PR actions.',
         '',
         'Use the tabs below to see each setup area. Sign in before changing settings.'
@@ -21808,7 +21690,7 @@ function renderSettings(account, monthlySummary, auth) {
       { label: 'Monthly summary', value: 'Unavailable while logged out' }
     ]);
     renderSummaryRows(els.billingSnapshotCard, []);
-    renderSummaryRows(els.depositBalanceCard, []);
+    renderSummaryRows(els.billingSummaryCard, []);
     safeText(els.providerBillingLanesCard, 'Login required.\n\nProvider monthly SaaS billing and payout lanes are visible after login.');
     renderOrderApiKeys(null, auth);
     renderStripeTools(null, auth);
@@ -21828,11 +21710,11 @@ function renderSettings(account, monthlySummary, auth) {
   setInputValue(els.billingCountry, billing.country || 'JP');
   setInputValue(els.billingCurrency, billing.currency || 'USD');
   setInputValue(els.billingMode, billing.mode || 'monthly_invoice');
-  setInputValue(els.billingAutoTopupEnabled, String(Boolean(billing.autoTopupEnabled)));
-  setInputValue(els.billingAutoTopupThreshold, moneyInputValueFromLedger(billing.autoTopupThreshold || 0));
-  setInputValue(els.billingAutoTopupAmount, moneyInputValueFromLedger(billing.autoTopupAmount || 0));
+  setInputValue(els.billingAutoTopupEnabled, 'false');
+  setInputValue(els.billingAutoTopupThreshold, '0');
+  setInputValue(els.billingAutoTopupAmount, '0');
   setInputValue(els.billingSubscriptionPlan, billing.subscriptionPlan || 'none');
-  setInputValue(els.billingSubscriptionOverageMode, billing.subscriptionOverageMode || 'deposit');
+  setInputValue(els.billingSubscriptionOverageMode, billing.subscriptionOverageMode || 'monthly_invoice');
   setInputValue(els.billingTaxId, billing.taxId);
   setInputValue(els.billingPurchaseOrderRef, billing.purchaseOrderRef);
   setInputValue(els.billingInvoiceMemo, billing.invoiceMemo);
@@ -21852,7 +21734,7 @@ function renderSettings(account, monthlySummary, auth) {
 
   if (els.settingsAccessCard) {
     const reviewText = canReviewReports ? ', FUNNEL to check conversion, or REPORTS to review feedback.' : '.';
-    els.settingsAccessCard.textContent = `Signed in as ${account?.login || auth.user.login}. Google or GitHub login can fund orders in PAYMENTS. GitHub link is required for adapter PRs and PROVIDER actions${reviewText}`;
+    els.settingsAccessCard.textContent = `Signed in as ${account?.login || auth.user.login}. Google or GitHub login can register billing in PAYMENTS. GitHub link is required for adapter PRs and PROVIDER actions${reviewText}`;
   }
   const orderKeys = account?.apiAccess?.orderKeys || [];
   const activeOrderKeys = orderKeys.filter((key) => key.active);
@@ -21860,20 +21742,20 @@ function renderSettings(account, monthlySummary, auth) {
   const testOrderKeys = activeOrderKeys.filter((key) => String(key.mode || 'live').toLowerCase() === 'test');
   renderSummaryRows(els.billingSnapshotCard, [
     { label: 'Welcome credits', value: pointsLabel(customerSummary.welcomeCreditsAvailable ?? billing.welcomeCreditsBalance ?? 0) },
-    { label: 'Deposit available', value: yen(customerSummary.depositAvailable ?? billing.depositBalance ?? 0) },
-    { label: 'Total usable funding', value: yen(customerSummary.fundingAvailable ?? ((customerSummary.welcomeCreditsAvailable ?? billing.welcomeCreditsBalance ?? 0) + (customerSummary.depositAvailable ?? billing.depositBalance ?? 0))) },
-    { label: 'Reserved for open orders', value: yen((customerSummary.welcomeCreditsReserved ?? billing.welcomeCreditsReserved ?? 0) + (customerSummary.depositReserved ?? billing.depositReserved ?? 0)) },
+    { label: 'Saved card billing', value: account?.stripe?.defaultPaymentMethodId || account?.stripe?.defaultPaymentMethodStatus === 'ready' ? 'ready' : 'card required' },
+    { label: 'Month-end amount due', value: yen(customerSummary.arrearsTotal ?? billing.arrearsTotal ?? 0) },
+    { label: 'Reserved credits', value: yen(customerSummary.welcomeCreditsReserved ?? billing.welcomeCreditsReserved ?? 0) },
     { label: 'Subscription plan', value: subscriptionPlanLabel(account?.stripe?.subscriptionPlan || customerSummary.subscriptionPlan || billing.subscriptionPlan || 'none') },
-    { label: 'Plan refill', value: yen(customerSummary.subscriptionRefillAmount ?? customerSummary.subscriptionIncludedCredits ?? billing.subscriptionIncludedCredits ?? 0) },
+    { label: 'Plan included usage', value: yen(customerSummary.subscriptionIncludedCredits ?? billing.subscriptionIncludedCredits ?? 0) },
     { label: 'Next renewal', value: account?.stripe?.subscriptionCurrentPeriodEnd ? formatTime(account.stripe.subscriptionCurrentPeriodEnd) : '-' },
     { label: 'Arrears', value: yen(customerSummary.arrearsTotal ?? billing.arrearsTotal ?? 0) }
   ]);
-  renderSummaryRows(els.depositBalanceCard, [
+  renderSummaryRows(els.billingSummaryCard, [
     { label: 'Welcome credits', value: pointsLabel(customerSummary.welcomeCreditsAvailable ?? billing.welcomeCreditsBalance ?? 0) },
-    { label: 'Deposit available', value: yen(customerSummary.depositAvailable ?? billing.depositBalance ?? 0) },
-    { label: 'Reserved now', value: yen((customerSummary.welcomeCreditsReserved ?? billing.welcomeCreditsReserved ?? 0) + (customerSummary.depositReserved ?? billing.depositReserved ?? 0)) },
-    { label: 'Usable now', value: yen(customerSummary.fundingAvailable ?? ((customerSummary.welcomeCreditsAvailable ?? billing.welcomeCreditsBalance ?? 0) + (customerSummary.depositAvailable ?? billing.depositBalance ?? 0))) },
-    { label: 'Last top-up', value: account?.stripe?.lastTopupAt ? `${yen(account?.stripe?.lastTopupAmount || 0)} · ${formatTime(account?.stripe?.lastTopupAt)}` : '-' }
+    { label: 'Saved card', value: account?.stripe?.defaultPaymentMethodId || account?.stripe?.defaultPaymentMethodStatus === 'ready' ? 'ready' : 'not registered' },
+    { label: 'Month-end amount due', value: yen(customerSummary.arrearsTotal ?? billing.arrearsTotal ?? 0) },
+    { label: 'Reserved credits', value: yen(customerSummary.welcomeCreditsReserved ?? billing.welcomeCreditsReserved ?? 0) },
+    { label: 'Plan included usage remaining', value: yen(customerSummary.subscriptionCreditsAvailable ?? 0) }
   ]);
   renderSummaryRows(els.settingsStatus, [
     { label: 'Account', value: account?.login || auth.user.login },
@@ -21886,8 +21768,8 @@ function renderSettings(account, monthlySummary, auth) {
     { label: 'Period', value: monthlySummary?.period || state.settingsPeriod },
     { label: 'End-user spend this month', value: yen(customerSummary.totalSpent || customerSummary.totalDue || 0) },
     { label: 'Welcome credits', value: pointsLabel(customerSummary.welcomeCreditsAvailable || 0) },
-    { label: 'Deposit available', value: yen(customerSummary.depositAvailable || 0) },
-    { label: 'Plan refill', value: yen(customerSummary.subscriptionRefillAmount || customerSummary.subscriptionIncludedCredits || 0) },
+    { label: 'Month-end amount due', value: yen(customerSummary.arrearsTotal || 0) },
+    { label: 'Plan included usage', value: yen(customerSummary.subscriptionIncludedCredits || 0) },
     { label: 'Provider order payouts', value: yen(providerSummary.grossPayout || 0) },
     { label: 'Provider monthly SaaS fees', value: yen(providerSummary.providerSubscriptionMonthlyPrice || 0) },
     { label: 'CAIt take from provider monthly SaaS fees', value: yen(providerSummary.providerSubscriptionMarketplaceFee || 0) },
@@ -22717,7 +22599,7 @@ async function createAndOptionallyRunJob() {
   const dispatchCheckTitle = dispatchCheckJa ? 'SEND ORDERを受け付けました。' : 'SEND ORDER received.';
   const dispatchCheckBody = dispatchCheckJa
     ? '実行前チェック中です。ログイン、支払い、接続先を確認してからOrder IDと進捗を表示します。'
-    : 'Running pre-dispatch checks now. CAIt is checking sign-in, funding, and routing before posting the Order ID and progress.';
+    : 'Running pre-dispatch checks now. CAIt is checking sign-in, billing, and routing before posting the Order ID and progress.';
   state.openChatLastStatus = `${dispatchCheckTitle}\n\n${dispatchCheckBody}`;
   state.openChatLastStatusTone = 'info';
   updateWorkChatStatusCard(dispatchCheckTitle, dispatchCheckBody, 'info');
@@ -23488,45 +23370,21 @@ if (els.apiKeyTable) els.apiKeyTable.onclick = (event) => {
 };
 if (els.createStripeDepositSessionBtn) els.createStripeDepositSessionBtn.onclick = () => {
   if (!ensureSettingsLogin()) return;
-  openDepositModal({ context: 'settings', returnTab: 'settings' });
+  openSettingsSection('payments');
+  window.requestAnimationFrame(() => els.createStripeSetupSessionBtn?.focus());
+  safeText(els.stripeCustomerActionResult, [
+    'Prepaid balance checkout has been removed.',
+    'Use REGISTER CARD for month-end billing.'
+  ].join('\n'));
+  flash('Use REGISTER CARD for month-end billing.', 'warn');
 };
 if (els.confirmDepositModalBtn) els.confirmDepositModalBtn.onclick = () => {
   if (!ensureSettingsLogin()) return;
   runAction(els.confirmDepositModalBtn, async () => {
-    if (!state.depositIntentArmed || !els.depositModal || els.depositModal.hidden) {
-      throw new Error(TEMPORARY_INVOICE_BILLING_ENABLED ? 'Use REQUEST INVOICE first.' : 'Use ADD DEPOSIT first.');
-    }
-    if (state.depositLaunchInFlight) return;
-    state.depositLaunchInFlight = true;
-    const amount = Number(els.depositModalAmount?.value || 0);
-    if (!(amount > 0)) throw new Error('Enter a positive deposit amount first.');
-    state.depositDraftAmount = String(Math.round(amount));
-    const depositReturnTab = state.depositReturnTab || 'settings';
-    const depositContext = state.depositContext || 'settings';
     closeDepositModal();
-    try {
-      if (TEMPORARY_INVOICE_BILLING_ENABLED) {
-        await submitTemporaryInvoiceRequest({
-          kind: 'deposit',
-          amount,
-          context: depositContext,
-          returnTab: depositReturnTab
-        });
-        return;
-      }
-      await launchStripeHostedAction('/api/stripe/deposit-session', {
-        amount,
-        return_tab: depositReturnTab
-      }, {
-        title: 'Deposit checkout is ready.',
-        successMessage: depositContext === 'order'
-          ? 'Opened deposit checkout. Return to Work Chat after payment and press SEND ORDER again.'
-          : 'Opened deposit checkout.',
-        output: 'customer'
-      });
-    } finally {
-      state.depositLaunchInFlight = false;
-    }
+    openSettingsSection('payments');
+    safeText(els.stripeCustomerActionResult, 'Prepaid balance checkout has been removed. Use REGISTER CARD for month-end billing.');
+    flash('Use REGISTER CARD for month-end billing.', 'warn');
   });
 };
 if (els.cancelDepositModalBtn) els.cancelDepositModalBtn.onclick = () => closeDepositModal();
@@ -23548,7 +23406,7 @@ if (els.createStripeSetupSessionBtn) els.createStripeSetupSessionBtn.onclick = (
   runAction(els.createStripeSetupSessionBtn, async () => {
     if (TEMPORARY_INVOICE_BILLING_ENABLED && !STRIPE_CARD_SETUP_DURING_TEMPORARY_BILLING_ENABLED) {
       safeText(els.stripeCustomerActionResult, [
-        ...temporaryInvoiceNoticeLines('deposit'),
+        ...temporaryInvoiceNoticeLines('payment'),
         '',
         'Saved payment-method setup is unavailable in temporary invoice/manual billing mode.'
       ].join('\n'));
@@ -23703,41 +23561,8 @@ if (els.runStripeProviderPayoutBtn) els.runStripeProviderPayoutBtn.onclick = () 
 if (els.runStripeAutoTopupBtn) els.runStripeAutoTopupBtn.onclick = () => {
   if (!ensureSettingsLogin()) return;
   runAction(els.runStripeAutoTopupBtn, async () => {
-    if (TEMPORARY_INVOICE_BILLING_ENABLED) {
-      safeText(els.stripeCustomerActionResult, [
-        ...temporaryInvoiceNoticeLines('deposit'),
-        '',
-        'Auto top-up is unavailable because hosted card charging is paused in temporary invoice/manual billing mode.'
-      ].join('\n'));
-      flash('Auto top-up is paused during temporary invoice billing.', 'warn');
-      return;
-    }
-    const amount = Number(els.billingAutoTopupAmount?.value || 0);
-    const autoTopupEnabled = String(els.billingAutoTopupEnabled?.value || 'false') === 'true';
-    const savedCard = Boolean(state.stripeStatus?.stripe?.accountStripe?.defaultPaymentMethodId) || String(state.stripeStatus?.stripe?.accountStripe?.defaultPaymentMethodStatus || '') === 'ready';
-    if (!autoTopupEnabled) {
-      safeText(els.stripeCustomerActionResult, 'Turn auto top-up on first.');
-      throw new Error('Turn auto top-up on first.');
-    }
-    if (!(amount > 0)) {
-      safeText(els.stripeCustomerActionResult, 'Configure a positive auto top-up amount first.');
-      throw new Error('Configure a positive auto top-up amount first.');
-    }
-    if (!savedCard) {
-      safeText(els.stripeCustomerActionResult, 'Auto top-up needs a saved payment method. Use ADD DEPOSIT or OPEN PLAN CHECKOUT first.');
-      throw new Error('Auto top-up needs a saved payment method. Use ADD DEPOSIT or OPEN PLAN CHECKOUT first.');
-    }
-    const result = await api('/api/stripe/auto-topup', {
-      method: 'POST',
-      body: JSON.stringify({ amount })
-    });
-    safeText(els.stripeCustomerActionResult, [
-      'Auto top-up attempted.',
-      `Amount: ${yen(result.amount || displayCurrencyToLedgerAmount(amount))}`,
-      result.payment_intent_id ? `Payment intent: ${result.payment_intent_id}` : 'Payment intent: -'
-    ].join('\n'));
-    flash('Auto top-up completed.', 'ok');
-    await refresh();
+    safeText(els.stripeCustomerActionResult, 'Automatic prepaid charging has been removed. Use REGISTER CARD for month-end billing.');
+    flash('Automatic prepaid charging has been removed.', 'warn');
   });
 };
 window.addEventListener('keydown', (event) => {
@@ -23769,11 +23594,11 @@ if (els.saveBillingSettingsBtn) els.saveBillingSettingsBtn.onclick = () => {
       billingEmail: els.billingEmail?.value || '',
       country: els.billingCountry?.value || 'JP',
       currency: els.billingCurrency?.value || 'USD',
-      autoTopupEnabled: els.billingAutoTopupEnabled?.value === 'true',
-      autoTopupThreshold: displayCurrencyToLedgerAmount(Number(els.billingAutoTopupThreshold?.value || 0)),
-      autoTopupAmount: displayCurrencyToLedgerAmount(Number(els.billingAutoTopupAmount?.value || 0)),
+      autoTopupEnabled: false,
+      autoTopupThreshold: 0,
+      autoTopupAmount: 0,
       subscriptionPlan: els.billingSubscriptionPlan?.value || 'none',
-      subscriptionOverageMode: els.billingSubscriptionOverageMode?.value || 'deposit',
+      subscriptionOverageMode: els.billingSubscriptionOverageMode?.value || 'monthly_invoice',
       taxId: els.billingTaxId?.value || '',
       purchaseOrderRef: els.billingPurchaseOrderRef?.value || '',
       invoiceMemo: els.billingInvoiceMemo?.value || '',
@@ -23783,7 +23608,7 @@ if (els.saveBillingSettingsBtn) els.saveBillingSettingsBtn.onclick = () => {
   });
   state.settingsPeriod = decodeURIComponent(period);
   switchTab('settings');
-  flash('Billing settings saved. Deposit and plan refill logic updated.', 'ok');
+  flash('Billing settings saved. Month-end billing logic updated.', 'ok');
   await refresh();
   });
 };

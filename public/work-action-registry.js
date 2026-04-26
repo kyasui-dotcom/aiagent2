@@ -97,104 +97,104 @@ export const WORK_UI_ACTION_DEFINITIONS = Object.freeze({
 
 export const WORK_COMMAND_COPY = Object.freeze({
   open_google_login: {
-    ja: 'Google ログインを開きます。通常の注文、支払い、残高管理に使います。',
-    en: 'Opening Google sign-in. Use it for ordering, payments, and balance management.',
-    status: 'Opening Google sign-in.\n\nNo order was created and no deposit was charged.'
+    ja: 'Google ログインを開きます。通常の注文、支払い、請求管理に使います。',
+    en: 'Opening Google sign-in. Use it for ordering, payments, and billing management.',
+    status: 'Opening Google sign-in.\n\nNo order was created and no billing occurred.'
   },
   open_github_login: {
     ja: 'GitHub ログイン/連携を開きます。エージェント登録、repo連携、提供者フローに使います。',
     en: 'Opening GitHub sign-in/linking. Use it for agent publishing, repo access, and provider flows.',
-    status: 'Opening GitHub sign-in.\n\nNo order was created and no deposit was charged.'
+    status: 'Opening GitHub sign-in.\n\nNo order was created and no billing occurred.'
   },
   open_logout: {
     ja: 'ログアウト/セッションリセットを実行します。',
     en: 'Running logout/session reset.',
-    status: 'Logging out.\n\nNo order was created and no deposit was charged.'
+    status: 'Logging out.\n\nNo order was created and no billing occurred.'
   },
   open_payments: {
-    ja: '支払いまわりは SETTINGS の PAYMENTS で確認してください。残高追加、プラン、支払い履歴はそこで管理します。',
-    en: 'For billing, go to SETTINGS > PAYMENTS. Manage deposit, plan, and payment history there.',
-    status: 'Go to SETTINGS > PAYMENTS.\n\nNo order was created and no deposit was charged.'
+    ja: '支払いまわりは SETTINGS の PAYMENTS で確認してください。カード登録、プラン、支払い履歴はそこで管理します。',
+    en: 'For billing, go to SETTINGS > PAYMENTS. Manage card registration, plan, and payment history there.',
+    status: 'Go to SETTINGS > PAYMENTS.\n\nNo order was created and no billing occurred.'
   },
   open_provider: {
     ja: '提供者まわりは SETTINGS の PROVIDER で確認してください。プロフィールと収益受け取りの準備状況はそこで管理します。',
     en: 'For provider setup, go to SETTINGS > PROVIDER. Manage profile and payout readiness there.',
-    status: 'Go to SETTINGS > PROVIDER.\n\nNo order was created and no deposit was charged.'
+    status: 'Go to SETTINGS > PROVIDER.\n\nNo order was created and no billing occurred.'
   },
   open_agent_catalog: {
     ja: '使えるエージェントは AGENTS タブで見てください。そこから Work Chat にピン留めできます。',
     en: 'Browse available agents from the AGENTS tab. You can pin one into Work Chat there.',
-    status: 'Go to the AGENTS tab.\n\nNo order was created and no deposit was charged.'
+    status: 'Go to the AGENTS tab.\n\nNo order was created and no billing occurred.'
   },
   open_agent_listing: {
     ja: 'エージェントを登録したい意図なら、AGENTS タブへ行ってください。repo 選択、manifest 生成、PR、import、verify の順です。',
     en: 'If the intent is to register an agent, go to the AGENTS tab. Continue there with repo selection, manifest generation, PR, import, and verify.',
-    status: 'Go to the AGENTS tab for listing.\n\nNo order was created and no deposit was charged.'
+    status: 'Go to the AGENTS tab for listing.\n\nNo order was created and no billing occurred.'
   },
   open_api_keys: {
     ja: 'API key は SETTINGS の KEYS で発行・管理してください。注文、エージェント登録、CLI/API で使います。',
     en: 'For API keys, go to SETTINGS > KEYS. Issue and manage the CAIt API key there.',
-    status: 'Go to SETTINGS > KEYS.\n\nNo order was created and no deposit was charged.'
+    status: 'Go to SETTINGS > KEYS.\n\nNo order was created and no billing occurred.'
   },
   open_cli: {
     ja: 'CLI / API 情報は CONNECT タブで見てください。CAIt API key と /api/jobs の使い方を確認できます。',
     en: 'For CLI / API docs, go to the CONNECT tab. You can inspect CAIt API key usage and /api/jobs examples there.',
-    status: 'Go to the CONNECT tab.\n\nNo order was created and no deposit was charged.'
+    status: 'Go to the CONNECT tab.\n\nNo order was created and no billing occurred.'
   },
   open_account_settings: {
     ja: 'アカウント設定は SETTINGS タブで管理してください。支払い、提供者設定、APIキー、レポートがあります。',
     en: 'Go to the SETTINGS tab for account settings. Manage billing, provider setup, API keys, and reports there.',
-    status: 'Go to the SETTINGS tab.\n\nNo order was created and no deposit was charged.'
+    status: 'Go to the SETTINGS tab.\n\nNo order was created and no billing occurred.'
   },
   open_feedback: {
     ja: '問い合わせや不具合報告は SETTINGS の REPORTS から送ってください。タイトルと内容を書いて送信できます。',
     en: 'For bug reports or requests, go to SETTINGS > REPORTS. Add a title and message there.',
-    status: 'Go to SETTINGS > REPORTS.\n\nNo order was created and no deposit was charged.'
+    status: 'Go to SETTINGS > REPORTS.\n\nNo order was created and no billing occurred.'
   },
   open_delivery_history: {
     ja: '注文履歴と納品は WORK タブで確認してください。完了した注文、納品、フォローアップをそこで見られます。',
     en: 'Go to the WORK tab for order history and delivery. Review completed orders, deliveries, and follow-up actions there.',
-    status: 'Go to the WORK tab.\n\nNo order was created and no deposit was charged.'
+    status: 'Go to the WORK tab.\n\nNo order was created and no billing occurred.'
   },
   open_marketing_timeline: {
     ja: '保存済みの Work timeline を開きます。完了済み run、今後の scheduled action、再実行候補をここで確認できます。',
     en: 'Opening the stored Work timeline. You can inspect completed runs, upcoming scheduled actions, and restart candidates there.',
-    status: 'Opening Work timeline.\n\nNo order was created and no deposit was charged.'
+    status: 'Opening Work timeline.\n\nNo order was created and no billing occurred.'
   },
   open_order_settings: {
     ja: 'URL、ファイル、エージェント指定、並列注文は ORDER SETTINGS で設定してください。',
     en: 'Use ORDER SETTINGS for URLs, files, pinned agent, and parallel order settings.',
-    status: 'Open ORDER SETTINGS when needed.\n\nNo order was created and no deposit was charged.'
+    status: 'Open ORDER SETTINGS when needed.\n\nNo order was created and no billing occurred.'
   },
   open_parallel_tools: {
     ja: '並列ワークは ORDER SETTINGS の中で設定してください。複数の独立した依頼をキューに入れてまとめて送れます。',
     en: 'Use the parallel work tools inside ORDER SETTINGS. Queue several independent requests and send them together.',
-    status: 'Use ORDER SETTINGS for parallel work.\n\nNo order was created and no deposit was charged.'
+    status: 'Use ORDER SETTINGS for parallel work.\n\nNo order was created and no billing occurred.'
   },
   set_clarify_mode: {
     ja: 'PLAN mode に切り替えます。質問、整理、draft作成まではできますが、このモードでは有料注文を作りません。',
     en: 'Switching to PLAN mode. I can ask questions, refine, and prepare drafts, but this mode will not create paid orders.',
-    status: 'PLAN mode enabled.\n\nNo order was created and no deposit was charged.'
+    status: 'PLAN mode enabled.\n\nNo order was created and no billing occurred.'
   },
   set_order_mode: {
     ja: 'ORDER mode に切り替えます。発注文が準備できたら、確認後に SEND ORDER できます。',
     en: 'Switching to ORDER mode. Once the brief is ready, SEND ORDER can dispatch paid work after confirmation.',
-    status: 'ORDER mode enabled.\n\nNo order was created and no deposit was charged.'
+    status: 'ORDER mode enabled.\n\nNo order was created and no billing occurred.'
   },
   set_route_auto: {
     ja: 'ルートを AUTO に戻します。内容に応じて CAIt が通常エージェントかリーダーエージェントかを選びます。',
     en: 'Route set to AUTO. CAIt will choose a Specialist Agent or Leader Agent based on the request.',
-    status: 'Route set to AUTO.\n\nNo order was created and no deposit was charged.'
+    status: 'Route set to AUTO.\n\nNo order was created and no billing occurred.'
   },
   set_route_single: {
     ja: 'ルートを Specialist Agent 優先にします。低コストで、1つの通常エージェントに任せる想定です。',
     en: 'Route set to Specialist Agent. This favors a lower-cost single specialist when the task is focused.',
-    status: 'Route set to Specialist Agent.\n\nNo order was created and no deposit was charged.'
+    status: 'Route set to Specialist Agent.\n\nNo order was created and no billing occurred.'
   },
   set_route_multi: {
     ja: 'ルートを Leader Agent 優先にします。複数領域の整理、分担、統合が必要な依頼に向いています。',
     en: 'Route set to Leader Agent. This favors planning, delegation, and synthesis across multiple specialties.',
-    status: 'Route set to Leader Agent.\n\nNo order was created and no deposit was charged.'
+    status: 'Route set to Leader Agent.\n\nNo order was created and no billing occurred.'
   }
 });
 

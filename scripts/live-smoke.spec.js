@@ -157,7 +157,7 @@ test('live anonymous smoke', async ({ page }) => {
   await expect(page.locator('#workChatStatusText')).toContainText('Message not sent yet');
   await page.locator('#createJobBtn').click();
   await expect(page.locator('#workChatThread')).toContainText('意図が少し曖昧です');
-  await expect(page.locator('#workChatThread')).toContainText('支払い/デポジット');
+  await expect(page.locator('#workChatThread')).toContainText('支払い/ルーティング確認');
   await expect(page.locator('#workChatThread')).toContainText('提供者');
   await page.locator('#jobPrompt').fill('リセット');
   await page.locator('#createJobBtn').click();

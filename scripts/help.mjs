@@ -28,7 +28,7 @@ Useful commands
 
 Settings before Stripe
 - Open the SETTINGS tab after login
-- Add deposit or open plan checkout for customer funding
+- Register a card or open plan checkout for customer billing
 - Save provider profile details and open Stripe Connect for payouts
 - Do not collect card or bank numbers directly in CAIt
 

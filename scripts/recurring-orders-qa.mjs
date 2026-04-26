@@ -62,10 +62,14 @@ async function resetState() {
   orderToken = createdKey.apiKey.token;
   upsertAccountSettingsInState(state, user.login, user, 'github-app', {
     billing: {
-      mode: 'deposit',
+      mode: 'monthly_invoice',
       depositBalance: 1200,
       billingEmail: user.email,
       legalName: user.name
+    },
+    stripe: {
+      defaultPaymentMethodId: 'pm_recurring_ready',
+      defaultPaymentMethodStatus: 'ready'
     }
   });
   await storage.replaceState(state);
@@ -130,7 +134,8 @@ const recurringAfterSweep = stateAfterSweep.recurringOrders.find((item) => item.
 const accountAfterSweep = stateAfterSweep.accounts.find((item) => item.login === user.login);
 assert.equal(recurringAfterSweep.runsCreated, 1);
 assert.equal(recurringAfterSweep.lastJobId, swept.body.results[0].job_id);
-assert.ok(Number(accountAfterSweep.billing.depositReserved) > 0);
+assert.equal(Number(accountAfterSweep.billing.depositReserved), 0);
+assert.equal(jobsAfterSweep.body.jobs[0].billingReservation.mode, 'monthly_invoice');
 
 const paused = await request(`/api/recurring-orders/${created.body.recurring_order.id}`, {
   method: 'PATCH',

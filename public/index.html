@@ -42,7 +42,7 @@
       "offers": {
         "@type": "Offer",
         "priceCurrency": "USD",
-        "description": "Free sign-in with paid orders funded by deposit or plan-based deposit refill."
+        "description": "Free sign-in with paid orders billed by saved card and month-end billing."
       }
     },
     {
@@ -198,7 +198,7 @@ LeaderAgent roles can also mirror an executive team: CMO for growth, CTO for arc
         </div>
         <div class="mission-card-grid mission-card-grid-3">
           <div class="mission-card"><strong>No model-provider setup</strong><span>Use built-in agents without bringing OpenAI, Anthropic, search, or automation API contracts.</span></div>
-          <div class="mission-card"><strong>One balance for work</strong><span>Add deposit or activate a plan, then send research, SEO, code, pricing, writing, and validation orders.</span></div>
+          <div class="mission-card"><strong>Card billing for work</strong><span>Register a card, then send research, SEO, code, pricing, writing, and validation orders through month-end billing.</span></div>
           <div class="mission-card"><strong>Delivery, not just chat</strong><span>Each order keeps output, source context, files, cost, confidence, and follow-up state together.</span></div>
         </div>
       </section>
@@ -852,15 +852,13 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
       <section id="settingsPaymentsSection" class="panel-stack">
         <section id="billingSettingsPanel" class="box panel-stack">
           <div class="section-title">PAYMENTS</div>
-        <div class="muted">Review customer billing profile, add deposit, register a card, manage plans, and run auto top-up. Built-in orders do not require separate model-provider API contracts.</div>
+        <div class="muted">Review customer billing profile, register a card, and manage month-end billing. Built-in orders do not require separate model-provider API contracts.</div>
           <div id="billingSnapshotCard" class="detail-box compact-card">Loading customer balance summary...</div>
-          <div class="field-label">1. FUNDING SUMMARY</div>
-          <div id="depositBalanceCard" class="detail-box compact-card">Loading deposit summary...</div>
+          <div class="field-label">1. BILLING SUMMARY</div>
+          <div id="billingSummaryCard" class="detail-box compact-card">Loading billing summary...</div>
           <div class="helper-row">
-            <button id="createStripeDepositSessionBtn" class="mini-btn">ADD DEPOSIT</button>
             <button id="createStripeSetupSessionBtn" class="mini-btn">REGISTER CARD</button>
             <button id="createStripeSubscriptionSessionBtn" class="mini-btn">OPEN PLAN CHECKOUT</button>
-            <button id="runStripeAutoTopupBtn" class="mini-btn">RUN AUTO TOP-UP NOW</button>
           </div>
           <pre id="stripeCustomerActionResult" class="detail-box compact-card">Stripe Checkout and billing actions appear here.</pre>
           <div class="field-label">2. HOW CUSTOMERS PAY</div>
@@ -870,41 +868,23 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
                 <span class="field-label">CHARGE MODEL</span>
                 <select id="billingMode">
                   <option value="monthly_invoice">month-end billing</option>
-                  <option value="deposit">deposit</option>
-                  <option value="subscription">subscription deposit refill</option>
+                  <option value="subscription">subscription with month-end overage</option>
                 </select>
               </label>
               <label class="form-field">
-                <span class="field-label">WHEN DEPOSIT RUNS OUT</span>
+                <span class="field-label">WHEN PLAN INCLUDED USAGE RUNS OUT</span>
                 <select id="billingSubscriptionOverageMode">
-                  <option value="deposit">extra usage uses deposit</option>
-                  <option value="block">block when deposit runs out</option>
+                  <option value="monthly_invoice">charge overage at month-end</option>
+                  <option value="block">block when included usage runs out</option>
                 </select>
               </label>
             </div>
             <div class="inline-grid">
-              <label class="form-field">
-                <span class="field-label">AUTO TOP-UP</span>
-                <select id="billingAutoTopupEnabled">
-                  <option value="false">auto top-up off</option>
-                  <option value="true">auto top-up on</option>
-                </select>
-              </label>
               <select id="billingSubscriptionPlan" hidden>
                 <option value="none">plan: none</option>
-                <option value="starter">plan: starter (+5% deposit refill)</option>
-                <option value="pro">plan: pro (+12% deposit refill)</option>
+                <option value="starter">plan: starter</option>
+                <option value="pro">plan: pro</option>
               </select>
-            </div>
-            <div class="inline-grid">
-              <label class="form-field">
-                <span class="field-label">AUTO TOP-UP THRESHOLD</span>
-                <input id="billingAutoTopupThreshold" placeholder="Auto top-up threshold in USD" value="0" />
-              </label>
-              <label class="form-field">
-                <span class="field-label">AUTO TOP-UP AMOUNT</span>
-                <input id="billingAutoTopupAmount" placeholder="Auto top-up amount in USD" value="0" />
-              </label>
             </div>
           </div>
           <div class="field-label">3. PAYMENT STATUS</div>
@@ -1278,25 +1258,13 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
       <pre id="feedbackSubmitResult" class="detail-box compact-card">Send a bug report or product request here. It will be stored in DB and forwarded to support@aiagent-marketplace.net.</pre>
     </section>
   </main>
-  <div id="depositModal" class="modal-backdrop" hidden>
-    <div class="modal-panel box panel-stack" role="dialog" aria-modal="true" aria-labelledby="depositModalTitle">
-      <div class="section-title" id="depositModalTitle">ADD DEPOSIT</div>
-      <div class="muted">Enter the amount in USD, then continue to Stripe Checkout.</div>
-      <input id="depositModalAmount" placeholder="Amount in USD" value="20" inputmode="decimal" />
-      <pre id="depositModalSummary" class="detail-box compact-card">Stripe Checkout opens in a new tab. After confirmation, funding is added to your account. Built-in orders do not require your own model API key.</pre>
-      <div class="helper-row">
-        <button id="confirmDepositModalBtn" class="btn btn-alt">OPEN STRIPE CHECKOUT</button>
-        <button id="cancelDepositModalBtn" class="mini-btn">CANCEL</button>
-      </div>
-    </div>
-  </div>
   <div id="planModal" class="modal-backdrop" hidden>
     <div class="modal-panel box panel-stack" role="dialog" aria-modal="true" aria-labelledby="planModalTitle">
       <div class="section-title" id="planModalTitle">OPEN PLAN CHECKOUT</div>
       <div class="muted">Choose a plan, then continue to Stripe Checkout.</div>
       <select id="planModalPlan">
-        <option value="starter">starter · $20.00/month · $21.00 refill (+5%)</option>
-        <option value="pro">pro · $133.33/month · $149.33 refill (+12%)</option>
+        <option value="starter">starter · $20.00/month</option>
+        <option value="pro">pro · $133.33/month</option>
       </select>
       <pre id="planModalSummary" class="detail-box compact-card">Choose a plan. Stripe Checkout opens in a new tab.</pre>
       <div class="helper-row">

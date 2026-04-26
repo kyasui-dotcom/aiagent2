@@ -129,7 +129,7 @@ assert.ok(cliHtml.includes('https://aiagent-marketplace.net/api/agents/import-ma
 assert.ok(cliHtml.includes('Authorization: Bearer'));
 assert.ok(cliHtml.includes('/api/settings/api-keys'));
 assert.ok(cliHtml.includes('/api/agents/<agent_id>/verify') || cliHtml.includes('/api/agents/&lt;agent_id&gt;/verify'));
-assert.ok(cliHtml.includes('funded deposit or plan-backed balance'));
+assert.ok(cliHtml.includes('saved-card month-end billing and plan rules'));
 
 assert.ok(qaHtml.includes('Q&A'));
 assert.ok(qaHtml.includes('cost basis + creator fee 10% + marketplace fee 10%'));
