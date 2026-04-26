@@ -3034,14 +3034,20 @@ function accountUserFromSettings(account) {
 
 async function persistAccountForIdentity(storage, env, user, authProvider) {
   let account = null;
+  let accountCreated = false;
   let signupCredits = null;
   await storage.mutate(async (draft) => {
+    const identityLogin = defaultLoginForAuthUser(user, authProvider);
+    const existingIdentityAccount = accountSettingsForIdentity(draft, user, authProvider);
+    const existingLoginAccount = identityLogin
+      ? accountSettingsForLogin(draft, identityLogin, user, authProvider)
+      : null;
+    accountCreated = !existingIdentityAccount?.login && !existingLoginAccount?.login;
     account = upsertAccountSettingsForIdentityInState(draft, user, authProvider, {});
     signupCredits = maybeGrantWelcomeCreditsForSignupInState(draft, account.login, user, authProvider);
     account = accountSettingsForLogin(draft, account.login, user, authProvider);
   });
-  if (signupCredits?.status === 'granted') {
-    await touchEvent(storage, 'CREDIT', `${account.login} earned ${signupCredits.amount} signup welcome credits`);
+  if (accountCreated) {
     await trackAuthConversionEvent(storage, 'signup_completed', {
       loggedIn: true,
       authProvider,
@@ -3050,11 +3056,14 @@ async function persistAccountForIdentity(storage, env, user, authProvider) {
       source: 'auth_callback',
       status: 'created'
     });
+  }
+  if (signupCredits?.status === 'granted') {
+    await touchEvent(storage, 'CREDIT', `${account.login} earned ${signupCredits.amount} signup welcome credits`);
     await maybeSendSignupWelcomeEmail(storage, env, account, user, authProvider);
   }
   await trackAuthLoginCompletion(storage, authProvider, account, {
     source: 'auth_callback',
-    status: signupCredits?.status === 'granted' ? 'created' : 'existing'
+    status: accountCreated ? 'created' : 'existing'
   });
   return account;
 }

@@ -51,6 +51,11 @@ function cookieHeaderFromSetCookie(value = '') {
   return firstPart || '';
 }
 
+function funnelTotal(analytics = null, eventName = '') {
+  const row = (analytics?.funnel || []).find((item) => item?.event === eventName);
+  return Number(row?.total || 0);
+}
+
 async function waitForServer(timeoutMs = 8000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -145,6 +150,20 @@ async function main() {
     const csrfToken = String(loggedInStatusRes.body.csrfToken || '').trim();
     assert.ok(csrfToken, 'logged-in auth status should expose a CSRF token for browser writes');
 
+    const firstSnapshotRes = await request('/api/snapshot', {
+      headers: {
+        cookie: sessionCookie
+      }
+    });
+    assert.equal(firstSnapshotRes.status, 200);
+    assert.equal(funnelTotal(firstSnapshotRes.body.conversionAnalytics, 'signup_completed'), 1, 'first verified email login should create one signup conversion');
+    assert.equal(funnelTotal(firstSnapshotRes.body.conversionAnalytics, 'email_login_completed'), 1, 'first verified email login should create one login completion');
+    assert.equal(Number(firstSnapshotRes.body.conversionAnalytics?.actuals?.accounts?.total || 0), 1, 'first verified email login should create one account');
+    const firstSignupRecent = (firstSnapshotRes.body.conversionAnalytics?.recent || []).find((event) => event?.event === 'signup_completed');
+    const firstLoginRecent = (firstSnapshotRes.body.conversionAnalytics?.recent || []).find((event) => event?.event === 'email_login_completed');
+    assert.equal(firstSignupRecent?.status, 'created');
+    assert.equal(firstLoginRecent?.status, 'created');
+
     const customReturnToken = createEmailAuthToken({
       email: 'owner@example.com',
       returnTo: '/?tab=agents',
@@ -154,6 +173,18 @@ async function main() {
     const customReturnRes = await request(`/auth/email/verify?token=${encodeURIComponent(customReturnToken)}`);
     assert.equal(customReturnRes.status, 302);
     assert.equal(String(customReturnRes.headers.get('location') || ''), '/?tab=agents', 'custom in-product return path should be preserved');
+    const secondSessionCookie = cookieHeaderFromSetCookie(customReturnRes.headers.get('set-cookie') || '') || sessionCookie;
+
+    const secondSnapshotRes = await request('/api/snapshot', {
+      headers: {
+        cookie: secondSessionCookie
+      }
+    });
+    assert.equal(secondSnapshotRes.status, 200);
+    assert.equal(funnelTotal(secondSnapshotRes.body.conversionAnalytics, 'signup_completed'), 1, 'repeat verified email login should not create another signup conversion');
+    assert.equal(funnelTotal(secondSnapshotRes.body.conversionAnalytics, 'email_login_completed'), 2, 'repeat verified email login should still create a login completion');
+    const secondLoginRecent = (secondSnapshotRes.body.conversionAnalytics?.recent || []).find((event) => event?.event === 'email_login_completed');
+    assert.equal(secondLoginRecent?.status, 'existing');
 
     const externalReturnToken = createEmailAuthToken({
       email: 'owner@example.com',
