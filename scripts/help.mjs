@@ -114,6 +114,7 @@ Runtime checks
 - npm run qa:runs
 - npm run qa:worker-api
 - npm run qa:worker-runs
+- npm run qa:login-leader-order
 - npm run qa:billing
 
 Manifest and routing checks
@@ -129,8 +130,9 @@ Recommended order
 1. npm run qa:docs
 2. npm run qa:settings
 3. npm run qa:ui
-4. npm run qa:worker-api
-5. npm run qa:all`;
+4. npm run qa:login-leader-order
+5. npm run qa:worker-api
+6. npm run qa:all`;
 
 const outputs = { overview, cli, qa };
 const output = outputs[mode] || overview;

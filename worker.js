@@ -10599,6 +10599,38 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       statusCode: followupConversation.statusCode || 400
     };
   }
+  const workflowEstimate = buildWorkflowEstimate(plan.selections);
+  if (current?.login) {
+    const fundingPreflightState = structuredClone(state);
+    const fundingPreflight = reserveBillingEstimateInState(
+      fundingPreflightState,
+      current.login,
+      current.user,
+      current.authProvider,
+      workflowEstimate.totalMax,
+      {
+        apiKeyMode: billingApiKeyModeForRequester(current, env),
+        period: billingPeriodId(),
+        at: nowIso()
+      }
+    );
+    if (!fundingPreflight?.ok) {
+      await (options.touchUsage || (async () => {}))();
+      return {
+        error: fundingPreflight?.error || 'Payment required before sending this Agent Team order.',
+        code: fundingPreflight?.code || 'payment_required',
+        planned_task_types: plan.plannedTasks,
+        estimated_cost: {
+          total: workflowEstimate.totalMax,
+          totalMin: workflowEstimate.totalMin,
+          totalMax: workflowEstimate.totalMax
+        },
+        billing_profile: fundingPreflight?.profile || null,
+        missing_amount: fundingPreflight?.missingAmount || workflowEstimate.totalMax,
+        statusCode: 402
+      };
+    }
+  }
   const promptOptimization = optimizeOrderPromptForBroker(body, { taskType });
   const inputBase = body.input && typeof body.input === 'object' ? body.input : {};
   const inputSourceBase = mergeProtectedPromptSourceIntoInput(inputBase, promptOptimization);
