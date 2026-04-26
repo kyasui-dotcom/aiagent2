@@ -11926,6 +11926,9 @@ async function handleRetryDispatch(storage, request, env) {
       draftJob.dispatchedAt = nowIso();
       draftJob.startedAt = draftJob.startedAt || draftJob.dispatchedAt;
       draftJob.status = 'dispatched';
+      draftJob.completedAt = null;
+      draftJob.failedAt = null;
+      draftJob.timedOutAt = null;
       draftJob.failureReason = null;
       draftJob.failureCategory = null;
       draftJob.dispatch = {
