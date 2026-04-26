@@ -22653,9 +22653,23 @@ async function createAndOptionallyRunJob() {
     void trackConversionEvent('draft_order_created', { ...analyticsDraft, source: 'implicit_order_prep' });
     return;
   }
+  const dispatchCheckJa = looksJapanese(draft.prompt || originalChatPrompt);
+  const dispatchCheckTitle = dispatchCheckJa ? 'SEND ORDERを受け付けました。' : 'SEND ORDER received.';
+  const dispatchCheckBody = dispatchCheckJa
+    ? '実行前チェック中です。ログイン、支払い、接続先を確認してからOrder IDと進捗を表示します。'
+    : 'Running pre-dispatch checks now. CAIt is checking sign-in, funding, and routing before posting the Order ID and progress.';
+  state.openChatLastStatus = `${dispatchCheckTitle}\n\n${dispatchCheckBody}`;
+  state.openChatLastStatusTone = 'info';
+  updateWorkChatStatusCard(dispatchCheckTitle, dispatchCheckBody, 'info');
+  upsertOpenChatPendingDispatchMessage(`${dispatchCheckTitle}\n\n${dispatchCheckBody}`, {
+    tone: 'info',
+    ja: dispatchCheckJa
+  });
+  flash(dispatchCheckJa ? 'SEND ORDERを受け付けました。実行前チェック中です。' : 'SEND ORDER received. Running checks...', 'info');
   try {
     validateOrderDraft(draft, { checkAccess: true, checkFunding: false });
   } catch (error) {
+    clearOpenChatPendingDispatchMessage();
     const blockedStatus = String(error?.message || 'Order blocked before dispatch.').slice(0, 240);
     void trackChatTranscript(draft.prompt, {
       kind: 'error',
@@ -22673,6 +22687,7 @@ async function createAndOptionallyRunJob() {
   }
   const serverPreflight = await preflightWorkOrderViaApi(draft);
   if (serverPreflight && !serverPreflight.ok) {
+    clearOpenChatPendingDispatchMessage();
     const preflightError = new Error(serverPreflight.error || 'Order preflight blocked dispatch.');
     preflightError.data = serverPreflight;
     preflightError.preflight = preflightFromError(preflightError);

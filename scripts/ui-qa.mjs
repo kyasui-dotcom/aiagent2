@@ -1020,6 +1020,9 @@ assert.ok(js.includes('Keep the final decision in one place: the composer choice
 assert.ok(js.includes('OPEN_CHAT_ORDER_PROGRESS_POLL_MS'));
 assert.ok(js.includes('function upsertOpenChatOrderProgressMessage('));
 assert.ok(js.includes('function startOpenChatOrderProgressPolling('));
+assert.ok(js.includes('SEND ORDER received. Running checks...'));
+assert.ok(js.includes('SEND ORDERを受け付けました。実行前チェック中です。'));
+assert.ok(js.includes('Running pre-dispatch checks now. CAIt is checking sign-in, funding, and routing before posting the Order ID and progress.'));
 assert.ok(js.includes('Order accepted. CAIt is starting dispatch and progress tracking.'));
 assert.ok(js.includes('発注を受け付けました。CAItが接続と進捗確認を始めています。'));
 assert.ok(js.includes('The order stopped before or during agent dispatch.'));
