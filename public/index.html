@@ -1258,6 +1258,28 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
       <pre id="feedbackSubmitResult" class="detail-box compact-card">Send a bug report or product request here. It will be stored in DB and forwarded to support@aiagent-marketplace.net.</pre>
     </section>
   </main>
+  <div id="apiKeyRevealModal" class="modal-backdrop" hidden>
+    <div class="modal-panel box panel-stack api-key-reveal-modal" role="dialog" aria-modal="true" aria-labelledby="apiKeyRevealTitle">
+      <div class="composer-title-row">
+        <div>
+          <div class="section-title" id="apiKeyRevealTitle">CAIt API KEY ISSUED</div>
+          <div class="muted">This is the only time CAIt can show this raw key. Copy it before closing.</div>
+        </div>
+        <button id="closeApiKeyRevealBtn" class="mini-btn" type="button">I SAVED IT</button>
+      </div>
+      <div class="detail-box action-card warn compact-card">Store this like a password. After you close this popup, CAIt will only show the key prefix and cannot recover the raw secret.</div>
+      <label class="form-field">
+        <span class="field-label">RAW CAIt API KEY</span>
+        <textarea id="apiKeyRevealToken" class="api-key-reveal-token" readonly spellcheck="false" autocomplete="off"></textarea>
+      </label>
+      <div class="helper-row">
+        <button id="copyApiKeyTokenBtn" class="btn btn-alt" type="button">COPY KEY</button>
+        <button id="copyApiKeyHeaderBtn" class="mini-btn" type="button">COPY AUTH HEADER</button>
+        <button id="copyApiKeyCurlBtn" class="mini-btn" type="button">COPY CURL</button>
+      </div>
+      <pre id="apiKeyRevealResult" class="detail-box compact-card">Copy the key, then paste it into Codex, CLI, or your server secret store.</pre>
+    </div>
+  </div>
   <div id="planModal" class="modal-backdrop" hidden>
     <div class="modal-panel box panel-stack" role="dialog" aria-modal="true" aria-labelledby="planModalTitle">
       <div class="section-title" id="planModalTitle">OPEN PLAN CHECKOUT</div>
@@ -1304,7 +1326,7 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
       <div id="flexToolActions" class="flex-tool-actions helper-row"></div>
     </div>
   </div>
-  <script type="module" src="/client.js?v=20260425b"></script>
+  <script type="module" src="/client.js?v=20260427b"></script>
   <script defer src="/analytics-loader.js?v=20260425a"></script>
 </body>
 </html>

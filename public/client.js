@@ -365,6 +365,13 @@ const els = {
   settingsKeysSection: $('settingsKeysSection'),
   settingsFunnelSection: $('settingsFunnelSection'),
   settingsReportsSection: $('settingsReportsSection'),
+  apiKeyRevealModal: $('apiKeyRevealModal'),
+  apiKeyRevealToken: $('apiKeyRevealToken'),
+  apiKeyRevealResult: $('apiKeyRevealResult'),
+  copyApiKeyTokenBtn: $('copyApiKeyTokenBtn'),
+  copyApiKeyHeaderBtn: $('copyApiKeyHeaderBtn'),
+  copyApiKeyCurlBtn: $('copyApiKeyCurlBtn'),
+  closeApiKeyRevealBtn: $('closeApiKeyRevealBtn'),
   apiKeyMode: $('apiKeyMode'),
   apiKeyLabel: $('apiKeyLabel'),
   createApiKeyBtn: $('createApiKeyBtn'),
@@ -3008,6 +3015,78 @@ function openPlanModal() {
 function closePlanModal() {
   state.planIntentArmed = false;
   setElementVisible(els.planModal, false);
+}
+
+function currentApiKeyRevealToken() {
+  return String(els.apiKeyRevealToken?.value || state.lastIssuedOrderApiKey?.token || '').trim();
+}
+
+function selectApiKeyRevealToken() {
+  if (!els.apiKeyRevealToken) return;
+  els.apiKeyRevealToken.focus();
+  els.apiKeyRevealToken.select();
+}
+
+function showApiKeyRevealResult(message = '') {
+  safeText(els.apiKeyRevealResult, message || 'Copy the key, then paste it into Codex, CLI, or your server secret store.');
+}
+
+function openApiKeyRevealModal(issued = null) {
+  const token = String(issued?.token || '').trim();
+  if (!token || !els.apiKeyRevealModal || !els.apiKeyRevealToken) return;
+  els.apiKeyRevealToken.value = token;
+  showApiKeyRevealResult([
+    'Copy this key now.',
+    `Label: ${issued.label || '-'}`,
+    `Prefix: ${issued.prefix || token.slice(0, 16)}...`,
+    '',
+    'Close this popup only after the key is saved. CAIt cannot show the raw secret again.'
+  ].join('\n'));
+  setElementVisible(els.apiKeyRevealModal, true);
+  window.requestAnimationFrame(() => selectApiKeyRevealToken());
+}
+
+function forgetLastIssuedApiKeySecret() {
+  if (!state.lastIssuedOrderApiKey?.token) return;
+  state.lastIssuedOrderApiKey = {
+    ...state.lastIssuedOrderApiKey,
+    token: ''
+  };
+}
+
+function closeApiKeyRevealModal() {
+  if (els.apiKeyRevealToken) els.apiKeyRevealToken.value = '';
+  setElementVisible(els.apiKeyRevealModal, false);
+  forgetLastIssuedApiKeySecret();
+  renderOrderApiKeys(state.snapshot?.accountSettings, state.snapshot?.auth);
+  renderConnectFlow();
+}
+
+async function copyApiKeyRevealValue(kind = 'token') {
+  const token = currentApiKeyRevealToken();
+  if (!token) {
+    showApiKeyRevealResult('No raw key is available in this popup. Issue a new key if you closed the one-time reveal.');
+    flash('No raw key available. Issue a new CAIt API key.', 'error');
+    return;
+  }
+  const text = kind === 'header'
+    ? `Authorization: Bearer ${token}`
+    : kind === 'curl'
+      ? formatOrderApiCommand(token)
+      : token;
+  const label = kind === 'header'
+    ? 'Authorization header copied.'
+    : kind === 'curl'
+      ? 'CAIt API curl command copied.'
+      : 'CAIt API key copied.';
+  await copyTextToClipboard(text, label);
+  showApiKeyRevealResult([
+    label,
+    '',
+    'Paste it into Codex, CLI, or your server secret store now.',
+    'After closing this popup, CAIt will only show the key prefix.'
+  ].join('\n'));
+  selectApiKeyRevealToken();
 }
 
 function renderPlanModalSummary() {
@@ -21180,17 +21259,15 @@ function renderOrderApiKeys(account = null, auth = null) {
   if (state.lastIssuedOrderApiKey?.token) {
     const issued = state.lastIssuedOrderApiKey;
     safeText(els.apiKeyCreateResult, [
-      'New CAIt API key issued. Copy it now. The raw secret is not shown again.',
+      'New CAIt API key issued. Copy it from the one-time popup now. The raw secret is not shown again after you close it.',
       '',
       'mode: LIVE',
       `label: ${issued.label}`,
       `prefix: ${issued.prefix}`,
       'settlement: included in live billing and provider payout settlement',
       '',
-      `token: ${issued.token}`,
-      '',
-      'public order example:',
-      formatOrderApiCommand(issued.token)
+      'Use COPY CURL in the popup for a command with the raw key. Placeholder example:',
+      formatOrderApiCommand()
     ].join('\n'));
   } else {
     safeText(els.apiKeyCreateResult, [
@@ -23307,6 +23384,7 @@ if (els.createApiKeyBtn) els.createApiKeyBtn.onclick = () => {
     if (els.apiKeyLabel) els.apiKeyLabel.value = '';
     flash(`${String(state.lastIssuedOrderApiKey?.mode || 'live').toUpperCase()} CAIt API key issued. Copy the raw key now; it will not be shown again.`, 'ok');
     await refresh();
+    openApiKeyRevealModal(state.lastIssuedOrderApiKey);
   });
 };
 if (els.apiKeyTable) els.apiKeyTable.onclick = (event) => {
@@ -23386,6 +23464,17 @@ if (els.planModal) {
     if (event.target === els.planModal) closePlanModal();
   };
 }
+if (els.apiKeyRevealModal) {
+  els.apiKeyRevealModal.onclick = (event) => {
+    if (event.target !== els.apiKeyRevealModal) return;
+    showApiKeyRevealResult('Copy and save the key before closing this one-time popup.');
+    selectApiKeyRevealToken();
+  };
+}
+if (els.copyApiKeyTokenBtn) els.copyApiKeyTokenBtn.onclick = () => { void copyApiKeyRevealValue('token'); };
+if (els.copyApiKeyHeaderBtn) els.copyApiKeyHeaderBtn.onclick = () => { void copyApiKeyRevealValue('header'); };
+if (els.copyApiKeyCurlBtn) els.copyApiKeyCurlBtn.onclick = () => { void copyApiKeyRevealValue('curl'); };
+if (els.closeApiKeyRevealBtn) els.closeApiKeyRevealBtn.onclick = () => closeApiKeyRevealModal();
 if (els.closeMarketingTimelineModalBtn) els.closeMarketingTimelineModalBtn.onclick = () => hideMarketingTimelineModal();
 if (els.marketingTimelineModal) {
   els.marketingTimelineModal.onclick = (event) => {
@@ -23480,6 +23569,11 @@ if (els.runStripeProviderPayoutBtn) els.runStripeProviderPayoutBtn.onclick = () 
   });
 };
 window.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && els.apiKeyRevealModal && !els.apiKeyRevealModal.hidden) {
+    showApiKeyRevealResult('Use COPY KEY, then press I SAVED IT when the key is stored. Escape does not close this one-time reveal.');
+    selectApiKeyRevealToken();
+    return;
+  }
   if (event.key === 'Escape' && els.planModal && !els.planModal.hidden) {
     closePlanModal();
   }

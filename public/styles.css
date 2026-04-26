@@ -1833,6 +1833,14 @@ textarea { min-height: 110px; }
 .failed::before, .offline::before { content: "● "; color: var(--red); opacity: .9; }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(3, 7, 14, .78); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 40; backdrop-filter: blur(4px); }
 .modal-panel { width: min(460px, 100%); box-shadow: 0 18px 48px rgba(0,0,0,.42); }
+.api-key-reveal-modal { width: min(720px, 100%); }
+.api-key-reveal-token {
+  min-height: 118px;
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.45;
+  word-break: break-all;
+}
 @media (max-width: 1180px) {
   .stats-grid-6 { grid-template-columns: repeat(3, 1fr); }
   .mission-card-grid-3, .price-grid, .doc-links-grid, .help-path-grid { grid-template-columns: 1fr; }
