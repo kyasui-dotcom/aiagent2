@@ -17,7 +17,17 @@ const env = {
   BASE_URL: BASE,
   MY_BINDING: null,
   ASSETS: {
-    async fetch() {
+    async fetch(request) {
+      const url = new URL(request.url);
+      if (url.pathname === '/login') {
+        return new Response('<section id="loginCheckingPanel"></section>', {
+          status: 200,
+          headers: { 'content-type': 'text/html' }
+        });
+      }
+      if (url.pathname === '/login.html') {
+        return new Response(null, { status: 307, headers: { location: '/login' } });
+      }
       return new Response('not found', { status: 404 });
     }
   }
@@ -102,6 +112,10 @@ async function request(path, init = {}, options = {}) {
 }
 
 async function loginWithEmail() {
+  const loginAlias = await request('/login');
+  assert.equal(loginAlias.status, 200, 'worker should serve the Cloudflare Assets /login alias without a self-redirect');
+  assert.match(loginAlias.text, /loginCheckingPanel/);
+
   const token = await emailAuthToken();
   const verified = await request(`/auth/email/verify?token=${encodeURIComponent(token)}`, { redirect: 'manual' });
   assert.equal(verified.status, 302, 'email verification should redirect after issuing a session');

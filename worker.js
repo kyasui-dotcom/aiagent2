@@ -12709,13 +12709,10 @@ export default {
 
     if (env.ASSETS) {
       const assetUrl = new URL(request.url);
-      const assetRequest = request.method === 'GET' && assetUrl.pathname === '/login'
-        ? new Request(new URL('/login.html', assetUrl), request)
-        : request;
-      if (request.method === 'GET' && assetUrl.pathname === '/login') assetUrl.pathname = '/login.html';
       const noCacheAssetPaths = new Set([
         '/',
         '/index.html',
+        '/login',
         '/login.html',
         '/styles.css',
         '/client.js',
@@ -12726,7 +12723,7 @@ export default {
         '/work-intent-resolver.js'
       ]);
       const isNoCacheAsset = request.method === 'GET' && noCacheAssetPaths.has(assetUrl.pathname);
-      const response = await env.ASSETS.fetch(assetRequest);
+      const response = await env.ASSETS.fetch(request);
       if (response.status !== 404) {
         return responseWithCookies(
           response,
