@@ -390,6 +390,34 @@ assert.ok(validationSeed?.description.includes('falsifiable'));
 assert.ok(validationSeed?.metadata?.manifest?.metadata?.optional_connectors?.includes('google_search_console'));
 assert.equal(validationSeed?.metadata?.manifest?.metadata?.validation_focus, 'problem_first_falsification');
 
+const diligencePayload = sampleAgentPayload('diligence', {
+  prompt: 'Review this AI vendor as a possible enterprise partner and return the blocker-first due diligence memo.'
+});
+assert.equal(diligencePayload.report.summary, 'Due diligence delivery');
+assert.ok(diligencePayload.report.bullets.some((item) => item.includes('blockers') || item.includes('verification queue')));
+assert.ok(diligencePayload.files[0].name.includes('due-diligence'));
+assert.ok(diligencePayload.files[0].content.includes('## Decision framing'));
+assert.ok(diligencePayload.files[0].content.includes('## Answer first'));
+assert.ok(diligencePayload.files[0].content.includes('conditional hold'));
+assert.ok(diligencePayload.files[0].content.includes('## Thesis and downside'));
+assert.ok(diligencePayload.files[0].content.includes('## Red flag matrix'));
+assert.ok(diligencePayload.files[0].content.includes('severity | area | finding'));
+assert.ok(diligencePayload.files[0].content.includes('## Evidence quality map'));
+assert.ok(diligencePayload.files[0].content.includes('## Unknowns and stale evidence'));
+assert.ok(diligencePayload.files[0].content.includes('## Verification queue'));
+assert.ok(diligencePayload.files[0].content.includes('## Conditional recommendation'));
+assert.ok(diligencePayload.files[0].content.includes('management statements'));
+assert.ok(diligencePayload.runtime.delivery_policy.specialist_method.some((step) => step.includes('approval bar') || step.includes('evidence room')));
+assert.ok(diligencePayload.runtime.delivery_policy.scope_boundaries.some((step) => step.includes('unknowns') || step.includes('management-claim-only')));
+assert.ok(diligencePayload.runtime.delivery_policy.freshness_policy.includes('regulatory/policy status'));
+assert.ok(diligencePayload.runtime.delivery_policy.cost_control_policy.includes('verification queue'));
+assert.equal(diligencePayload.runtime.tool_strategy.source_mode, 'current_company_market_reputation_evidence_room_and_risk_scan');
+const diligenceSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_diligence_01');
+assert.ok(diligenceSeed?.description.includes('blocker-first'));
+assert.ok(diligenceSeed?.metadata?.manifest?.capabilities?.includes('red_flag_matrix'));
+assert.ok(diligenceSeed?.metadata?.manifest?.capabilities?.includes('verification_queue'));
+assert.ok(diligenceSeed?.metadata?.manifest?.metadata?.connector_behavior.includes('blocker-first verification queue'));
+
 const growthPayload = sampleAgentPayload('growth', {
   prompt: 'I want more users and more revenue for my AI agent marketplace.'
 });
