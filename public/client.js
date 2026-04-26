@@ -573,6 +573,7 @@ const state = {
   planIntentArmed: false,
   eventFilter: '',
   currentTab: 'start',
+  pendingAuthTab: '',
   runSearch: '',
   runRequesterFilter: 'all',
   jobAgentSearch: '',
@@ -4170,6 +4171,10 @@ function openSettingsSection(section) {
   state.settingsSection = allowedSections.includes(section)
     ? section
     : 'payments';
+  if (!auth?.loggedIn) {
+    requireStartLoginGate('settings', 'Login required. SETTINGS actions are private.');
+    return;
+  }
   switchTab('settings');
   renderSettingsFlow(state.snapshot?.accountSettings, state.snapshot?.monthlySummary, auth);
   focusSettingsSection(state.settingsSection);
@@ -4310,6 +4315,9 @@ function rememberTab(tab) {
 function loginReturnPathForTab(tab = 'work') {
   const safeTab = normalizeTab(tab);
   if (!safeTab || safeTab === 'start') return '/';
+  if (safeTab === 'settings' && state.settingsSection) {
+    return `/?tab=settings&section=${encodeURIComponent(state.settingsSection)}`;
+  }
   return safeTab === 'work' ? '/?tab=work' : `/?tab=${encodeURIComponent(safeTab)}`;
 }
 
@@ -4325,6 +4333,24 @@ function buildLoginPageUrl({ source = 'direct', nextTab = 'work', nextPath = '' 
 
 function openDedicatedLoginPage(options = {}) {
   window.location.href = buildLoginPageUrl(options);
+}
+
+function currentPrivateReturnTab(fallback = 'work') {
+  const tab = normalizeTab(state.currentTab);
+  if (tab && tab !== 'start') return tab;
+  return normalizeTab(fallback) || 'work';
+}
+
+function openLoginForProtectedAction(source = 'protected_action', fallbackTab = 'work') {
+  openDedicatedLoginPage({
+    source,
+    nextTab: currentPrivateReturnTab(fallbackTab)
+  });
+}
+
+function openGithubSignIn() {
+  trackLoginStarted('github');
+  window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
 }
 
 function readRememberedAuthState() {
@@ -5054,8 +5080,7 @@ function applyOpenChatCommand(answer) {
     return;
   }
   if (command === 'open_github_login') {
-    trackLoginStarted('github');
-    window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
+    openGithubSignIn();
     return;
   }
   if (command === 'open_logout') {
@@ -12213,7 +12238,7 @@ async function handleChatActionButton(action = '', detail = {}) {
         status: 'Order prep canceled.\n\nNo order was created and no billing occurred.'
       });
     },
-    connect_github: async () => { window.location.href = githubAuthActionUrl(state.snapshot?.auth || {}); },
+    connect_github: async () => { openGithubSignIn(); },
     connect_google: async () => { openPrimaryGoogleSignIn(); },
     connect_x: async () => { connectXAccount(); },
     post_current_to_x: async () => { void postCurrentComposerToX(); },
@@ -12260,6 +12285,10 @@ function openPrimaryGoogleSignIn() {
   if (isLikelyRestrictedGoogleOAuthBrowser()) {
     flash(googleOAuthBrowserWarning(), 'warn');
   }
+  if (!state.snapshot?.auth?.loggedIn && !state.snapshot?.auth?.googleConfigured) {
+    openLoginForProtectedAction('google_login_unavailable', 'work');
+    return;
+  }
   trackLoginStarted('google');
   window.location.href = googleAuthActionUrl(state.snapshot?.auth || {});
 }
@@ -12274,7 +12303,7 @@ function connectXAccount() {
   const auth = state.snapshot?.auth || {};
   if (!auth.loggedIn) {
     flash('Sign in first, then connect X. The X connector is saved to your CAIt account.', 'warn');
-    openPrimaryGoogleSignIn();
+    openLoginForProtectedAction('connect_x', 'work');
     return;
   }
   if (auth.xConfigured === false || auth.xTokenEncryptionConfigured === false) {
@@ -12292,7 +12321,7 @@ async function postCurrentComposerToX() {
   const auth = state.snapshot?.auth || {};
   if (!auth.loggedIn) {
     flash('Sign in first, then connect X before posting.', 'warn');
-    openPrimaryGoogleSignIn();
+    openLoginForProtectedAction('post_current_to_x', 'work');
     return;
   }
   const account = state.snapshot?.accountSettings || null;
@@ -17438,7 +17467,7 @@ async function executeCodeHandoffInGithub(job = null, deliverable = null, draft 
     });
     if (job?.id && state.selectedJobId === String(job.id)) renderRunDelivery(selectedJob());
     flash('GitHub executor paused. Sign in and connect GitHub, then resume this delivery.', 'warn');
-    openPrimaryGoogleSignIn();
+    openGithubSignIn();
     return;
   }
   if (!connectorStatus.github) {
@@ -17888,7 +17917,7 @@ async function postExactTextToX(text = '', options = {}) {
     });
     if (options.jobId && state.selectedJobId === String(options.jobId)) renderRunDelivery(selectedJob());
     flash('X executor paused. Sign in and connect X, then resume this delivery.', 'warn');
-    openPrimaryGoogleSignIn();
+    openLoginForProtectedAction('x_post_executor', 'work');
     return;
   }
   if (!connectorStatus.x) {
@@ -17947,7 +17976,7 @@ async function postExactToInstagram(draft = {}, options = {}) {
   const auth = state.snapshot?.auth || {};
   if (!auth.loggedIn) {
     flash('Sign in before CAIt can publish to Instagram.', 'warn');
-    openPrimaryGoogleSignIn();
+    openLoginForProtectedAction('instagram_publish', 'work');
     return;
   }
   const accessToken = String(draft.instagramAccessToken || '').trim();
@@ -19632,6 +19661,18 @@ function requireStartLoginGate(targetTab = 'start', reason = 'Sign in from START
   });
 }
 
+function showAuthCheckingScreen(targetTab = 'work') {
+  state.pendingAuthTab = normalizeTab(targetTab) || 'work';
+  state.currentTab = 'auth-check';
+  document.querySelectorAll('[data-screen]').forEach((node) => {
+    node.hidden = node.dataset.screen !== 'auth-check';
+  });
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.classList.toggle('active', false);
+  });
+  syncTopWorkChatCta();
+}
+
 function pauseWorkChatOnTabLeave() {
   const hasBoundaryState = Boolean(
     state.pendingOrderConfirmation
@@ -19683,7 +19724,9 @@ function switchTab(tab, options = {}) {
   if (!loggedIn && nextTab !== 'start') {
     if (!authKnown && options.allowBootstrapAccess === true) {
       // During the first snapshot load, preserve the requested post-login route
-      // instead of bouncing back to /login before auth cookies are read.
+      // behind a neutral checking screen instead of showing private UI or login.
+      showAuthCheckingScreen(nextTab);
+      return;
     } else {
       requireStartLoginGate(nextTab, 'Sign in from START first. The product experience is private after login.');
       return;
@@ -19717,6 +19760,16 @@ function switchTab(tab, options = {}) {
 function syncLanding(snapshot = state.snapshot || {}) {
   const auth = snapshot?.auth || {};
   const loggedIn = Boolean(auth?.loggedIn);
+  if (state.currentTab === 'auth-check') {
+    const targetTab = state.pendingAuthTab || 'work';
+    state.pendingAuthTab = '';
+    if (loggedIn) {
+      switchTab(targetTab);
+    } else {
+      requireStartLoginGate(targetTab, 'Sign in from START first. The product experience is private after login.');
+    }
+    return;
+  }
   setTabVisible('start', !loggedIn);
   if (!loggedIn && state.currentTab !== 'start') {
     switchTab('start');
@@ -20198,7 +20251,7 @@ function handleFlexibleToolAction(action = '', actionLabel = '') {
     return;
   }
   if (kind === 'connect_github') {
-    window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
+    openGithubSignIn();
     return;
   }
   if (kind === 'connect_x') {
@@ -23104,16 +23157,9 @@ if (els.importDeployedAdapterBtn) els.importDeployedAdapterBtn.onclick = () => r
   }
   await importManifestUrlAndVerify(manifestUrl, 'Hosted manifest');
 });
-if (els.googleLoginBtn) els.googleLoginBtn.onclick = () => {
-  if (isLikelyRestrictedGoogleOAuthBrowser()) {
-    flash(googleOAuthBrowserWarning(), 'warn');
-  }
-  trackLoginStarted('google');
-  window.location.href = googleAuthActionUrl(state.snapshot?.auth || {});
-};
+if (els.googleLoginBtn) els.googleLoginBtn.onclick = openPrimaryGoogleSignIn;
 if (els.githubLoginBtn) els.githubLoginBtn.onclick = () => {
-  trackLoginStarted('github');
-  window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
+  openGithubSignIn();
 };
 if (els.installGithubAppBtn) els.installGithubAppBtn.onclick = () => {
   const popup = window.open('/auth/github-app/install', '_blank', 'noopener');
@@ -23143,8 +23189,7 @@ if (els.clearRepoSelectionBtn) els.clearRepoSelectionBtn.onclick = () => {
   }
 };
 if (els.connectHubGithubBtn) els.connectHubGithubBtn.onclick = () => {
-  trackLoginStarted('github');
-  window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
+  openGithubSignIn();
 };
 if (els.connectHubInstallBtn) els.connectHubInstallBtn.onclick = () => { window.location.href = '/auth/github-app/install'; };
 if (els.connectHubLoadReposBtn) els.connectHubLoadReposBtn.onclick = () => runAction(els.connectHubLoadReposBtn, async () => {
@@ -23217,8 +23262,7 @@ if (els.startSignupBtn) els.startSignupBtn.onclick = () => {
 };
 if (els.entryGoogleLoginBtn) els.entryGoogleLoginBtn.onclick = openPrimaryGoogleSignIn;
 if (els.entryGithubLoginBtn) els.entryGithubLoginBtn.onclick = () => {
-  trackLoginStarted('github');
-  window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
+  openGithubSignIn();
 };
 if (els.entryGuestContinueBtn) els.entryGuestContinueBtn.onclick = continueOpenChatAsGuest;
 if (els.toggleOrderSettingsBtn) els.toggleOrderSettingsBtn.onclick = () => {
@@ -23304,8 +23348,7 @@ if (els.checkAgentListBtn) els.checkAgentListBtn.onclick = () => {
   if (state.snapshot) render(state.snapshot);
 };
 if (els.agentFlowGithubLoginBtn) els.agentFlowGithubLoginBtn.onclick = () => {
-  trackLoginStarted('github');
-  window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
+  openGithubSignIn();
 };
 if (els.refreshSettingsBtn) els.refreshSettingsBtn.onclick = () => {
   if (!ensureSettingsLogin()) return;
@@ -24006,9 +24049,7 @@ window.addEventListener('pagehide', () => {
 function ensureSettingsLogin() {
   const loggedIn = Boolean(state.snapshot?.auth?.loggedIn && state.snapshot?.auth?.user?.login);
   if (loggedIn) return true;
-  switchTab('settings');
-  renderSettingsFlow(state.snapshot?.accountSettings, state.snapshot?.monthlySummary, state.snapshot?.auth);
-  flash('Login required. SETTINGS actions are private.', 'error');
+  requireStartLoginGate('settings', 'Login required. SETTINGS actions are private.');
   return false;
 }
 
@@ -24020,8 +24061,7 @@ function ensureGithubLinkedAccess(options = {}) {
   if (requiresGithubFlow ? githubAuthorized : (githubLinked || canManageAgentsFromBrowser(auth) || canManagePayoutsFromBrowser(auth))) return true;
   if (!auth?.loggedIn) {
     flash('Sign in first, then connect GitHub.', 'error');
-    trackLoginStarted('github');
-    window.location.href = githubAuthActionUrl(auth);
+    openGithubSignIn();
     return false;
   }
   if (githubLinked && requiresGithubFlow && !githubAuthorized) {
