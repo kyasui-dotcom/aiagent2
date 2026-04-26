@@ -6413,6 +6413,11 @@ async function performSingleJobCreate(req, body, current, options = {}) {
       draftJob.dispatchedAt = nowIso();
       draftJob.startedAt = draftJob.startedAt || draftJob.dispatchedAt;
       draftJob.status = 'dispatched';
+      draftJob.completedAt = null;
+      draftJob.failedAt = null;
+      draftJob.timedOutAt = null;
+      draftJob.failureReason = null;
+      draftJob.failureCategory = null;
       draftJob.dispatch = {
         endpoint: dispatch.endpoint,
         statusCode: dispatch.statusCode,
@@ -9312,7 +9317,11 @@ const server = http.createServer(async (req, res) => {
         draftJob.dispatchedAt = nowIso();
         draftJob.startedAt = draftJob.startedAt || draftJob.dispatchedAt;
         draftJob.status = 'dispatched';
+        draftJob.completedAt = null;
+        draftJob.failedAt = null;
+        draftJob.timedOutAt = null;
         draftJob.failureReason = null;
+        draftJob.failureCategory = null;
         draftJob.dispatch = {
           endpoint: dispatch.endpoint,
           statusCode: dispatch.statusCode,
