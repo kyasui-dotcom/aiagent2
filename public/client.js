@@ -12205,6 +12205,23 @@ async function handleChatActionButton(action = '', detail = {}) {
     connect_google: async () => { openPrimaryGoogleSignIn(); },
     connect_x: async () => { connectXAccount(); },
     post_current_to_x: async () => { void postCurrentComposerToX(); },
+    register_card: async () => {
+      openSettingsSection('payments');
+      if (!ensureSettingsLogin()) return;
+      if (TEMPORARY_INVOICE_BILLING_ENABLED && !STRIPE_CARD_SETUP_DURING_TEMPORARY_BILLING_ENABLED) {
+        flash('Saved payment-method setup is paused during temporary invoice billing.', 'warn');
+        return;
+      }
+      await launchStripeHostedAction('/api/stripe/setup-session', {}, {
+        title: TEMPORARY_INVOICE_BILLING_ENABLED
+          ? 'Payment method registration is ready.'
+          : 'Payment method setup is ready.',
+        successMessage: TEMPORARY_INVOICE_BILLING_ENABLED
+          ? 'Opened payment method registration. Orders still use monthly invoice/manual confirmation until automated charging is enabled.'
+          : 'Opened payment method setup.',
+        output: 'customer'
+      });
+    },
     open_payments: async () => { openSettingsSection('payments'); },
     open_provider: async () => { openSettingsSection('provider'); },
     open_api_keys: async () => { openSettingsSection('keys'); },
@@ -13250,10 +13267,17 @@ function orderFundingErrorInfo(error) {
   const data = error?.data || {};
   const code = String(data?.code || '').trim().toLowerCase();
   const message = String(error?.message || '').trim();
+  const billingProfile = state.stripeStatus?.billingProfile || state.snapshot?.monthlySummary?.customer || {};
+  const account = state.snapshot?.accountSettings || {};
+  const accountStripe = state.stripeStatus?.stripe?.accountStripe || account?.stripe || {};
+  const configuredMode = String(account?.billing?.mode || billingProfile?.configuredMode || '').trim().toLowerCase();
+  const savedCard = Boolean(accountStripe.defaultPaymentMethodId) || String(accountStripe.defaultPaymentMethodStatus || '') === 'ready';
   const paymentLike = Number(error?.status || 0) === 402
     || ['payment_required', 'insufficient_deposit', 'payment_method_missing', 'stripe_auto_topup_failed', 'auto_topup_not_captured'].includes(code)
     || /payment|required|deposit|funding|balance/i.test(message);
   if (!paymentLike) return null;
+  const registerCardRequired = code === 'payment_method_missing'
+    || (configuredMode === 'monthly_invoice' && !savedCard && ['payment_required', 'insufficient_deposit'].includes(code));
   const missingLedger = Number(data?.missing_amount ?? data?.missingAmount ?? 0);
   const estimatedLedger = Number(data?.estimated_cost?.total ?? data?.estimatedCost?.total ?? 0);
   const requiredLedger = missingLedger > 0 ? missingLedger : estimatedLedger;
@@ -13265,6 +13289,7 @@ function orderFundingErrorInfo(error) {
   return {
     code,
     message,
+    action: registerCardRequired ? 'register_card' : 'funding',
     missingUsd,
     suggestedUsd,
     estimatedBilling: data?.estimated_cost || null
@@ -13275,6 +13300,33 @@ function handleOrderFundingPrompt(error, draft = {}, options = {}) {
   const info = orderFundingErrorInfo(error);
   if (!info) return false;
   const prompt = draft.prompt || fallbackPromptFromOrderInput(draft.input || null) || 'Order request';
+  if (info.action === 'register_card') {
+    appendOrderChatExchange(prompt, {
+      kind: 'clarify',
+      tone: 'warn',
+      body: [
+        'Card registration is required before I can send this order.',
+        '',
+        'This account is set to month-end billing, so the correct next step is REGISTER CARD, not deposit top-up.',
+        info.missingUsd > 0 ? `Order estimate: ${usdFormatter.format(info.missingUsd)}` : '',
+        '',
+        'Register a card in SETTINGS > PAYMENTS, then return to Work Chat and press SEND ORDER again.'
+      ].filter(Boolean).join('\n'),
+      actions: [
+        { action: 'register_card', label: 'REGISTER CARD' },
+        { action: 'open_payments', label: 'OPEN PAYMENTS' }
+      ],
+      status: 'Card registration required before dispatch.'
+    }, { tone: 'warn', nextPrompt: prompt });
+    openSettingsSection('payments');
+    flash('Register a card before dispatch. Deposit top-up is not required for month-end billing.', 'warn');
+    void trackConversionEvent('payment_required_shown', {
+      ...(options.analytics || summarizeOrderDraftForAnalytics(draft, options.source || 'work_chat')),
+      status: 'register_card_required',
+      missingUsd: info.missingUsd
+    });
+    return true;
+  }
   const missingLine = info.missingUsd > 0
     ? `Estimated missing deposit: ${usdFormatter.format(info.missingUsd)}`
     : 'Deposit is required before this order can be dispatched.';
@@ -20285,10 +20337,16 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
   const strategy = routingDecision.strategy;
   const planned = routingDecision.plan;
   const billingProfile = state.stripeStatus?.billingProfile || snapshot?.monthlySummary?.customer || {};
+  const account = snapshot?.accountSettings || {};
+  const accountStripe = state.stripeStatus?.stripe?.accountStripe || account?.stripe || {};
+  const configuredBillingMode = String(account?.billing?.mode || billingProfile?.configuredMode || '').trim().toLowerCase();
+  const savedCard = Boolean(accountStripe.defaultPaymentMethodId) || String(accountStripe.defaultPaymentMethodStatus || '') === 'ready';
+  const monthlyBillingSelected = configuredBillingMode === 'monthly_invoice';
+  const monthlyBillingReady = monthlyBillingSelected && savedCard;
   const depositAvailable = Number(billingProfile.depositAvailable || 0);
   const autoTopupReady = Boolean(billingProfile.autoTopupEnabled) && Number(billingProfile.autoTopupAmount || 0) > 0;
   const adminBillingBypass = Boolean(auth?.isPlatformAdmin);
-  const billingReady = adminBillingBypass || depositAvailable > 0 || autoTopupReady;
+  const billingReady = adminBillingBypass || monthlyBillingReady || depositAvailable > 0 || autoTopupReady;
   const dispatchReady = isOpenChatDispatchReadyPrompt(prompt);
   const skillDraft = looksLikeAgentSkillMarkdown(prompt);
   const quickAnswer = skillDraft || dispatchReady ? null : quickOrderChatAnswer(prompt, sourceCounts);
@@ -20382,8 +20440,10 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
     body = `Using ${sourceCounts.urlCount} URL(s) and ${sourceCounts.fileCount} file(s). Add a prompt if you want explicit instructions.`;
     tone = 'ok';
   } else if (!billingReady) {
-    title = 'Payment required.';
-    body = `Open PAYMENTS and add deposit or activate a plan before pressing ${uiLabels.sendOrder}. That balance funds built-in agents without separate buyer-side model API contracts.`;
+    title = monthlyBillingSelected ? 'Register card before sending.' : 'Payment required.';
+    body = monthlyBillingSelected
+      ? `Month-end billing is selected. Open PAYMENTS and use REGISTER CARD before pressing ${uiLabels.sendOrder}.`
+      : `Open PAYMENTS and add deposit or activate a plan before pressing ${uiLabels.sendOrder}. That balance funds built-in agents without separate buyer-side model API contracts.`;
     tone = 'warn';
     buttonText = uiLabels.sendOrder;
   } else if (strategy === 'multi' && pinnedAgent) {

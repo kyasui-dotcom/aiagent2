@@ -415,7 +415,7 @@ upsertAccountSettingsInState(invoiceFallbackState, 'erin', invoiceFallbackUser, 
 });
 const invoiceFallback = reserveBillingEstimateInState(invoiceFallbackState, 'erin', invoiceFallbackUser, 'github-app', 120, { period: '2026-04' });
 assert.equal(invoiceFallback.ok, false);
-assert.equal(invoiceFallback.code, 'payment_required');
+assert.equal(invoiceFallback.code, 'payment_method_missing');
 assert.equal(invoiceFallback.profile.mode, 'deposit');
 
 const approvedInvoiceState = { agents: [], jobs: [], accounts: [] };
@@ -426,6 +426,10 @@ upsertAccountSettingsInState(approvedInvoiceState, 'fran', approvedInvoiceUser, 
     invoiceApproved: true,
     depositBalance: 0,
     autoTopupEnabled: false
+  },
+  stripe: {
+    defaultPaymentMethodId: 'pm_fran_ready',
+    defaultPaymentMethodStatus: 'ready'
   }
 });
 const approvedInvoice = reserveBillingEstimateInState(approvedInvoiceState, 'fran', approvedInvoiceUser, 'github-app', 120, { period: '2026-04' });

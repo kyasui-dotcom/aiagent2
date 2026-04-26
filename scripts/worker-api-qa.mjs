@@ -1464,8 +1464,34 @@ try {
     })
   }, { sessionCookie: daveSession });
   assert.equal(unfundedOrder.status, 402);
-  assert.equal(unfundedOrder.body.code, 'payment_required');
+  assert.equal(unfundedOrder.body.code, 'payment_method_missing');
   assert.equal(unfundedOrder.body.billing_profile.mode, 'deposit');
+
+  const daveDepositMode = await request('/api/settings/billing', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      mode: 'deposit',
+      depositBalance: 0,
+      autoTopupEnabled: false
+    })
+  }, { sessionCookie: daveSession });
+  assert.equal(daveDepositMode.status, 200);
+  assert.equal(daveDepositMode.body.account.billing.mode, 'deposit');
+
+  const depositUnfundedOrder = await request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      parent_agent_id: 'qa-runner',
+      agent_id: imported.body.agent.id,
+      task_type: 'ops',
+      prompt: 'Run the ops task without deposit funding.'
+    })
+  }, { sessionCookie: daveSession });
+  assert.equal(depositUnfundedOrder.status, 402);
+  assert.equal(depositUnfundedOrder.body.code, 'payment_required');
+  assert.equal(depositUnfundedOrder.body.billing_profile.mode, 'deposit');
 
   const topupPayload = JSON.stringify({
     id: 'evt_worker_qa_topup_1',
