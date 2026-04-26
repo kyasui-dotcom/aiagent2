@@ -232,4 +232,165 @@ assert.ok(repairedCmo);
 assert.equal(Boolean(repairedCmo.metadata?.hidden_from_catalog), false);
 assert.equal(Boolean(repairedCmo.metadata?.deleted_at || repairedCmo.metadata?.deletedAt), false);
 
+const jobStorage = createD1LikeStorage(null, { allowInMemory: true });
+const jobState = await jobStorage.getState();
+await jobStorage.replaceState({
+  ...jobState,
+  jobs: [{
+    id: 'job-parent',
+    parentAgentId: 'qa',
+    taskType: 'cmo_leader',
+    prompt: 'parent',
+    input: {},
+    priority: 'normal',
+    status: 'running',
+    workflow: { childRuns: [{ id: 'job-child', status: 'running' }] },
+    createdAt: '2026-04-26T08:00:00.000Z',
+    startedAt: '2026-04-26T08:05:00.000Z',
+    logs: ['parent started']
+  }]
+});
+await jobStorage.replaceState({
+  ...jobState,
+  jobs: [{
+    id: 'job-parent',
+    parentAgentId: 'qa',
+    taskType: 'cmo_leader',
+    prompt: 'parent',
+    input: {},
+    priority: 'normal',
+    status: 'queued',
+    createdAt: '2026-04-26T08:00:00.000Z',
+    logs: ['stale queued snapshot']
+  }]
+});
+const mergedJobState = await jobStorage.getState();
+const mergedParent = mergedJobState.jobs.find((job) => job.id === 'job-parent');
+assert.ok(mergedParent);
+assert.equal(mergedParent.status, 'running');
+assert.ok(Array.isArray(mergedParent.logs) && mergedParent.logs.includes('parent started'));
+assert.ok(Array.isArray(mergedParent.logs) && mergedParent.logs.includes('stale queued snapshot'));
+
+function createConcurrentJobsDb() {
+  const jobsRows = [];
+  return {
+    prepare(sql) {
+      let bound = [];
+      return {
+        bind(...args) {
+          bound = args;
+          return this;
+        },
+        async all() {
+          if (sql.startsWith('PRAGMA table_info(')) {
+            const table = sql.match(/PRAGMA table_info\((.+)\)/)?.[1] || '';
+            if (table === 'chat_transcripts') return { results: [{ name: 'session_id' }] };
+            if (table === 'jobs') return { results: [{ name: 'workflow_parent_id' }, { name: 'workflow_task' }, { name: 'workflow_agent_name' }, { name: 'workflow_json' }, { name: 'executor_state_json' }, { name: 'original_prompt' }, { name: 'prompt_optimization_json' }, { name: 'selection_mode' }, { name: 'estimate_window_json' }, { name: 'billing_reservation_json' }, { name: 'logs_json' }, { name: 'timed_out_at' }, { name: 'last_callback_at' }] };
+            return { results: [] };
+          }
+          if (sql.startsWith('SELECT * FROM jobs ORDER BY')) {
+            return { results: [...jobsRows] };
+          }
+          if (/SELECT \* FROM (agents|events|accounts|feedback_reports|chat_transcripts|recurring_orders|email_deliveries|exact_match_actions|app_settings) ORDER BY/.test(sql)) {
+            return { results: [] };
+          }
+          if (sql.startsWith('SELECT * FROM agents WHERE id IN')) return { results: [] };
+          return { results: [] };
+        },
+        async first() {
+          if (sql.startsWith('SELECT COUNT(*) as count FROM events')) return { count: 1 };
+          return null;
+        },
+        async run() {
+          if (sql.startsWith('INSERT OR REPLACE INTO jobs')) {
+            const row = {
+              id: bound[0],
+              parent_agent_id: bound[1],
+              task_type: bound[2],
+              prompt: bound[3],
+              input_json: bound[4],
+              budget_cap: bound[5],
+              deadline_sec: bound[6],
+              priority: bound[7],
+              status: bound[8],
+              job_kind: bound[9],
+              assigned_agent_id: bound[10],
+              score: bound[11],
+              usage_json: bound[12],
+              billing_estimate_json: bound[13],
+              actual_billing_json: bound[14],
+              output_json: bound[15],
+              failure_reason: bound[16],
+              failure_category: bound[17],
+              callback_token: bound[18],
+              dispatch_json: bound[19],
+              workflow_parent_id: bound[20],
+              workflow_task: bound[21],
+              workflow_agent_name: bound[22],
+              workflow_json: bound[23],
+              executor_state_json: bound[24],
+              original_prompt: bound[25],
+              prompt_optimization_json: bound[26],
+              selection_mode: bound[27],
+              estimate_window_json: bound[28],
+              billing_reservation_json: bound[29],
+              logs_json: bound[30],
+              created_at: bound[31],
+              claimed_at: bound[32],
+              dispatched_at: bound[33],
+              started_at: bound[34],
+              last_callback_at: bound[35],
+              completed_at: bound[36],
+              failed_at: bound[37],
+              timed_out_at: bound[38]
+            };
+            const index = jobsRows.findIndex((item) => item.id === row.id);
+            if (index >= 0) jobsRows[index] = row;
+            else jobsRows.push(row);
+          }
+          return { success: true };
+        }
+      };
+    }
+  };
+}
+
+const concurrentJobsStorage = createD1LikeStorage(createConcurrentJobsDb(), { stateCacheTtlMs: 0 });
+const concurrentBase = await concurrentJobsStorage.getState();
+await Promise.all([
+  concurrentJobsStorage.replaceState({
+    ...concurrentBase,
+    jobs: [{
+      id: 'workflow-root',
+      parentAgentId: 'qa',
+      taskType: 'cmo_leader',
+      prompt: 'parent',
+      input: {},
+      priority: 'normal',
+      status: 'queued',
+      jobKind: 'workflow',
+      createdAt: '2026-04-26T08:10:00.000Z'
+    }]
+  }),
+  concurrentJobsStorage.replaceState({
+    ...concurrentBase,
+    jobs: [{
+      id: 'workflow-child',
+      parentAgentId: 'qa',
+      taskType: 'research',
+      prompt: 'child',
+      input: {},
+      priority: 'normal',
+      status: 'queued',
+      jobKind: 'workflow_child',
+      workflowParentId: 'workflow-root',
+      workflowTask: 'research',
+      createdAt: '2026-04-26T08:10:01.000Z'
+    }]
+  })
+]);
+const concurrentJobsState = await concurrentJobsStorage.getState();
+assert.equal(concurrentJobsState.jobs.some((job) => job.id === 'workflow-root'), true);
+assert.equal(concurrentJobsState.jobs.some((job) => job.id === 'workflow-child'), true);
+
 console.log('storage qa passed');
