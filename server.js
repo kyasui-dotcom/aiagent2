@@ -4740,13 +4740,10 @@ async function handleGuestTrialClaim(req) {
 }
 
 async function recordOrderApiKeyUsage(current, req) {
-  if (!current?.apiKey?.id || !current?.login) return;
-  await storage.mutate(async (draft) => {
-    touchOrderApiKeyUsageInState(draft, current.login, current.apiKey.id, {
-      lastUsedPath: new URL(req.url, 'http://localhost').pathname,
-      lastUsedMethod: req.method
-    });
-  });
+  // Do not rewrite account JSON on API-key authenticated traffic. A usage-only
+  // account write can invalidate the same key if a stale/sanitized account copy
+  // wins a later merge; billing/job mutations still persist normally.
+  return;
 }
 function requireWriteAccess(req) {
   const current = currentUserContext(req);

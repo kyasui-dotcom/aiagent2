@@ -3301,13 +3301,10 @@ async function handleGuestTrialClaim(storage, request, env) {
 }
 
 async function recordOrderApiKeyUsage(storage, current, request) {
-  if (!current?.apiKey?.id || !current?.login) return;
-  await storage.mutate(async (draft) => {
-    touchOrderApiKeyUsageInState(draft, current.login, current.apiKey.id, {
-      lastUsedPath: new URL(request.url).pathname,
-      lastUsedMethod: request.method
-    });
-  });
+  // Do not rewrite account JSON on API-key authenticated traffic. A usage-only
+  // account write can invalidate the same key if a stale/sanitized account copy
+  // wins a later D1 merge; billing/job mutations still persist normally.
+  return;
 }
 function boolFlag(raw, fallback = false) {
   const value = String(raw ?? '').trim().toLowerCase();
