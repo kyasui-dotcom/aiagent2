@@ -8,6 +8,8 @@ assert.equal(inferTaskType('', '検索流入を増やすSEO改善'), 'seo');
 assert.equal(inferTaskType('', 'ヤフオク出品文を作る'), 'listing');
 assert.equal(inferTaskType('', 'broker dispatch routing'), 'ops');
 assert.equal(inferTaskType('summary', 'ignored'), 'summary');
+assert.equal(inferTaskType('x_post', ''), 'x_post');
+assert.equal(inferTaskType('twitter', ''), 'x_post');
 assert.deepEqual(inferTaskSequence('seo', '検索流入を増やすSEO改善', { maxTasks: 3 }), ['seo', 'research', 'writing']);
 assert.deepEqual(inferTaskSequence('code', '料金計算ロジックのバグ修正', { maxTasks: 2 }), ['code', 'debug']);
 assert.deepEqual(inferTaskSequence('seo', '検索流入を増やすSEO改善', { maxTasks: 3, expand: false }), ['seo']);

@@ -214,6 +214,16 @@ assert.ok(js.includes('Reload WORK. If it still fails, sign in again and recheck
 assert.ok(js.includes('Current phase:'));
 assert.ok(js.includes('Thinking:'));
 assert.ok(js.includes('Next:'));
+assert.ok(js.includes('merge supporting work products into one accountable final report.'));
+assert.ok(js.includes('prepare the next supporting work step.'));
+assert.ok(js.includes('The integrated report merged the supporting work products into one delivery.'));
+assert.ok(js.includes('Supporting work items:'));
+assert.ok(js.includes('<summary>INTEGRATED REPORT</summary>'));
+assert.ok(js.includes('Open individual research, writing, or execution items only when you want supporting detail.'));
+assert.ok(js.includes('This run is one supporting work item inside an Agent Team.'));
+assert.ok(!js.includes('The Team Leader merged the specialist outputs into one delivery.'));
+assert.ok(!js.includes('Specialist runs:'));
+assert.ok(!js.includes('<summary>TEAM LEADER SUMMARY</summary>'));
 assert.ok(js.includes('Recent broker signals:'));
 assert.ok(js.includes('function trackedOrderIdsForHistory'));
 assert.ok(js.includes('async function backfillTrackedJobsIntoSnapshot'));

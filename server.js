@@ -6106,7 +6106,7 @@ async function performSingleJobCreate(req, body, current, options = {}) {
     login: current.login,
     accountId: accountIdForLogin(current.login)
   });
-  const taskType = inferTaskType(body.task_type, body.prompt);
+  const taskType = normalizeTaskTypes([body.task_type])[0] || inferTaskType(body.task_type, body.prompt);
   const state = await storage.getState();
   const account = current?.login ? accountSettingsForLogin(state, current.login, current.user, current.authProvider) : null;
   const billingMode = billingModeForRequester(current, account);
@@ -6488,7 +6488,7 @@ async function handleCreateWorkflowJob(req, body, current, options = {}) {
   if (String(body.agent_id || '').trim()) {
     return { error: 'Multi-agent objective does not support a single pinned agent. Clear the pin and retry.', statusCode: 400 };
   }
-  const taskType = inferTaskType(body.task_type, body.prompt);
+  const taskType = normalizeTaskTypes([body.task_type])[0] || inferTaskType(body.task_type, body.prompt);
   const intakeClarification = buildIntakeClarification(body, { taskType });
   if (intakeClarification) {
     await (options.touchUsage || (async () => {}))();
@@ -6736,7 +6736,7 @@ async function runRecurringOrderSweep(req, options = {}) {
         result = promptPolicyBlockPayload(promptInjection);
       } else {
         const requestedStrategy = normalizeOrderStrategy(body.order_strategy || body.orderStrategy || 'auto');
-        const taskType = inferTaskType(body.task_type, body.prompt);
+        const taskType = normalizeTaskTypes([body.task_type])[0] || inferTaskType(body.task_type, body.prompt);
         const resolved = resolveOrderStrategy(latestState.agents || [], body, taskType, requestedStrategy);
         result = resolved.strategy === 'multi'
           ? await handleCreateWorkflowJob(req, body, current, { workflowPlan: resolved.plan })
@@ -9164,7 +9164,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 400, promptPolicyBlockPayload(promptInjection));
     }
     const requestedStrategy = normalizeOrderStrategy(body.order_strategy || body.orderStrategy || body.execution_mode || body.executionMode);
-    const taskType = inferTaskType(body.task_type, body.prompt);
+    const taskType = normalizeTaskTypes([body.task_type])[0] || inferTaskType(body.task_type, body.prompt);
     const resolved = resolveOrderStrategy(state.agents, body, taskType, requestedStrategy);
     const guestPrepared = await prepareGuestTrialOrderContext(req, current, body, resolved);
     if (guestPrepared.error) return json(res, guestPrepared.statusCode || 400, guestPrepared);

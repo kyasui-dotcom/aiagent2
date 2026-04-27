@@ -449,6 +449,8 @@ const syntheticAgentTeamOutput = buildAgentTeamDeliveryOutput({
 ]);
 assert.equal(syntheticAgentTeamOutput.files?.[0]?.content_type, 'social_post_pack', 'agent team output should promote specialist execution packets to explicit deliverables');
 assert.equal(syntheticAgentTeamOutput.report?.authority_request?.missing_connectors?.[0], 'x', 'agent team output should preserve specialist authority requests for execution gating');
+assert.equal(syntheticAgentTeamOutput.summary, 'Leader final summary', 'leader-authored summary should remain the default integrated summary when available');
+assert.equal(syntheticAgentTeamOutput.report?.childRuns?.length, 2, 'integrated output should keep supporting work product summaries attached to the merged report');
 
 const connectorHandoffWorkflow = await request('/api/jobs', {
   method: 'POST',
@@ -1564,6 +1566,20 @@ try {
   assert.equal(providerSoftX.body.agent.verificationStatus, 'verified');
   const providerSoftXId = providerSoftX.body.agent.id;
 
+  const publicAgents = await request('/api/agents');
+  assert.equal(publicAgents.status, 200);
+  const publicXBuiltIn = publicAgents.body.agents.find((agent) => agent.id === 'agent_x_launch_01');
+  assert.ok(publicXBuiltIn, 'public catalog should include the built-in X adapter');
+  assert.equal(publicXBuiltIn.links?.layer, 'execution');
+  assert.equal(publicXBuiltIn.links?.role, 'x_publish_executor');
+  assert.ok(publicXBuiltIn.links?.upstream?.task_types?.includes('writing'));
+  assert.ok(publicXBuiltIn.links?.upstream?.resolved?.some((agent) => agent.id === 'agent_writer_01'));
+  const publicProviderX = publicAgents.body.agents.find((agent) => agent.id === providerSoftXId);
+  assert.ok(publicProviderX, 'public catalog should include imported user/provider X agents');
+  assert.ok(publicProviderX.tags.includes('x'));
+  assert.ok(publicProviderX.links?.upstream?.task_types?.includes('writing'));
+  assert.ok(publicProviderX.links?.upstream?.resolved?.some((agent) => agent.id === 'agent_writer_01'));
+
   const providerWorkflowWaits = [];
   const providerWorkflow = await request('/api/jobs', {
     method: 'POST',
@@ -1595,8 +1611,13 @@ try {
     'leader workflow should soft-match the provider cmo capability instead of only built-ins'
   );
   assert.ok(
-    providerChildRuns.some((run) => run.taskType === 'x_post' && run.agentId === providerSoftXId && run.dispatchTaskType === 'twitter'),
-    'workflow should route semantic x_post work to the provider-declared twitter capability'
+    providerChildRuns.some(
+      (run) =>
+        run.taskType === 'x_post' &&
+        run.agentId === providerSoftXId &&
+        (run.dispatchTaskType === 'twitter' || run.dispatchTaskType === 'x_post')
+    ),
+    'workflow should route semantic x_post work to the provider-declared X/Twitter capability'
   );
 
   const workflow = await request('/api/jobs', {

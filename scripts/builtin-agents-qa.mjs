@@ -778,6 +778,9 @@ assert.equal(inferTaskType('', '1告知でX Reddit Indie Hackers Instagramまで
 assert.equal(inferTaskType('', 'CTOとしてアーキテクチャを見て'), 'cto_leader');
 assert.equal(inferTaskType('', 'CFOとしてユニットエコノミクスを確認して'), 'cfo_leader');
 assert.equal(inferTaskType('', '法務部長として規約リスクを見て'), 'legal_leader');
+assert.equal(inferTaskType('', '社長秘書としてメール返信と日程調整をして'), 'secretary_leader');
+assert.equal(inferTaskType('', 'Zoomで会議設定と日程調整をしてください'), 'schedule_coordination');
+assert.equal(inferTaskType('', 'メール返信案を作って承認後に送れる形にして'), 'reply_draft');
 assert.equal(inferTaskType('', 'Give me a competitor teardown for Linear vs Jira'), 'teardown');
 assert.equal(inferTaskType('', 'Review this landing page and improve the CTA'), 'landing');
 assert.equal(inferTaskType('', 'Draft a hiring JD for our founding engineer'), 'hiring');
@@ -798,6 +801,13 @@ assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'CTO TEAM LEADER'))
 assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'CPO TEAM LEADER'));
 assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'CFO TEAM LEADER'));
 assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'LEGAL TEAM LEADER'));
+assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'EXECUTIVE SECRETARY LEADER'));
+assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'INBOX TRIAGE AGENT'));
+assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'REPLY DRAFT AGENT'));
+assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'SCHEDULE COORDINATION AGENT'));
+assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'FOLLOW-UP AGENT'));
+assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'MEETING PREP AGENT'));
+assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'MEETING NOTES AGENT'));
 assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'X OPS CONNECTOR AGENT'));
 assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'EMAIL OPS CONNECTOR AGENT'));
 assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'COLD EMAIL AGENT'));
@@ -806,6 +816,33 @@ assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'INDIE HACKERS LAUN
 assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'INSTAGRAM LAUNCH AGENT'));
 assert.ok(DEFAULT_AGENT_SEEDS.some((agent) => agent.name === 'DATA ANALYSIS AGENT'));
 assert.ok(DEFAULT_AGENT_SEEDS.length >= 30);
+
+const secretarySequence = inferTaskSequence('secretary_leader', '社長秘書としてメール返信とZoomの日程調整を承認制で進めて', { maxTasks: 7 });
+assert.equal(secretarySequence[0], 'secretary_leader');
+assert.ok(secretarySequence.includes('inbox_triage'));
+assert.ok(secretarySequence.includes('reply_draft'));
+assert.ok(secretarySequence.includes('schedule_coordination'));
+assert.ok(secretarySequence.indexOf('inbox_triage') < secretarySequence.indexOf('reply_draft'));
+assert.ok(secretarySequence.indexOf('inbox_triage') < secretarySequence.indexOf('schedule_coordination'));
+const secretarySeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_secretary_leader_01');
+const scheduleSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_schedule_coordination_01');
+assert.ok(secretarySeed);
+assert.ok(scheduleSeed);
+assert.ok((secretarySeed.metadata?.manifest?.metadata?.downstream_task_types || []).includes('schedule_coordination'));
+assert.ok((scheduleSeed.metadata?.manifest?.metadata?.optional_connectors || []).includes('zoom'));
+assert.ok((scheduleSeed.metadata?.manifest?.metadata?.optional_connectors || []).includes('microsoft_teams'));
+assert.ok((scheduleSeed.metadata?.manifest?.capabilities || []).includes('meeting_link_handoff'));
+const secretaryLinks = agentLinksFromRecord(secretarySeed, { catalog: DEFAULT_AGENT_SEEDS });
+assert.ok(secretaryLinks.downstream.resolved.some((item) => item.id === 'agent_inbox_triage_01'));
+assert.ok(secretaryLinks.downstream.resolved.some((item) => item.id === 'agent_schedule_coordination_01'));
+const secretaryPayload = sampleAgentPayload('secretary_leader', {
+  prompt: 'Act as an executive secretary. Draft replies and coordinate a Zoom or Teams meeting.',
+  output_language: 'en'
+});
+assert.equal(secretaryPayload.report.summary, 'Executive Secretary Leader delivery');
+assert.ok(secretaryPayload.files[0].content.includes('Zoom'));
+assert.ok(secretaryPayload.files[0].content.includes('Microsoft Teams'));
+assert.ok(/approval/i.test(secretaryPayload.files[0].content));
 
 for (const kind of BUILT_IN_KINDS) {
   const payload = sampleAgentPayload(kind, { prompt: 'QA sample. Answer in English.', output_language: 'en' });
@@ -827,7 +864,7 @@ for (const kind of BUILT_IN_KINDS) {
   assert.ok(Array.isArray(scopeBoundaries), `${kind} should have scope boundaries`);
   assert.ok(scopeBoundaries.length >= 3, `${kind} should have at least three scope boundaries`);
   assert.ok(scopeBoundaries.every((step) => step.length > 30), `${kind} scope boundaries should be specific`);
-  assert.ok(['default', 'when_current', 'provided_only'].includes(toolStrategy.web_search), `${kind} should have a valid web search mode`);
+  assert.ok(['default', 'when_current', 'provided_only', 'never'].includes(toolStrategy.web_search), `${kind} should have a valid web search mode`);
   assert.ok(toolStrategy.source_mode.length > 8, `${kind} should define source mode`);
   assert.ok(toolStrategy.note.length > 40, `${kind} should define tool strategy note`);
   assert.equal(payload.runtime.delivery_policy.depth_policy, executionPolicy.depth_policy, `${kind} fallback runtime should expose depth policy`);
@@ -880,6 +917,13 @@ const expectedModelTiers = {
   cpo_leader: 'standard',
   cfo_leader: 'reasoning',
   legal_leader: 'reasoning',
+  secretary_leader: 'standard',
+  inbox_triage: 'standard',
+  reply_draft: 'standard',
+  schedule_coordination: 'standard',
+  follow_up: 'standard',
+  meeting_prep: 'standard',
+  meeting_notes: 'standard',
   instagram: 'cheap',
   x_post: 'cheap',
   reddit: 'cheap',
@@ -914,6 +958,13 @@ const expectedWebSearchModes = {
   cpo_leader: 'default',
   cfo_leader: 'default',
   legal_leader: 'default',
+  secretary_leader: 'when_current',
+  inbox_triage: 'never',
+  reply_draft: 'never',
+  schedule_coordination: 'when_current',
+  follow_up: 'never',
+  meeting_prep: 'never',
+  meeting_notes: 'never',
   instagram: 'default',
   x_post: 'default',
   reddit: 'default',

@@ -9491,7 +9491,7 @@ function isAutoWorkflowSpecialtyTask(taskType = '') {
 }
 
 function resolveOrderStrategy(agents, body = {}, strategy = 'auto') {
-  const taskType = inferTaskType(body.task_type, body.prompt);
+  const taskType = normalizeTaskTypes([body.task_type])[0] || inferTaskType(body.task_type, body.prompt);
   const repoBackedCodeIntent = ['code', 'debug', 'ops', 'automation'].includes(String(taskType || '').trim().toLowerCase())
     && /(github|git hub|repo|repository|pull request|\bpr\b|branch|commit|diff|issue|bug|debug|fix|修正|直して|デバッグ|リポジトリ|プルリク|ブランチ|コミット|差分)/i.test(String(body.prompt || ''));
   if (strategy === 'single') {
@@ -10961,7 +10961,7 @@ async function performSingleJobCreate(storage, env, current, body, options = {})
     login: current.login,
     accountId: accountIdForLogin(current.login)
   });
-  const taskType = inferTaskType(body.task_type, body.prompt);
+  const taskType = normalizeTaskTypes([body.task_type])[0] || inferTaskType(body.task_type, body.prompt);
   const state = await storage.getState();
   const account = current?.login ? accountSettingsForLogin(state, current.login, current.user, current.authProvider) : null;
   const billingMode = billingModeForRequester(current, account, env);
@@ -11246,7 +11246,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
   if (String(body.agent_id || '').trim()) {
     return { error: 'Multi-agent objective does not support a single pinned agent. Clear the pin and retry.', statusCode: 400 };
   }
-  const taskType = inferTaskType(body.task_type, body.prompt);
+  const taskType = normalizeTaskTypes([body.task_type])[0] || inferTaskType(body.task_type, body.prompt);
   const intakeClarification = buildIntakeClarification(body, { taskType });
   if (intakeClarification) {
     await (options.touchUsage || (async () => {}))();

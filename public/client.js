@@ -14499,7 +14499,7 @@ function agentTags(agent) {
 function agentExecutionProfile(agent) {
   const manifest = agentManifest(agent);
   const metadata = agent?.metadata && typeof agent.metadata === 'object' ? agent.metadata : {};
-  const requiredConnectorCapabilities = normalizeClientList(
+  const requiredConnectorCapabilities = normalizeClientConnectorCapabilityList(
     manifest.required_connector_capabilities
     || manifest.requiredConnectorCapabilities
     || metadata.required_connector_capabilities
@@ -14531,25 +14531,95 @@ function normalizeClientConnector(value = '') {
   const text = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (!text) return '';
   if (['github', 'github_app', 'github_oauth', 'repo', 'repository', 'pull_request', 'pr'].includes(text)) return 'github';
-  if (['google', 'google_oauth', 'google_drive', 'drive', 'gmail', 'docs', 'sheets', 'calendar'].includes(text)) return 'google';
+  if (['google', 'google_oauth', 'google_drive', 'drive', 'gmail', 'docs', 'sheets', 'calendar', 'google_calendar', 'google_meet', 'meet'].includes(text)) return 'google';
+  if (['zoom', 'zoom_oauth', 'zoom_meeting'].includes(text)) return 'zoom';
+  if (['microsoft', 'microsoft_oauth', 'microsoft_teams', 'teams', 'teams_meeting', 'office365', 'office_365'].includes(text)) return 'microsoft';
   if (['x', 'x_oauth', 'twitter', 'twitter_oauth', 'tweet', 'tweets', 'x_post', 'social_x'].includes(text)) return 'x';
   if (['stripe', 'payment', 'payments', 'billing', 'checkout', 'card'].includes(text)) return 'stripe';
   return text;
 }
 
+const CLIENT_CONNECTOR_CAPABILITY_ALIASES = new Map([
+  ['github.read_repo', 'github.read_repo'],
+  ['read_repo', 'github.read_repo'],
+  ['github.read_private_repo', 'github.read_private_repo'],
+  ['read_private_repo', 'github.read_private_repo'],
+  ['github.write_pr', 'github.write_pr'],
+  ['write_pr', 'github.write_pr'],
+  ['create_pull_request', 'github.write_pr'],
+  ['github.create_pull_request', 'github.write_pr'],
+  ['github.write_repo', 'github.write_repo'],
+  ['write_repo', 'github.write_repo'],
+  ['google.read_drive', 'google.read_drive'],
+  ['read_drive', 'google.read_drive'],
+  ['google.read_docs', 'google.read_docs'],
+  ['read_docs', 'google.read_docs'],
+  ['google.read_sheets', 'google.read_sheets'],
+  ['read_sheets', 'google.read_sheets'],
+  ['google.read_presentations', 'google.read_presentations'],
+  ['read_presentations', 'google.read_presentations'],
+  ['google.read_gmail', 'google.read_gmail'],
+  ['read_gmail', 'google.read_gmail'],
+  ['google.send_gmail', 'google.send_gmail'],
+  ['send_gmail', 'google.send_gmail'],
+  ['gmail.send', 'google.send_gmail'],
+  ['email.send', 'google.send_gmail'],
+  ['email_delivery.send', 'google.send_gmail'],
+  ['google.read_calendar', 'google.read_calendar'],
+  ['read_calendar', 'google.read_calendar'],
+  ['google.write_calendar', 'google.write_calendar'],
+  ['write_calendar', 'google.write_calendar'],
+  ['calendar.write', 'google.write_calendar'],
+  ['google.create_meet', 'google.create_meet'],
+  ['create_meet', 'google.create_meet'],
+  ['google_meet.create', 'google.create_meet'],
+  ['zoom.schedule_meeting', 'zoom.schedule_meeting'],
+  ['schedule_zoom', 'zoom.schedule_meeting'],
+  ['zoom.create_meeting', 'zoom.schedule_meeting'],
+  ['microsoft.create_teams_meeting', 'microsoft.create_teams_meeting'],
+  ['teams.create_meeting', 'microsoft.create_teams_meeting'],
+  ['microsoft_teams.create_meeting', 'microsoft.create_teams_meeting'],
+  ['google.read_gsc', 'google.read_gsc'],
+  ['read_gsc', 'google.read_gsc'],
+  ['google.read_ga4', 'google.read_ga4'],
+  ['read_ga4', 'google.read_ga4'],
+  ['x.post', 'x.post'],
+  ['post_tweet', 'x.post'],
+  ['x.schedule_post', 'x.schedule_post'],
+  ['schedule_post', 'x.schedule_post'],
+  ['x.read_profile', 'x.read_profile'],
+  ['read_profile', 'x.read_profile'],
+  ['stripe.manage_billing', 'stripe.manage_billing'],
+  ['manage_billing', 'stripe.manage_billing'],
+  ['stripe.read_customer', 'stripe.read_customer'],
+  ['read_customer', 'stripe.read_customer']
+]);
+
+function normalizeClientConnectorCapability(value = '') {
+  const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (!key) return '';
+  return CLIENT_CONNECTOR_CAPABILITY_ALIASES.get(key) || key;
+}
+
+function normalizeClientConnectorCapabilityList(value, fallback = []) {
+  return normalizeClientList(value, fallback).map(normalizeClientConnectorCapability).filter(Boolean);
+}
+
 function connectorForRequiredCapability(value = '') {
-  const [provider] = String(value || '').trim().toLowerCase().split('.');
+  const [provider] = normalizeClientConnectorCapability(value).split('.');
   return normalizeClientConnector(provider);
 }
 
 function defaultGoogleSourceGroupsForCapabilitiesClient(capabilities = []) {
   const output = new Set();
   for (const capability of normalizeClientList(capabilities, [])) {
-    const normalized = String(capability || '').trim().toLowerCase();
+    const normalized = normalizeClientConnectorCapability(capability);
     if (normalized === 'google.read_gsc') output.add('gsc');
     if (normalized === 'google.read_ga4') output.add('ga4');
     if (['google.read_drive', 'google.read_docs', 'google.read_sheets', 'google.read_presentations'].includes(normalized)) output.add('drive');
     if (normalized === 'google.read_calendar') output.add('calendar');
+    if (normalized === 'google.write_calendar') output.add('calendar');
+    if (normalized === 'google.create_meet') output.add('calendar');
     if (normalized === 'google.read_gmail') output.add('gmail');
     if (normalized === 'google.send_gmail') output.add('gmail');
   }
@@ -14571,6 +14641,8 @@ function connectorStatusForClient(auth = state.snapshot?.auth || {}, account = s
     notion: false,
     linear: false,
     jira: false,
+    zoom: false,
+    microsoft: false,
     vercel: false,
     cloudflare: false
   };
@@ -14619,6 +14691,12 @@ function googleCapabilityStatusForClient(auth = state.snapshot?.auth || {}, acco
     ),
     'google.read_calendar': providerReady && hasAny(
       'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/calendar'
+    ),
+    'google.write_calendar': providerReady && hasAny(
+      'https://www.googleapis.com/auth/calendar'
+    ),
+    'google.create_meet': providerReady && hasAny(
       'https://www.googleapis.com/auth/calendar'
     ),
     'google.read_gsc': providerReady && hasAny(
@@ -14672,7 +14750,7 @@ function clientOrderPreflight(draft = {}) {
     const missing = profile.requiredConnectors
       .map(normalizeClientConnector)
       .filter((connector) => connector && Object.prototype.hasOwnProperty.call(connectorStatus, connector) && !connectorStatus[connector]);
-    const missingCapabilities = (profile.requiredConnectorCapabilities || []).filter((capability) => {
+    const missingCapabilities = (profile.requiredConnectorCapabilities || []).map(normalizeClientConnectorCapability).filter((capability) => {
       const normalized = String(capability || '').trim().toLowerCase();
       if (!normalized) return false;
       if (Object.prototype.hasOwnProperty.call(googleCapabilities, normalized)) return !googleCapabilities[normalized];
@@ -14832,6 +14910,13 @@ const KNOWN_BUILT_IN_AGENT_KINDS = new Set([
   'cpo_leader',
   'cfo_leader',
   'legal_leader',
+  'secretary_leader',
+  'inbox_triage',
+  'reply_draft',
+  'schedule_coordination',
+  'follow_up',
+  'meeting_prep',
+  'meeting_notes',
   'instagram',
   'x_post',
   'reddit',
@@ -15172,7 +15257,7 @@ function currentOrderInputTypeHints(prompt = String(els.jobPrompt?.value || ''),
   if (counts.fileCount) hints.add('file');
   if (/\b(github|repo|repository|pull request|pr)\b|リポジトリ|プルリク/i.test(text)) hints.add('repo');
   if (/\b(api|webhook|json payload)\b/i.test(text)) hints.add('api_payload');
-  if (/\b(oauth|gmail|google drive|slack|discord|notion|linear|jira)\b/i.test(text)) hints.add('oauth_resource');
+  if (/\b(oauth|gmail|google drive|google calendar|google meet|zoom|teams|microsoft teams|slack|discord|notion|linear|jira)\b/i.test(text)) hints.add('oauth_resource');
   if (!hints.size) hints.add('text');
   return [...hints];
 }
@@ -15186,6 +15271,13 @@ function clientTaskTagHints(taskType = '') {
     cpo_leader: ['leader', 'product', 'ux'],
     cfo_leader: ['leader', 'finance', 'pricing'],
     legal_leader: ['leader', 'legal', 'compliance'],
+    secretary_leader: ['leader', 'secretary', 'email', 'calendar'],
+    inbox_triage: ['secretary', 'email', 'gmail'],
+    reply_draft: ['secretary', 'email', 'writing'],
+    schedule_coordination: ['secretary', 'calendar', 'meeting'],
+    follow_up: ['secretary', 'reminder', 'email'],
+    meeting_prep: ['secretary', 'meeting', 'briefing'],
+    meeting_notes: ['secretary', 'meeting', 'summary'],
     growth: ['marketing', 'growth'],
     teardown: ['research', 'analysis', 'competitor'],
     data_analysis: ['data', 'analysis'],
@@ -15211,6 +15303,13 @@ const WORKFLOW_TASK_SOFT_MATCH_MAP = Object.freeze({
   cpo_leader: ['cpo', 'cpo_leader', 'product_leader'],
   cfo_leader: ['cfo', 'cfo_leader', 'finance_leader'],
   legal_leader: ['legal', 'legal_leader', 'legal_counsel', 'compliance_leader'],
+  secretary_leader: ['secretary_leader', 'executive_secretary', 'executive_assistant', 'secretary', 'assistant_ops'],
+  inbox_triage: ['inbox_triage', 'email_triage', 'mailbox_triage', 'gmail_triage', 'inbox'],
+  reply_draft: ['reply_draft', 'email_reply', 'reply_writer', 'gmail_reply'],
+  schedule_coordination: ['schedule_coordination', 'calendar_coordination', 'calendar', 'scheduling', 'meeting_schedule', 'google_meet', 'zoom', 'microsoft_teams'],
+  follow_up: ['follow_up', 'followup', 'reminder', 'chaser'],
+  meeting_prep: ['meeting_prep', 'meeting_brief', 'agenda', 'briefing'],
+  meeting_notes: ['meeting_notes', 'minutes', 'action_items', 'meeting_summary'],
   research: ['research', 'analysis', 'summary'],
   teardown: ['teardown', 'research', 'analysis', 'competitor', 'benchmark'],
   data_analysis: ['data_analysis', 'analytics', 'data', 'research'],
@@ -17337,7 +17436,7 @@ function setGenericDeliverableAuthorityRequired(jobId = '', authority = null) {
     authorityRequired: {
       reason: String(authority.reason || authority.error || 'Additional connector access is required before execution can continue.'),
       missingConnectors: normalizeClientList(authority.missingConnectors || authority.missing_connectors, []),
-      missingConnectorCapabilities: normalizeClientList(authority.missingConnectorCapabilities || authority.missing_connector_capabilities, []),
+      missingConnectorCapabilities: normalizeClientConnectorCapabilityList(authority.missingConnectorCapabilities || authority.missing_connector_capabilities, []),
       source: String(authority.source || '').trim(),
       requestedAt: new Date().toISOString(),
       ownerLabel: String(authority.ownerLabel || authority.owner_label || '').trim(),
@@ -17364,7 +17463,7 @@ function genericDeliverableAuthorityState(run = null, draft = null) {
   const missingConnectors = normalizeClientList(authority.missingConnectors, [])
     .map(normalizeClientConnector)
     .filter((connector) => connector && Object.prototype.hasOwnProperty.call(connectorStatus, connector) && !connectorStatus[connector]);
-  const missingConnectorCapabilities = normalizeClientList(authority.missingConnectorCapabilities, []);
+  const missingConnectorCapabilities = normalizeClientConnectorCapabilityList(authority.missingConnectorCapabilities, []);
   const requiredRepositorySelection = Boolean(authority.requiredRepositorySelection || authority.required_repository_selection);
   const missingRepositorySelection = requiredRepositorySelection && !normalizeRepoFullName(draft?.repoFullName || '');
   const requiredChannelSelection = Boolean(authority.requiredChannelSelection || authority.required_channel_selection);
@@ -17408,12 +17507,12 @@ function googleIncludeGroupsFromAuthorityRequest(request = null) {
   ).map(normalizeGoogleIncludeGroup).filter(Boolean);
   if (explicit.length) return Array.from(new Set(explicit));
   return googleIncludeGroupsForCapabilities(
-    request.missingConnectorCapabilities
+    normalizeClientConnectorCapabilityList(request.missingConnectorCapabilities
       || request.missing_connector_capabilities
       || request.requiredConnectorCapabilities
       || request.required_connector_capabilities
       || request.capabilities
-      || []
+      || [])
   );
 }
 
@@ -17435,7 +17534,7 @@ function authorityRequestFromReport(report = {}) {
       || candidate.required_connectors,
     []
   );
-  const missingConnectorCapabilities = normalizeClientList(
+  const missingConnectorCapabilities = normalizeClientConnectorCapabilityList(
     candidate.missingConnectorCapabilities
       || candidate.missing_connector_capabilities
       || candidate.requiredConnectorCapabilities
@@ -17483,8 +17582,8 @@ function authorityOwnerLabelForRun(run = null, deliverable = null, authority = n
 }
 
 function describeAuthorityNeed(capabilities = [], connectors = []) {
-  const normalizedCapabilities = normalizeClientList(capabilities, []).map((item) => String(item || '').trim().toLowerCase());
-  const normalizedConnectors = normalizeClientList(connectors, []).map((item) => String(item || '').trim().toLowerCase());
+  const normalizedCapabilities = normalizeClientConnectorCapabilityList(capabilities, []);
+  const normalizedConnectors = normalizeClientList(connectors, []).map(normalizeClientConnector);
   const parts = [];
   if (normalizedCapabilities.includes('github.write_pr')) parts.push('GitHub pull request authority');
   if (normalizedCapabilities.includes('x.post')) parts.push('X posting authority');
@@ -17492,10 +17591,16 @@ function describeAuthorityNeed(capabilities = [], connectors = []) {
   if (normalizedCapabilities.includes('google.read_ga4')) parts.push('a GA4 property');
   if (normalizedCapabilities.includes('google.read_drive') || normalizedCapabilities.includes('google.read_docs') || normalizedCapabilities.includes('google.read_sheets') || normalizedCapabilities.includes('google.read_presentations')) parts.push('a Google Drive source');
   if (normalizedCapabilities.includes('google.read_calendar')) parts.push('a Google Calendar source');
+  if (normalizedCapabilities.includes('google.write_calendar')) parts.push('Google Calendar write authority');
+  if (normalizedCapabilities.includes('google.create_meet')) parts.push('Google Meet creation authority');
   if (normalizedCapabilities.includes('google.read_gmail')) parts.push('a Gmail source');
   if (normalizedCapabilities.includes('google.send_gmail')) parts.push('Gmail send authority');
+  if (normalizedCapabilities.includes('zoom.schedule_meeting')) parts.push('Zoom scheduling authority');
+  if (normalizedCapabilities.includes('microsoft.create_teams_meeting')) parts.push('Microsoft Teams scheduling authority');
   if (!parts.length && normalizedConnectors.includes('github')) parts.push('a GitHub connection');
   if (!parts.length && normalizedConnectors.includes('google')) parts.push('a Google connection');
+  if (!parts.length && normalizedConnectors.includes('zoom')) parts.push('a Zoom connection');
+  if (!parts.length && normalizedConnectors.includes('microsoft')) parts.push('a Microsoft Teams connection');
   if (!parts.length && normalizedConnectors.includes('x')) parts.push('an X connection');
   return parts.length ? parts.join(', ') : 'additional authority';
 }

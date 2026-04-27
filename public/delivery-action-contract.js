@@ -955,7 +955,7 @@ export function googleIncludeGroupsForCapabilities(capabilities = []) {
     if (normalized === 'google.read_gsc') groups.add('gsc');
     else if (normalized === 'google.read_ga4') groups.add('ga4');
     else if (normalized === 'google.read_drive' || normalized === 'google.read_docs' || normalized === 'google.read_sheets' || normalized === 'google.read_presentations') groups.add('drive');
-    else if (normalized === 'google.read_calendar') groups.add('calendar');
+    else if (normalized === 'google.read_calendar' || normalized === 'google.write_calendar' || normalized === 'google.create_meet') groups.add('calendar');
     else if (normalized === 'google.read_gmail') groups.add('gmail');
   }
   return Array.from(groups);
