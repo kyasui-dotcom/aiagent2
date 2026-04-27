@@ -617,6 +617,7 @@ const state = {
   serverPreparedOrder: null,
   openChatEntryDismissed: false,
   openChatDecisionSuppressed: false,
+  openChatDecisionSuppressedBriefKey: '',
   openChatPausedByTabLeave: false,
   openChatLastStatus: '',
   openChatLastStatusTone: 'info',
@@ -858,7 +859,11 @@ function clearLiveSnapshotRefreshTimer() {
 
 function hasActiveLiveJobs(snapshot = state.snapshot || {}) {
   const jobs = Array.isArray(snapshot?.jobs) ? snapshot.jobs : [];
-  return jobs.some((job) => ['queued', 'claimed', 'running', 'dispatched', 'created'].includes(normalizeOrderProgressStatus(job?.status || '')));
+  return jobs.some((job) => isActiveLiveOrderStatus(job?.status || ''));
+}
+
+function isActiveLiveOrderStatus(status = '') {
+  return ['queued', 'claimed', 'running', 'dispatched', 'created'].includes(normalizeOrderProgressStatus(status));
 }
 
 function hasActiveOpenChatOrderProgress() {
@@ -866,7 +871,7 @@ function hasActiveOpenChatOrderProgress() {
   return messages.some((message) => {
     if (message?.pendingDispatch === true) return true;
     if (!message?.orderProgressId && !message?.workflowParentId) return false;
-    return ['queued', 'claimed', 'running', 'dispatched', 'created'].includes(normalizeOrderProgressStatus(message?.orderProgressStatus || ''));
+    return isActiveLiveOrderStatus(message?.orderProgressStatus || '');
   });
 }
 
@@ -3435,6 +3440,14 @@ function normalizeOpenChatSession(session = {}) {
     || session.jobPrompt
     || session.openChatPreparedBrief
     || 'New chat';
+  const activeJobIds = Array.isArray(session.activeJobIds || session.active_job_ids)
+    ? (session.activeJobIds || session.active_job_ids).map((item) => compactChatText(item, 120)).filter(Boolean).slice(0, 24)
+    : [];
+  const linkedOrderId = compactChatText(session.linkedOrderId || session.linked_order_id || session.orderId || session.order_id || '', 120);
+  const preparedBrief = compactChatText(session.openChatPreparedBrief || '', 9000);
+  const orderBoundBrief = (linkedOrderId || activeJobIds.length || session.activeWork)
+    ? (preparedBrief || messages.map((message) => extractPreparedBriefFromChatText(message.body || '')).find(Boolean) || '')
+    : '';
   return {
     id,
     title: compactChatText(String(titleSource || 'New chat').replace(/\s+/g, ' '), 72) || 'New chat',
@@ -3443,12 +3456,10 @@ function normalizeOpenChatSession(session = {}) {
     serverManaged: Boolean(session.serverManaged),
     sessionId: compactChatText(session.sessionId || session.session_id || '', 120),
     activeWork: Boolean(session.activeWork),
-    activeJobIds: Array.isArray(session.activeJobIds || session.active_job_ids)
-      ? (session.activeJobIds || session.active_job_ids).map((item) => compactChatText(item, 120)).filter(Boolean).slice(0, 24)
-      : [],
-    linkedOrderId: compactChatText(session.linkedOrderId || session.linked_order_id || session.orderId || session.order_id || '', 120),
+    activeJobIds,
+    linkedOrderId,
     openChatMode: normalizeOpenChatMode(session.openChatMode || 'order'),
-    openChatPreparedBrief: compactChatText(session.openChatPreparedBrief || '', 9000),
+    openChatPreparedBrief: preparedBrief,
     openChatParallelPlan: Array.isArray(session.openChatParallelPlan) ? session.openChatParallelPlan.slice(0, 8) : [],
     openChatClarifyOptions: Array.isArray(session.openChatClarifyOptions) ? session.openChatClarifyOptions.slice(0, 8) : [],
     openChatVagueChoicePrompt: compactChatText(session.openChatVagueChoicePrompt || '', 2000),
@@ -3462,6 +3473,7 @@ function normalizeOpenChatSession(session = {}) {
     openChatPendingQuestionPattern: compactChatText(session.openChatPendingQuestionPattern || '', 120),
     openChatLastStatus: compactChatText(session.openChatLastStatus || '', 1000),
     openChatLastStatusTone: ['ok', 'warn', 'error', 'info'].includes(String(session.openChatLastStatusTone || '')) ? session.openChatLastStatusTone : 'info',
+    openChatDecisionSuppressedBriefKey: compactChatText(session.openChatDecisionSuppressedBriefKey || openChatDecisionBriefKey(orderBoundBrief), 80),
     jobPrompt: compactChatText(session.jobPrompt || '', 9000),
     jobUrls: compactChatText(session.jobUrls || '', 5000),
     jobType: compactChatText(session.jobType || '', 80),
@@ -3772,6 +3784,7 @@ function currentOpenChatSessionPayload(existingSessions = null, options = {}) {
     openChatPendingQuestionPattern: compactChatText(state.openChatPendingQuestionPattern || '', 120),
     openChatLastStatus: compactChatText(state.openChatLastStatus || '', 1000),
     openChatLastStatusTone: ['ok', 'warn', 'error', 'info'].includes(String(state.openChatLastStatusTone || '')) ? state.openChatLastStatusTone : 'info',
+    openChatDecisionSuppressedBriefKey: compactChatText(state.openChatDecisionSuppressedBriefKey || '', 80),
     jobPrompt: compactChatText(els.jobPrompt?.value || '', 9000),
     jobUrls: compactChatText(els.jobUrls?.value || '', 5000),
     jobType: compactChatText(els.jobType?.value || '', 80),
@@ -3934,6 +3947,8 @@ function loadOpenChatSession(sessionId = '') {
   state.openChatPendingQuestionPattern = compactChatText(session.openChatPendingQuestionPattern || '', 120);
   state.openChatLastStatus = compactChatText(session.openChatLastStatus || 'Chat session loaded.\n\nContinue from the restored context.', 1000);
   state.openChatLastStatusTone = ['ok', 'warn', 'error', 'info'].includes(String(session.openChatLastStatusTone || '')) ? session.openChatLastStatusTone : 'info';
+  state.openChatDecisionSuppressedBriefKey = compactChatText(session.openChatDecisionSuppressedBriefKey || '', 80);
+  state.openChatDecisionSuppressed = false;
   state.selectedAgentId = compactChatText(session.selectedAgentId || '', 120);
   if (els.jobAgentId) els.jobAgentId.value = state.selectedAgentId;
   state.pendingIntake = null;
@@ -3973,6 +3988,8 @@ function startNewOpenChatSession(options = {}) {
   state.openChatEntryDismissed = Boolean(state.snapshot?.auth?.loggedIn);
   state.openChatPausedByTabLeave = false;
   state.openChatMode = 'clarify';
+  state.openChatDecisionSuppressedBriefKey = '';
+  state.openChatDecisionSuppressed = false;
   clearOrderComposerPrompt();
   state.openChatLastStatus = '';
   state.openChatLastStatusTone = 'info';
@@ -5449,6 +5466,7 @@ function applyOpenChatCommand(answer) {
     state.openChatPendingQuestionTask = '';
     state.openChatPendingQuestionPattern = '';
     state.openChatDecisionSuppressed = false;
+    state.openChatDecisionSuppressedBriefKey = '';
     if (els.jobUrls) els.jobUrls.value = '';
     if (els.jobFiles) els.jobFiles.value = '';
     if (els.intakeAnswer) els.intakeAnswer.value = '';
@@ -8416,6 +8434,36 @@ function openChatChoiceNormalizedLabel(label = '') {
   return normalizeOpenChatIntentText(label).replace(/\s+/g, '');
 }
 
+function openChatDecisionBriefKey(brief = '') {
+  const normalized = String(brief || '').replace(/\s+/g, ' ').trim();
+  if (!isStructuredOrderBrief(normalized)) return '';
+  let hash = 2166136261;
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return `${normalized.length}:${hash.toString(16)}`;
+}
+
+function isOpenChatDecisionSuppressedForBrief(brief = '') {
+  const key = openChatDecisionBriefKey(brief);
+  return Boolean(key && state.openChatDecisionSuppressedBriefKey === key);
+}
+
+function markOpenChatDecisionSuppressedForBrief(brief = '') {
+  const key = openChatDecisionBriefKey(brief);
+  if (key) state.openChatDecisionSuppressedBriefKey = key;
+  state.openChatDecisionSuppressed = true;
+}
+
+function clearOpenChatDecisionSuppressionForNewBrief(brief = '') {
+  const key = openChatDecisionBriefKey(brief);
+  if (!key || key !== state.openChatDecisionSuppressedBriefKey) {
+    state.openChatDecisionSuppressed = false;
+    state.openChatDecisionSuppressedBriefKey = '';
+  }
+}
+
 function openChatLooksNegativeOrderChoice(prompt = '') {
   const token = openChatChoiceReplyToken(prompt);
   const text = openChatIntentMatchText(prompt);
@@ -8576,10 +8624,11 @@ function openChatDefaultDecisionOptions(ja = false) {
 
 function openChatComposerDecisionOptions() {
   if (state.openChatDecisionSuppressed) return [];
-  if (hasActiveOpenChatOrderProgress() || hasActiveLiveJobs()) return [];
+  const preparedBrief = lastOpenChatPreparedBrief();
+  if (isOpenChatDecisionSuppressedForBrief(preparedBrief)) return [];
   const rawOptions = Array.isArray(state.openChatClarifyOptions) ? state.openChatClarifyOptions : [];
   const decisionOptions = rawOptions.filter((option) => ['confirm_preorder_order', 'revise_preorder_order', 'cancel_preorder_order'].includes(String(option?.command || '')));
-  const context = `${openChatPreviousAgentMessageBody()}\n${openChatPreviousUserMessageBody()}\n${lastOpenChatPreparedBrief()}`;
+  const context = `${openChatPreviousAgentMessageBody()}\n${openChatPreviousUserMessageBody()}\n${preparedBrief}`;
   const ja = looksJapanese(context);
   if (decisionOptions.length) {
     const defaults = openChatDefaultDecisionOptions(ja);
@@ -8591,7 +8640,7 @@ function openChatComposerDecisionOptions() {
       };
     });
   }
-  if (openChatLastPromptWasOrderDecision() || isStructuredOrderBrief(lastOpenChatPreparedBrief())) {
+  if (openChatLastPromptWasOrderDecision() || isStructuredOrderBrief(preparedBrief)) {
     return openChatDefaultDecisionOptions(ja);
   }
   return [];
@@ -10030,7 +10079,7 @@ function openChatRequirementHubSpec(prompt = '', inputCounts = {}) {
     services.push({ type, labelJa, labelEn, purposeJa, purposeEn, command });
   };
 
-  const codeish = /(github|git hub|repo|repository|pull request|\bPR\b|branch|commit|diff|code|coding|bug|debug|ci|github actions?|workflow|deploy|コード|実装|修正|バグ|デバッグ|リポジトリ|プルリク|ブランチ|コミット|差分|デプロイ|テスト落ち|Actions)/i.test(text);
+  const codeish = /(github|git hub|repo|repository|pull request|\bpr\b|\bbranch\b|\bcommit\b|\bdiff\b|\bcode\b|\bcoding\b|\bbug\b|\bdebug(?:ging)?\b|\bci\b|ci\/cd|continuous integration|github actions?\b|\bworkflow\b|\bdeploy(?:ment)?\b|コード|実装|修正|バグ|デバッグ|リポジトリ|プルリク|ブランチ|コミット|差分|デプロイ|テスト落ち|Actions)/i.test(text);
   if (codeish) {
     add(
       'github_repo',
@@ -12032,7 +12081,7 @@ function appendOrderChatExchange(prompt, answer, options = {}) {
   } else if (answerKind === 'command') {
     state.openChatClarifyOptions = [];
   }
-  if (answerKind === 'assist' && nextPrompt) state.openChatDecisionSuppressed = false;
+  if (answerKind === 'assist' && nextPrompt) clearOpenChatDecisionSuppressionForNewBrief(nextPrompt);
   if (answerCommand === 'reset_chat') state.openChatDecisionSuppressed = false;
   state.pendingIntake = null;
   state.intakeConfirmed = false;
@@ -12519,7 +12568,7 @@ async function dispatchOpenChatConfirmedChoice() {
     return;
   }
   state.openChatPreparedBrief = confirmed.prompt;
-  state.openChatDecisionSuppressed = true;
+  markOpenChatDecisionSuppressedForBrief(confirmed.prompt);
   state.openChatClarifyOptions = [];
   state.pendingOrderConfirmation = {
     accepted: true,
@@ -22883,6 +22932,7 @@ function acceptPreparedOpenChatOrderForDispatch(preparedBrief = '') {
   const taskType = openChatPreserveSeedTaskType(prepared, structuredTask);
   const prompt = structuredTask ? prepared : rewriteStructuredBriefTaskType(prepared, taskType);
   state.openChatPreparedBrief = prompt;
+  markOpenChatDecisionSuppressedForBrief(prompt);
   clearPinnedAgentIfMismatchedBrief(prompt);
   state.pendingOrderConfirmation = {
     accepted: true,
@@ -22921,7 +22971,6 @@ async function createAndOptionallyRunJob() {
   if (state.openChatPausedByTabLeave && resumePrompt) {
     state.openChatPausedByTabLeave = false;
   }
-  state.openChatDecisionSuppressed = false;
   let draft = currentOrderDraft();
   const inputCounts = orderInputCounts(draft.input || null);
   const preparedBriefForChoice = lastOpenChatPreparedBrief();
@@ -22967,6 +23016,7 @@ async function createAndOptionallyRunJob() {
       skip_intake: true
     };
     state.openChatPreparedBrief = confirmed.prompt;
+    markOpenChatDecisionSuppressedForBrief(confirmed.prompt);
     state.pendingOrderConfirmation = {
       accepted: true,
       agentId: '',
@@ -23070,6 +23120,7 @@ async function createAndOptionallyRunJob() {
     const directTaskType = openChatCanonicalOrderTaskType(directParts.taskType, directDispatchBrief) || directParts.taskType || draft.task_type || currentRoutingTask() || 'research';
     const finalDirectDispatchBrief = rewriteStructuredBriefTaskType(directDispatchBrief, directTaskType);
     state.openChatPreparedBrief = finalDirectDispatchBrief;
+    markOpenChatDecisionSuppressedForBrief(finalDirectDispatchBrief);
     clearPinnedAgentIfMismatchedTask(directTaskType);
     if (els.jobPrompt) els.jobPrompt.value = '';
     draft = {
