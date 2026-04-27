@@ -5561,12 +5561,19 @@ async function createOrderApiKey(req) {
     return { error: 'Test API keys are disabled on the public deployment.', statusCode: 403 };
   }
   let created = null;
-  await storage.mutate(async (draft) => {
-    created = createOrderApiKeyInState(draft, current.login, current.user, current.authProvider, {
-      label: body?.label || '',
-      mode: body?.mode || 'live'
+  try {
+    await storage.mutate(async (draft) => {
+      created = createOrderApiKeyInState(draft, current.login, current.user, current.authProvider, {
+        label: body?.label || '',
+        mode: body?.mode || 'live'
+      });
     });
-  });
+  } catch (error) {
+    if (/^API key title /.test(String(error?.message || ''))) {
+      return { error: error.message, statusCode: 400 };
+    }
+    throw error;
+  }
   await touchEvent('API_KEY', `${current.login} issued ${created.apiKey.mode} CAIt API key ${created.apiKey.label}`);
   return {
     ok: true,

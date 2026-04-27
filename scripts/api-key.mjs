@@ -40,7 +40,7 @@ Commands:
 
 Options:
   --base-url <url>       default: ${DEFAULT_BASE_URL}
-  --label <label>        default: cli
+  --label <title>        required for create/issue. Example: codex-desktop
   --mode <live|test>     default: live. Public deployment rejects test keys.
   --login <login>        operator mode target account
   --admin-token <token>  operator token, or use CAIT_ADMIN_API_TOKEN
@@ -59,7 +59,7 @@ export function parseApiKeyArgs(argv = []) {
   const options = {
     command,
     baseUrl: envValue('CAIT_BASE_URL', DEFAULT_BASE_URL),
-    label: envValue('CAIT_KEY_LABEL', 'cli'),
+    label: envValue('CAIT_KEY_LABEL'),
     mode: envValue('CAIT_KEY_MODE', 'live'),
     login: envValue('CAIT_KEY_LOGIN'),
     adminToken: envValue('CAIT_ADMIN_API_TOKEN') || envValue('CAIT_OPERATOR_TOKEN'),
@@ -93,6 +93,24 @@ export function parseApiKeyArgs(argv = []) {
   options.baseUrl = options.baseUrl.replace(/\/+$/, '') || DEFAULT_BASE_URL;
   options.mode = String(options.mode || 'live').toLowerCase();
   return options;
+}
+
+function normalizeIssueLabel(value = '') {
+  return String(value || '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function requireIssueLabel(options) {
+  const label = normalizeIssueLabel(options.label);
+  if (!label) {
+    throw new Error('--label is required when creating a CAIt API key. Example: npm run cait:key -- create --label codex-desktop');
+  }
+  if (label.length > 80) {
+    throw new Error('--label must be 80 characters or fewer.');
+  }
+  options.label = label;
 }
 
 function normalizeCookie(value = '') {
@@ -266,6 +284,7 @@ export async function runApiKeyCli(argv = process.argv.slice(2)) {
     return;
   }
   if (options.command === 'create' || options.command === 'issue') {
+    requireIssueLabel(options);
     const result = options.login
       ? (options.adminToken ? await createWithAdminToken(options) : await createWithAdminSession(options))
       : await createWithUserSession(options);

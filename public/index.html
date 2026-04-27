@@ -24,7 +24,7 @@
   <link rel="alternate" type="application/atom+xml" title="CAIt News Atom" href="/feed.xml" />
   <link rel="stylesheet" href="/styles.css?v=20260424am" />
   <link rel="preload" href="/fast-auth.js?v=20260427b" as="script" />
-  <link rel="modulepreload" href="/client.js?v=20260427e" />
+  <link rel="modulepreload" href="/client.js?v=20260427f" />
   <script type="application/ld+json">[
     {
       "@context": "https://schema.org",
@@ -1054,8 +1054,8 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
               </select>
             </label>
             <label class="form-field form-field-grow">
-              <span class="field-label">CAIt API KEY LABEL</span>
-              <input id="apiKeyLabel" placeholder="Key label: codex-desktop / ci-runner / personal-cli" />
+              <span class="field-label">CAIt API KEY TITLE</span>
+              <input id="apiKeyLabel" required maxlength="80" autocomplete="off" placeholder="Title: codex-desktop / ci-runner / personal-cli" />
             </label>
             <button id="createApiKeyBtn" class="btn btn-alt">ISSUE CAIt API KEY</button>
           </div>
@@ -1339,7 +1339,7 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
     </div>
   </div>
   <script src="/fast-auth.js?v=20260427b"></script>
-  <script type="module" src="/client.js?v=20260427e"></script>
+  <script type="module" src="/client.js?v=20260427f"></script>
   <script defer src="/analytics-loader.js?v=20260425a"></script>
 </body>
 </html>

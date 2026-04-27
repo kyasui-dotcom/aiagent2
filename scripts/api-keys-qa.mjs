@@ -7,9 +7,21 @@ import {
   touchOrderApiKeyUsageInState
 } from '../lib/shared.js';
 import { createD1LikeStorage } from '../lib/storage.js';
-import { parseApiKeyArgs } from './api-key.mjs';
+import { parseApiKeyArgs, runApiKeyCli } from './api-key.mjs';
 
 const state = { agents: [], jobs: [], events: [], accounts: [] };
+
+assert.throws(
+  () => createOrderApiKeyInState(
+    state,
+    'missing-title',
+    { login: 'missing-title', name: 'Missing Title' },
+    'email',
+    { label: '   ' }
+  ),
+  /API key title is required/
+);
+assert.equal(state.accounts.length, 0, 'blank API key titles should not create or mutate accounts');
 
 const created = createOrderApiKeyInState(
   state,
@@ -102,9 +114,24 @@ assert.equal(parsedUserCli.label, 'codex-desktop');
 assert.equal(parsedUserCli.sessionCookie, 'aiagent2_session=abc');
 assert.equal(parsedUserCli.printExport, true);
 
-const parsedOperatorCli = parseApiKeyArgs(['create', '--login', 'user@example.com', '--admin-token', 'operator-secret', '--mode', 'live']);
+const parsedOperatorCli = parseApiKeyArgs(['create', '--login', 'user@example.com', '--admin-token', 'operator-secret', '--label', 'operator-cli', '--mode', 'live']);
 assert.equal(parsedOperatorCli.login, 'user@example.com');
 assert.equal(parsedOperatorCli.adminToken, 'operator-secret');
+assert.equal(parsedOperatorCli.label, 'operator-cli');
 assert.equal(parsedOperatorCli.mode, 'live');
+
+const originalCaitKeyLabel = process.env.CAIT_KEY_LABEL;
+delete process.env.CAIT_KEY_LABEL;
+try {
+  const parsedNoLabelCli = parseApiKeyArgs(['create', '--cookie', 'aiagent2_session=abc']);
+  assert.equal(parsedNoLabelCli.label, '');
+  await assert.rejects(
+    () => runApiKeyCli(['create', '--cookie', 'aiagent2_session=abc']),
+    /--label is required/
+  );
+} finally {
+  if (originalCaitKeyLabel === undefined) delete process.env.CAIT_KEY_LABEL;
+  else process.env.CAIT_KEY_LABEL = originalCaitKeyLabel;
+}
 
 console.log('api keys qa passed');

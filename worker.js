@@ -4757,12 +4757,19 @@ async function createOrderApiKey(storage, request, env) {
     return { error: 'Test API keys are disabled on the public deployment.', statusCode: 403 };
   }
   let created = null;
-  await storage.mutate(async (draft) => {
-    created = createOrderApiKeyInState(draft, current.login, current.user, current.authProvider, {
-      label: body?.label || '',
-      mode: body?.mode || 'live'
+  try {
+    await storage.mutate(async (draft) => {
+      created = createOrderApiKeyInState(draft, current.login, current.user, current.authProvider, {
+        label: body?.label || '',
+        mode: body?.mode || 'live'
+      });
     });
-  });
+  } catch (error) {
+    if (/^API key title /.test(String(error?.message || ''))) {
+      return { error: error.message, statusCode: 400 };
+    }
+    throw error;
+  }
   await touchEvent(storage, 'API_KEY', `${current.login} issued ${created.apiKey.mode} CAIt API key ${created.apiKey.label}`);
   return {
     ok: true,
@@ -4794,22 +4801,29 @@ async function createAdminOrderApiKey(storage, request, env) {
     return { error: 'Test API keys are disabled on the public deployment.', statusCode: 403 };
   }
   let created = null;
-  await storage.mutate(async (draft) => {
-    const existing = (Array.isArray(draft.accounts) ? draft.accounts : [])
-      .find((account) => String(account?.login || '').trim().toLowerCase() === target.login);
-    const existingUser = accountUserFromSettings(existing);
-    const user = existingUser || {
-      login: target.login,
-      name: String(body?.name || target.login).trim() || target.login,
-      email: String(body?.email || (target.login.includes('@') ? target.login : '')).trim(),
-      accountId: accountIdForLogin(target.login)
-    };
-    const authProvider = existing?.authProvider || 'operator-cli';
-    created = createOrderApiKeyInState(draft, target.login, user, authProvider, {
-      label: body?.label || 'cli',
-      mode: body?.mode || 'live'
+  try {
+    await storage.mutate(async (draft) => {
+      const existing = (Array.isArray(draft.accounts) ? draft.accounts : [])
+        .find((account) => String(account?.login || '').trim().toLowerCase() === target.login);
+      const existingUser = accountUserFromSettings(existing);
+      const user = existingUser || {
+        login: target.login,
+        name: String(body?.name || target.login).trim() || target.login,
+        email: String(body?.email || (target.login.includes('@') ? target.login : '')).trim(),
+        accountId: accountIdForLogin(target.login)
+      };
+      const authProvider = existing?.authProvider || 'operator-cli';
+      created = createOrderApiKeyInState(draft, target.login, user, authProvider, {
+        label: body?.label || '',
+        mode: body?.mode || 'live'
+      });
     });
-  });
+  } catch (error) {
+    if (/^API key title /.test(String(error?.message || ''))) {
+      return { error: error.message, statusCode: 400 };
+    }
+    throw error;
+  }
   await touchEvent(storage, 'API_KEY', `${authorization.actor} issued ${created.apiKey.mode} CAIt API key ${created.apiKey.label} for ${target.login}`, {
     source: 'admin_api_key_cli',
     actor: authorization.actor,

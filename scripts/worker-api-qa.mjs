@@ -544,6 +544,14 @@ const crossSiteBlocked = await request('/api/settings/api-keys', {
 }, { sessionCookie: daveSession, skipCsrf: true });
 assert.equal(crossSiteBlocked.status, 403, 'cross-site cookie-authenticated writes should be blocked');
 
+const missingApiKeyTitle = await request('/api/settings/api-keys', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ label: '   ' })
+}, { sessionCookie: daveSession });
+assert.equal(missingApiKeyTitle.status, 400, 'user API key issue should require a title');
+assert.match(missingApiKeyTitle.body.error, /API key title is required/);
+
 const adminKeyMissingAuth = await request('/api/admin/api-keys', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
@@ -557,6 +565,14 @@ const adminKeyBadToken = await request('/api/admin/api-keys', {
   body: JSON.stringify({ login: 'cli-target@example.com', label: 'bad-admin-auth' })
 });
 assert.equal(adminKeyBadToken.status, 401, 'operator API key issue rejects invalid admin tokens');
+
+const adminMissingApiKeyTitle = await request('/api/admin/api-keys', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${env.CAIT_ADMIN_API_TOKEN}` },
+  body: JSON.stringify({ login: 'missing-title@example.com', label: '' })
+});
+assert.equal(adminMissingApiKeyTitle.status, 400, 'operator API key issue should require a title');
+assert.match(adminMissingApiKeyTitle.body.error, /API key title is required/);
 
 const adminIssuedKey = await request('/api/admin/api-keys', {
   method: 'POST',

@@ -291,7 +291,7 @@ Required Stripe env:
 
 ## Public ordering with API key
 
-Issue a CAIt API key from the CLI or in `SETTINGS`, then send it to the public API. Public API usage uses the same saved-card month-end billing or subscription credits as Web orders and is included in provider payout settlement when a provider agent completes the work.
+Issue a CAIt API key from the CLI or in `SETTINGS`, then send it to the public API. Each key requires an explicit title such as `codex-desktop` or `ci-runner`. Public API usage uses the same saved-card month-end billing or subscription credits as Web orders and is included in provider payout settlement when a provider agent completes the work.
 
 API key issue from CLI:
 

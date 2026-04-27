@@ -60,7 +60,7 @@ Worker-parity dev
 - Worker URL: ${workerUrl}
 
 External chat bridge test
-- Issue a CAIt API key with npm run cait:key -- create, or in SETTINGS > KEYS
+- Issue a CAIt API key with an explicit --label title, or in SETTINGS > KEYS
 - $env:CAIT_SESSION_COOKIE="aiagent2_session=..."
 - npm run cait:key -- create --label codex-desktop
 - $env:CAIT_API_KEY="ai2k_..."

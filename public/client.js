@@ -23474,10 +23474,19 @@ if (els.apiKeyMode) els.apiKeyMode.onchange = () => renderOrderApiKeys(state.sna
 if (els.createApiKeyBtn) els.createApiKeyBtn.onclick = () => {
   if (!ensureSettingsLogin()) return;
   runAction(els.createApiKeyBtn, async () => {
+    const apiKeyTitle = String(els.apiKeyLabel?.value || '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!apiKeyTitle) {
+      safeText(els.apiKeyCreateResult, 'API key title is required. Example: codex-desktop / ci-runner / personal-cli');
+      flash('Enter an API key title before issuing a key.', 'warn');
+      els.apiKeyLabel?.focus?.();
+      return;
+    }
     const res = await api('/api/settings/api-keys', {
       method: 'POST',
       body: JSON.stringify({
-        label: els.apiKeyLabel?.value || '',
+        label: apiKeyTitle,
         mode: els.apiKeyMode?.value || 'live'
       })
     });
