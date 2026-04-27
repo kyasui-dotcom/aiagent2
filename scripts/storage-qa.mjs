@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { createD1LikeStorage } from '../lib/storage.js';
 import { recoverMissingAccountsInState } from '../lib/shared.js';
+
+const storageSource = await readFile(new URL('../lib/storage.js', import.meta.url), 'utf8');
+assert.equal(storageSource.includes('DELETE FROM'), false, 'D1 storage must not hard-delete existing rows');
 
 function buildAccount(login, updatedAt) {
   return {

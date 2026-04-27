@@ -895,6 +895,7 @@ const deletedRegistered = await request(`/api/agents/${registered.body.agent.id}
 assert.equal(deletedRegistered.status, 200);
 assert.equal(deletedRegistered.body.ok, true);
 assert.equal(deletedRegistered.body.agent.id, registered.body.agent.id);
+assert.equal(deletedRegistered.body.soft_deleted, true, 'agent DELETE should hide the agent without deleting the database row');
 
 const githubDraftUnauthorized = await request('/api/github/generate-manifest', {
   method: 'POST',
@@ -1817,6 +1818,7 @@ try {
   const deletedImported = await request(`/api/agents/${imported.body.agent.id}`, { method: 'DELETE' });
   assert.equal(deletedImported.status, 200);
   assert.equal(deletedImported.body.ok, true);
+  assert.equal(deletedImported.body.soft_deleted, true);
 } finally {
   globalThis.fetch = originalFetch;
 }

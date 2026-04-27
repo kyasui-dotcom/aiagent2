@@ -199,5 +199,6 @@ assert.ok(afterCron.jobs.some((job) => job.input?._broker?.recurring?.recurringO
 const deleted = await request(`/api/recurring-orders/${created.body.recurring_order.id}`, { method: 'DELETE' });
 assert.equal(deleted.status, 200);
 assert.equal(deleted.body.ok, true);
+assert.equal(deleted.body.recurring_order.status, 'cancelled', 'recurring order delete should cancel without deleting the row');
 
 console.log('recurring orders qa passed');

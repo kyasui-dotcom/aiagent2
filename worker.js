@@ -2339,7 +2339,6 @@ async function appendEmailDelivery(storage, delivery) {
   await storage.mutate(async (draft) => {
     if (!Array.isArray(draft.emailDeliveries)) draft.emailDeliveries = [];
     draft.emailDeliveries.unshift(delivery);
-    if (draft.emailDeliveries.length > 1000) draft.emailDeliveries = draft.emailDeliveries.slice(0, 1000);
   });
   return delivery;
 }
@@ -4767,8 +4766,17 @@ async function deleteExactMatchAction(storage, request, env, actionId) {
   const targetId = String(actionId || '').trim();
   if (!targetId) return { error: 'Action id is required', statusCode: 400 };
   await storage.mutate(async (draft) => {
-    draft.exactMatchActions = (Array.isArray(draft.exactMatchActions) ? draft.exactMatchActions : [])
-      .filter((item) => String(item?.id || '').trim() !== targetId);
+    const actions = Array.isArray(draft.exactMatchActions) ? draft.exactMatchActions : [];
+    const index = actions.findIndex((item) => String(item?.id || '').trim() === targetId);
+    if (index >= 0) {
+      actions[index] = {
+        ...actions[index],
+        enabled: false,
+        disabledAt: actions[index].disabledAt || nowIso(),
+        updatedAt: nowIso()
+      };
+    }
+    draft.exactMatchActions = actions;
   });
   const state = await storage.getState();
   return { ok: true, actions: sanitizeExactMatchActionsForClient(state.exactMatchActions || []) };
@@ -4816,8 +4824,18 @@ async function deleteAppSetting(storage, request, env, key = '') {
   const targetKey = String(key || '').trim();
   if (!targetKey || !(targetKey in APP_SETTING_DEFAULTS)) return { error: 'Unknown app setting key.', statusCode: 400 };
   await storage.mutate(async (draft) => {
-    draft.appSettings = (Array.isArray(draft.appSettings) ? draft.appSettings : [])
-      .filter((item) => String(item?.key || '').trim() !== targetKey);
+    const settings = Array.isArray(draft.appSettings) ? draft.appSettings : [];
+    const index = settings.findIndex((item) => String(item?.key || '').trim() === targetKey);
+    const reset = {
+      key: targetKey,
+      value: String(APP_SETTING_DEFAULTS[targetKey] || ''),
+      source: 'default_reset',
+      resetAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    if (index >= 0) settings[index] = { ...settings[index], ...reset, createdAt: settings[index].createdAt || nowIso() };
+    else settings.push({ ...reset, createdAt: nowIso() });
+    draft.appSettings = settings;
   });
   const state = await storage.getState();
   return { ok: true, app_settings: appSettingsMap(state) };
@@ -5039,9 +5057,8 @@ async function recordChatTranscript(storage, request, env) {
     await storage.mutate(async (draft) => {
       if (!Array.isArray(draft.chatTranscripts)) draft.chatTranscripts = [];
       const existingIndex = draft.chatTranscripts.findIndex((item) => String(item?.id || '') === String(transcript.id || ''));
-      if (existingIndex !== -1) draft.chatTranscripts.splice(existingIndex, 1);
-      draft.chatTranscripts.unshift(transcript);
-      if (draft.chatTranscripts.length > 2000) draft.chatTranscripts = draft.chatTranscripts.slice(0, 2000);
+      if (existingIndex !== -1) draft.chatTranscripts[existingIndex] = transcript;
+      else draft.chatTranscripts.unshift(transcript);
     });
   }
   return {
@@ -6243,8 +6260,8 @@ async function touchEvent(storage, type, message, meta = {}) {
     return event;
   }
   await storage.mutate(async (draft) => {
+    if (!Array.isArray(draft.events)) draft.events = [];
     draft.events.push(event);
-    if (draft.events.length > 2000) draft.events = draft.events.slice(-2000);
   });
   return event;
 }
@@ -11631,8 +11648,9 @@ async function handleDeleteRecurringOrder(storage, request, env, recurringOrderI
     result = deleteRecurringOrderInState(draft, recurringOrderId, current);
   });
   if (result?.error) return json(result, result.statusCode || 400);
-  await touchEvent(storage, 'RECURRING', `scheduled work ${result.recurringOrder.id.slice(0, 12)} deleted`, {
-    recurringOrderId: result.recurringOrder.id
+  await touchEvent(storage, 'RECURRING', `scheduled work ${result.recurringOrder.id.slice(0, 12)} cancelled (row retained)`, {
+    recurringOrderId: result.recurringOrder.id,
+    status: result.recurringOrder.status
   });
   if (current.apiKey?.id) await recordOrderApiKeyUsage(storage, current, request);
   return json({ ok: true, recurring_order: result.recurringOrder });
@@ -11869,11 +11887,26 @@ async function handleDeleteAgent(storage, request, env, agentId) {
     const agent = draft.agents.find((item) => item.id === agentId);
     if (!agent) return { error: 'Agent not found', statusCode: 404 };
     const relatedRuns = draft.jobs.filter((job) => job.assignedAgentId === agentId || job.parentAgentId === agentId).length;
-    draft.agents = draft.agents.filter((item) => item.id !== agentId);
-    return { ok: true, agent: publicAgent(agent), related_runs: relatedRuns };
+    const deletedAt = nowIso();
+    const visibleAgent = publicAgent(agent);
+    agent.online = false;
+    agent.metadata = {
+      ...(agent.metadata && typeof agent.metadata === 'object' ? agent.metadata : {}),
+      hidden_from_catalog: true,
+      not_routable: true,
+      deleted_at: deletedAt,
+      deletedAt,
+      deleted_reason: 'owner_removed_from_catalog',
+      deletedReason: 'owner_removed_from_catalog'
+    };
+    agent.verificationStatus = 'deprecated';
+    agent.verificationCheckedAt = deletedAt;
+    agent.verificationError = agent.verificationError || 'Agent retained for audit after owner removed it from the catalog.';
+    agent.updatedAt = deletedAt;
+    return { ok: true, agent: visibleAgent || { id: agent.id, name: agent.name }, related_runs: relatedRuns, soft_deleted: true };
   });
   if (result.error) return json({ error: result.error }, result.statusCode || 400);
-  await touchEvent(storage, 'REMOVED', `${result.agent.name} deleted from registry (${result.related_runs} related runs kept)`);
+  await touchEvent(storage, 'REMOVED', `${result.agent.name} removed from catalog (${result.related_runs} related runs kept; row retained)`);
   if (current.apiKey?.id) await recordOrderApiKeyUsage(storage, current, request);
   return json(result);
 }

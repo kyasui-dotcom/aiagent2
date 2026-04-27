@@ -3040,8 +3040,8 @@ async function touchEvent(type, message, meta = {}) {
     await storage.appendEvent(event);
   } else {
     await storage.mutate(async (state) => {
+      if (!Array.isArray(state.events)) state.events = [];
       state.events.push(event);
-      if (state.events.length > 2000) state.events = state.events.slice(-2000);
     });
   }
   broadcast(event);
@@ -3096,7 +3096,6 @@ async function appendEmailDelivery(delivery) {
   await storage.mutate(async (state) => {
     if (!Array.isArray(state.emailDeliveries)) state.emailDeliveries = [];
     state.emailDeliveries.unshift(delivery);
-    if (state.emailDeliveries.length > 1000) state.emailDeliveries = state.emailDeliveries.slice(0, 1000);
   });
   return delivery;
 }
@@ -5262,8 +5261,18 @@ async function deleteAppSetting(req, key = '') {
   const targetKey = String(key || '').trim();
   if (!targetKey || !(targetKey in APP_SETTING_DEFAULTS)) return { error: 'Unknown app setting key.', statusCode: 400 };
   await storage.mutate(async (draft) => {
-    draft.appSettings = (Array.isArray(draft.appSettings) ? draft.appSettings : [])
-      .filter((item) => String(item?.key || '').trim() !== targetKey);
+    const settings = Array.isArray(draft.appSettings) ? draft.appSettings : [];
+    const index = settings.findIndex((item) => String(item?.key || '').trim() === targetKey);
+    const reset = {
+      key: targetKey,
+      value: String(APP_SETTING_DEFAULTS[targetKey] || ''),
+      source: 'default_reset',
+      resetAt: nowIso(),
+      updatedAt: nowIso()
+    };
+    if (index >= 0) settings[index] = { ...settings[index], ...reset, createdAt: settings[index].createdAt || nowIso() };
+    else settings.push({ ...reset, createdAt: nowIso() });
+    draft.appSettings = settings;
   });
   const state = await storage.getState();
   return { ok: true, app_settings: appSettingsMap(state) };
@@ -5449,8 +5458,9 @@ async function recordChatTranscript(req) {
   } else {
     await storage.mutate(async (draft) => {
       if (!Array.isArray(draft.chatTranscripts)) draft.chatTranscripts = [];
-      draft.chatTranscripts.unshift(transcript);
-      if (draft.chatTranscripts.length > 2000) draft.chatTranscripts = draft.chatTranscripts.slice(0, 2000);
+      const existingIndex = draft.chatTranscripts.findIndex((item) => String(item?.id || '') === String(transcript.id || ''));
+      if (existingIndex !== -1) draft.chatTranscripts[existingIndex] = transcript;
+      else draft.chatTranscripts.unshift(transcript);
     });
   }
   return {
@@ -6665,8 +6675,9 @@ async function deleteRecurringOrderForRequest(req, recurringOrderId) {
     result = deleteRecurringOrderInState(draft, recurringOrderId, current);
   });
   if (result?.error) return result;
-  await touchEvent('RECURRING', `scheduled work ${result.recurringOrder.id.slice(0, 12)} deleted`, {
-    recurringOrderId: result.recurringOrder.id
+  await touchEvent('RECURRING', `scheduled work ${result.recurringOrder.id.slice(0, 12)} cancelled (row retained)`, {
+    recurringOrderId: result.recurringOrder.id,
+    status: result.recurringOrder.status
   });
   if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
   return { ok: true, recurring_order: result.recurringOrder };
@@ -8873,11 +8884,26 @@ const server = http.createServer(async (req, res) => {
       const agent = state.agents.find((item) => item.id === id);
       if (!agent) return { error: 'Agent not found', statusCode: 404 };
       const relatedRuns = state.jobs.filter((job) => job.assignedAgentId === id || job.parentAgentId === id).length;
-      state.agents = state.agents.filter((item) => item.id !== id);
-      return { ok: true, agent: publicAgent(agent), related_runs: relatedRuns };
+      const deletedAt = nowIso();
+      const visibleAgent = publicAgent(agent);
+      agent.online = false;
+      agent.metadata = {
+        ...(agent.metadata && typeof agent.metadata === 'object' ? agent.metadata : {}),
+        hidden_from_catalog: true,
+        not_routable: true,
+        deleted_at: deletedAt,
+        deletedAt,
+        deleted_reason: 'owner_removed_from_catalog',
+        deletedReason: 'owner_removed_from_catalog'
+      };
+      agent.verificationStatus = 'deprecated';
+      agent.verificationCheckedAt = deletedAt;
+      agent.verificationError = agent.verificationError || 'Agent retained for audit after owner removed it from the catalog.';
+      agent.updatedAt = deletedAt;
+      return { ok: true, agent: visibleAgent || { id: agent.id, name: agent.name }, related_runs: relatedRuns, soft_deleted: true };
     });
     if (result.error) return json(res, result.statusCode || 400, { error: result.error });
-    await touchEvent('REMOVED', `${result.agent.name} deleted from registry (${result.related_runs} related runs kept)`);
+    await touchEvent('REMOVED', `${result.agent.name} removed from catalog (${result.related_runs} related runs kept; row retained)`);
     if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
     return json(res, 200, result);
   }
