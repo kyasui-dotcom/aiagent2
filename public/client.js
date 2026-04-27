@@ -4355,6 +4355,17 @@ function openGithubSignIn() {
 }
 
 async function fetchFastAuthStatus(timeoutMs = 2500) {
+  const inlineResolved = window.__CAIT_FAST_AUTH_RESOLVED__;
+  if (inlineResolved && typeof inlineResolved === 'object') return inlineResolved;
+  const inlinePromise = window.__CAIT_FAST_AUTH_STATUS__;
+  if (inlinePromise && typeof inlinePromise.then === 'function') {
+    const timeoutValue = Symbol('fast-auth-timeout');
+    const timeoutPromise = new Promise((resolve) => {
+      window.setTimeout(() => resolve(timeoutValue), Math.max(500, Number(timeoutMs) || 2500));
+    });
+    const result = await Promise.race([inlinePromise, timeoutPromise]);
+    if (result && result !== timeoutValue) return result;
+  }
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), Math.max(500, Number(timeoutMs) || 2500));
   try {
@@ -4397,7 +4408,7 @@ function applyFastAuthStatusForAuthCheck(authStatus = null) {
 async function primeAuthCheckFromStatus() {
   if (state.currentTab !== 'auth-check') return;
   const status = await fetchFastAuthStatus();
-  applyFastAuthStatusForAuthCheck(status);
+  return applyFastAuthStatusForAuthCheck(status);
 }
 
 function readRememberedAuthState() {
@@ -24070,7 +24081,6 @@ loadManifestExample();
   state.routeAgentId = initialRoute.agentId;
   if (initialRoute.settingsSection) state.settingsSection = initialRoute.settingsSection;
   switchTab(initialRoute.tab || readRememberedTab() || 'start', { allowBootstrapAccess: true });
-  void primeAuthCheckFromStatus();
   if (initialRoute.stripeState) {
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('stripe');
@@ -24126,10 +24136,21 @@ function ensureGithubLinkedAccess(options = {}) {
   return false;
 }
 
-state.initialSnapshotLoading = true;
-try {
-  await refresh();
-} finally {
-  state.initialSnapshotLoading = false;
+async function bootstrapInitialSnapshot() {
+  const startedOnAuthCheck = state.currentTab === 'auth-check';
+  if (startedOnAuthCheck) {
+    const resolved = await primeAuthCheckFromStatus();
+    if (resolved && !state.snapshot?.auth?.loggedIn && state.currentTab === 'auth-check') return;
+  }
+  state.initialSnapshotLoading = true;
+  try {
+    await refresh();
+  } catch (error) {
+    flash(error.message || 'Initial data load failed. Refresh the page or sign in again.', 'error');
+  } finally {
+    state.initialSnapshotLoading = false;
+    trackPageViewOnce();
+  }
 }
-trackPageViewOnce();
+
+void bootstrapInitialSnapshot();
