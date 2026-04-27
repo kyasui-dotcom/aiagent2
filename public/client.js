@@ -15673,12 +15673,12 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
       node.hidden = true;
       node.innerHTML = '';
     });
-    safeText(els.adminAccountsMetric, '0');
-    safeText(els.adminChatsMetric, '0');
-    safeText(els.adminOrdersMetric, '0');
-    safeText(els.adminAgentsMetric, '0');
-    safeText(els.adminIssuesMetric, '0');
-    safeText(els.adminActiveMetric, '0');
+    safeText(els.adminAccountsMetric, '-');
+    safeText(els.adminChatsMetric, '-');
+    safeText(els.adminOrdersMetric, '-');
+    safeText(els.adminAgentsMetric, '-');
+    safeText(els.adminIssuesMetric, '-');
+    safeText(els.adminActiveMetric, '-');
     safeText(els.adminDetail, 'Admin access required.');
     renderAdminChatFilterButtons();
     return;

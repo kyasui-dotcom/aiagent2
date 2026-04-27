@@ -2988,18 +2988,90 @@ async function ownerInfoFromRequest(request, env, current = null) {
   };
 }
 
+function sessionAccountRepairLogin(session = null, account = null) {
+  return String(
+    session?.accountLogin
+    || account?.login
+    || session?.user?.login
+    || defaultLoginForAuthUser(session?.user || null, sessionAuthProvider(session))
+    || ''
+  ).trim().toLowerCase();
+}
+
+function accountRecordForLogin(state = {}, login = '') {
+  const safeLogin = String(login || '').trim().toLowerCase();
+  if (!safeLogin) return null;
+  return (Array.isArray(state?.accounts) ? state.accounts : [])
+    .find((account) => aliasLoginsForAccount(account).includes(safeLogin)) || null;
+}
+
+function sessionAccountIdentities(session = null) {
+  const identities = [];
+  if (sessionHasGoogleOauth(session) && session?.googleIdentity) {
+    identities.push({ provider: 'google-oauth', prefix: 'google', user: session.googleIdentity });
+  }
+  if (sessionHasGithubApp(session) && session?.githubIdentity) {
+    identities.push({ provider: 'github-app', prefix: 'github', user: session.githubIdentity });
+  } else if (sessionHasGithubOauth(session) && session?.githubIdentity) {
+    identities.push({ provider: 'github-oauth', prefix: 'github', user: session.githubIdentity });
+  }
+  const explicitProvider = sessionAuthProvider(session);
+  if (!identities.length && explicitProvider !== 'guest' && session?.user?.login) {
+    const prefix = explicitProvider.split('-')[0] || explicitProvider;
+    identities.push({ provider: explicitProvider, prefix, user: session.user });
+  }
+  return identities.filter((identity) => identity.provider && identity.user);
+}
+
+function sessionAccountNeedsRepair(state = {}, session = null, account = null) {
+  const targetLogin = sessionAccountRepairLogin(session, account);
+  if (!targetLogin) return false;
+  const persisted = accountRecordForLogin(state, targetLogin);
+  if (!persisted) return true;
+  const normalized = accountSettingsForLogin(state, persisted.login || targetLogin, session?.user || null, sessionAuthProvider(session));
+  return sessionAccountIdentities(session).some((identity) => !accountIdentityForProvider(normalized, identity.prefix));
+}
+
+async function repairSessionAccountIfNeeded(storage, state = {}, session = null, account = null) {
+  if (!sessionAccountNeedsRepair(state, session, account)) return { state, account };
+  const initialLogin = sessionAccountRepairLogin(session, account);
+  const identities = sessionAccountIdentities(session);
+  let repairedLogin = initialLogin;
+  await storage.mutate(async (draft) => {
+    if (!Array.isArray(draft.accounts)) draft.accounts = [];
+    const persisted = accountRecordForLogin(draft, repairedLogin);
+    if (persisted?.login) repairedLogin = persisted.login;
+    if (!persisted && repairedLogin) {
+      upsertAccountSettingsInState(draft, repairedLogin, session?.user || { login: repairedLogin }, sessionAuthProvider(session), {});
+    }
+    for (const identity of identities) {
+      const linked = linkIdentityToAccountInState(draft, repairedLogin, identity.user, identity.provider);
+      if (!linked?.ok && linked?.reason === 'identity_already_linked' && linked?.linkedAccount?.login) {
+        const merged = mergeAccountsInState(draft, linked.linkedAccount.login, repairedLogin);
+        repairedLogin = merged?.targetLogin || repairedLogin;
+      }
+    }
+  });
+  const freshState = typeof storage.getFreshState === 'function' ? await storage.getFreshState() : await storage.getState();
+  return {
+    state: freshState,
+    account: accountSettingsForLogin(freshState, repairedLogin, session?.user || null, sessionAuthProvider(session))
+  };
+}
+
 async function currentUserContext(request, env) {
   const session = await getSession(request, env);
   if (!session?.user?.login && !session?.accountLogin) return { session: null, user: null, login: '', authProvider: 'guest' };
   const storage = runtimeStorage(env);
-  const state = await storage.getState();
-  const account = session?.accountLogin
+  let state = await storage.getState();
+  let account = session?.accountLogin
     ? accountSettingsForLogin(state, session.accountLogin)
     : sessionHasGithubOauth(session)
       ? accountSettingsForIdentity(state, session.githubIdentity, 'github-oauth')
       : sessionHasGoogleOauth(session)
         ? accountSettingsForIdentity(state, session.googleIdentity, 'google-oauth')
         : accountSettingsForIdentity(state, session.user, sessionAuthProvider(session));
+  ({ state, account } = await repairSessionAccountIfNeeded(storage, state, session, account));
   const githubAuthorized = Boolean(sessionHasGithubOauth(session) || sessionHasGithubApp(session) || accountHasGithubConnector(account));
   const googleAuthorized = Boolean(sessionHasGoogleOauth(session) || accountHasGoogleConnector(account));
   const githubIdentity = accountIdentityForProvider(account, 'github') || session?.githubIdentity || null;
@@ -4567,8 +4639,13 @@ async function snapshot(storage, request, env) {
   const canReviewReports = canReviewFeedbackReports(current, env);
   const canRepairAdminAccounts = canViewAdminDashboard(current, env);
   if (canRepairAdminAccounts) {
-    const repair = await storage.mutate(async (draft) => recoverMissingAccountsInState(draft));
-    if (Number(repair?.recovered || 0) > 0) state = await storage.getState();
+    if (typeof storage.getFreshState === 'function') state = await storage.getFreshState();
+    const repairProbe = structuredClone(state);
+    const repairPreview = recoverMissingAccountsInState(repairProbe);
+    if (Number(repairPreview?.recovered || 0) > 0) {
+      await storage.mutate(async (draft) => recoverMissingAccountsInState(draft));
+      state = typeof storage.getFreshState === 'function' ? await storage.getFreshState() : await storage.getState();
+    }
   }
   if (current.user?.login) {
     accountSettings = accountSettingsForLogin(state, current.login, current.user, current.authProvider);
