@@ -238,6 +238,57 @@ assert.ok(asyncWorkflowTaskOrder.indexOf('data_analysis') < asyncWorkflowTaskOrd
 assert.ok(asyncWorkflowFirstState.body.job.workflow.statusCounts.completed >= 2, 'leader handoff should release eligible built-in specialists after the leader completes');
 
 const qaStorage = createD1LikeStorage(env.MY_BINDING, { allowInMemory: true, stateCacheTtlMs: 0 });
+await qaStorage.mutate(async (draft) => {
+  draft.jobs.push(
+    {
+      id: 'qa-workflow-auto-retry-parent',
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'auto retry timed out research child',
+      status: 'running',
+      createdAt: nowIso(),
+      startedAt: nowIso(),
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research', 'growth'],
+        childRuns: []
+      },
+      logs: []
+    },
+    {
+      id: 'qa-workflow-auto-retry-child',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'timed out research child should be retried by leader sweep',
+      status: 'timed_out',
+      assignedAgentId: 'agent_research_01',
+      workflowParentId: 'qa-workflow-auto-retry-parent',
+      createdAt: nowIso(),
+      startedAt: nowIso(),
+      timedOutAt: nowIso(),
+      failedAt: nowIso(),
+      failureCategory: 'deadline_timeout',
+      dispatch: { attempts: 0, retryable: true, maxRetries: 2 },
+      logs: ['qa timed out workflow child']
+    }
+  );
+});
+const autoRetrySweep = await request('/api/dev/timeout-sweep', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ retry_limit: 1 })
+});
+assert.equal(autoRetrySweep.status, 200);
+assert.equal(autoRetrySweep.body.retry.retried_count, 1, 'leader timeout sweep should retry timed-out workflow children');
+assert.ok(autoRetrySweep.body.retry.job_ids.includes('qa-workflow-auto-retry-child'));
+const autoRetryState = await qaStorage.getState();
+const autoRetriedChild = autoRetryState.jobs.find((job) => job.id === 'qa-workflow-auto-retry-child');
+assert.ok(['queued', 'running', 'completed'].includes(String(autoRetriedChild?.status || '')), 'auto-retried workflow child should leave timed_out status');
+assert.ok(Number(autoRetriedChild.dispatch.attempts || 0) >= 1);
+
 const asyncRawState = await qaStorage.getState();
 const asyncCheckpointLeader = asyncRawState.jobs.find((job) => (
   job.workflowParentId === asyncWorkflow.body.workflow_job_id
@@ -295,7 +346,7 @@ const executionWithPriorAnalysis = asyncAfterNextLayerState.jobs.find((job) => (
   && job.input?._broker?.workflow?.sequencePhase === 'action'
   && job.taskType !== 'cmo_leader'
   && Array.isArray(job.input?._broker?.workflow?.leaderHandoff?.priorRuns)
-  && job.input._broker.workflow.leaderHandoff.priorRuns.some((run) => ['teardown', 'data_analysis', 'seo_gap', 'landing'].includes(run.taskType))
+  && job.input._broker.workflow.leaderHandoff.priorRuns.some((run) => ['teardown', 'data_analysis', 'media_planner', 'seo_gap', 'landing'].includes(run.taskType))
 ));
 assert.ok(executionWithPriorAnalysis, 'execution-layer children should receive completed research/analysis handoff before dispatch');
 await qaStorage.mutate(async (draft) => {

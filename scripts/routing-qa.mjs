@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { DEFAULT_AGENT_SEEDS, agentTagsFromRecord, buildIntakeClarification, inferAgentTagsFromSignals, inferTaskSequence, inferTaskType, computeScore, isAgentTeamLaunchIntent, isBuiltInAgent, isFreeWebGrowthIntent, isLargeAgentTeamIntent, optimizeOrderPromptForBroker } from '../lib/shared.js';
+import { DEFAULT_AGENT_SEEDS, agentTagsFromRecord, buildIntakeClarification, inferAgentTagsFromSignals, inferTaskSequence, inferTaskType, computeScore, isAgentTeamLaunchIntent, isBuiltInAgent, isCmoExternalExecutionIntent, isFreeWebGrowthIntent, isLargeAgentTeamIntent, optimizeOrderPromptForBroker } from '../lib/shared.js';
 
 assert.equal(inferTaskType('', '料金計算ロジックのバグ修正'), 'code');
 assert.equal(inferTaskType('', '中古iPhone 13の買取比較'), 'research');
@@ -30,6 +30,18 @@ assert.ok(freeFlow.includes('research'));
 assert.ok(freeFlow.includes('seo_gap'));
 assert.ok(freeFlow.includes('landing'));
 assert.ok(freeFlow.includes('growth'));
+
+const cmoActionFlow = inferTaskSequence('cmo_leader', 'CMOスタートで外部コネクターまで実行し、X投稿とディレクトリ掲載のアクションまで完走したい', { maxTasks: 14 });
+assert.equal(isCmoExternalExecutionIntent('cmo_leader', '外部コネクターまで実行したい'), true);
+assert.equal(cmoActionFlow[0], 'cmo_leader');
+assert.ok(cmoActionFlow.includes('research'));
+assert.ok(cmoActionFlow.includes('media_planner'));
+assert.ok(cmoActionFlow.includes('seo_gap'));
+assert.ok(cmoActionFlow.includes('landing'));
+assert.ok(cmoActionFlow.includes('growth'));
+assert.ok(cmoActionFlow.includes('directory_submission'));
+assert.ok(cmoActionFlow.includes('acquisition_automation'));
+assert.ok(cmoActionFlow.includes('x_post'));
 
 const launchFlow = inferTaskSequence('', '1告知でサイト、競合分析、Instagram、X、Reddit、Indie Hackers、データ分析までAgent Teamでまとめて作る', { maxTasks: 11 });
 assert.equal(launchFlow[0], 'cmo_leader');

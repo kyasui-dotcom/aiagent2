@@ -47,6 +47,7 @@ const SESSION_VERSION = 2;
 const APP_SHELL_ASSET_VERSION = '20260424c';
 const BUILT_IN_JOB_TIMEOUT_FLOOR_MS = 10 * 60 * 1000;
 const WORKFLOW_CHILD_TIMEOUT_FLOOR_MS = 15 * 60 * 1000;
+const WORKFLOW_ACTION_CHILD_TIMEOUT_FLOOR_MS = 30 * 60 * 1000;
 const WORKFLOW_PARENT_TIMEOUT_FLOOR_MS = 45 * 60 * 1000;
 let generatedSessionSecret = '';
 const rateLimitBuckets = new Map();
@@ -4309,6 +4310,18 @@ function canRetryJob(job) {
   if (job.dispatch?.retryable === false) return false;
   const attempts = Number(job.dispatch?.attempts || 0);
   return attempts < maxDispatchRetriesForJob(job);
+}
+
+function shouldAutoRetryTimedOutWorkflowChild(parent = null, job = {}) {
+  if (!parent || parent.jobKind !== 'workflow' || !job?.workflowParentId) return false;
+  if (String(job.status || '').trim().toLowerCase() !== 'timed_out') return false;
+  if (!canRetryJob(job)) return false;
+  const primary = workflowPrimaryTask(parent);
+  if (!isWorkflowLeaderTask(primary)) return false;
+  const task = String(job.workflowTask || job.taskType || '').trim().toLowerCase();
+  if (isWorkflowLeaderTask(task)) return true;
+  const layer = workflowDispatchLayer(parent, job);
+  return layer <= 2;
 }
 
 function githubAppRecommendedSettings(request, env) {
@@ -9219,10 +9232,11 @@ function planWorkflowSelections(agents, taskType, prompt, options = {}) {
   const largeTeam = isLargeAgentTeamIntent(taskType, prompt);
   const primaryTask = inferTaskSequence(taskType, prompt, { maxTasks: 1, expand: false })[0] || inferTaskType(taskType, prompt);
   const leaderTeam = isWorkflowLeaderTask(primaryTask);
+  const defaultMaxTasks = options.maxTasks || (largeTeam || primaryTask === 'cmo_leader' ? 14 : leaderTeam ? 10 : 3);
   const plannedTasks = Array.isArray(options.plannedTasks) && options.plannedTasks.length
     ? normalizeTaskTypes(options.plannedTasks)
     : inferTaskSequence(taskType, prompt, {
-        maxTasks: options.maxTasks || (largeTeam ? 11 : leaderTeam ? 8 : 3),
+        maxTasks: defaultMaxTasks,
         expand: options.expand !== false
       });
   const tagHintsByTask = options.tagHintsByTask && typeof options.tagHintsByTask === 'object' ? options.tagHintsByTask : {};
@@ -9266,12 +9280,12 @@ const LEADER_WORKFLOW_PLANNER_SCHEMA = {
     planned_tasks: {
       type: 'array',
       minItems: 1,
-      maxItems: 12,
+      maxItems: 14,
       items: { type: 'string' }
     },
     task_tags: {
       type: 'array',
-      maxItems: 12,
+      maxItems: 14,
       items: {
         type: 'object',
         additionalProperties: false,
@@ -9357,8 +9371,8 @@ function sanitizeLeaderPlannerResult(raw = {}, fallbackPlan = {}, agents = []) {
   for (const task of preludeTasks) push(task);
   for (const task of requestedTasks) push(task);
   const targetSize = requestedTasks.length
-    ? Math.min(12, Math.max(2, 1 + preludeTasks.length + requestedTasks.length))
-    : Math.min(12, fallbackTasks.length);
+    ? Math.min(14, Math.max(2, 1 + preludeTasks.length + requestedTasks.length))
+    : Math.min(14, fallbackTasks.length);
   for (const task of fallbackTasks) {
     if (merged.length >= targetSize) break;
     push(task);
@@ -9371,7 +9385,7 @@ function sanitizeLeaderPlannerResult(raw = {}, fallbackPlan = {}, agents = []) {
     tagHintsByTask[task] = normalizeAgentTags(item.tags || [], { max: 8 });
   }
   return {
-    plannedTasks: merged.slice(0, 12),
+    plannedTasks: merged.slice(0, 14),
     tagHintsByTask,
     leaderPlanning: {
       source: 'openai',
@@ -10120,10 +10134,23 @@ function workflowChildPlanIndex(parent = {}, child = {}) {
   return runIndex >= 0 ? runIndex : Number.MAX_SAFE_INTEGER;
 }
 
+function workflowChildSortKey(parent = {}, child = {}) {
+  const task = workflowTaskName(child);
+  const phase = workflowSequencePhaseForJob(child);
+  const planIndex = workflowChildPlanIndex(parent, child);
+  if (isWorkflowLeaderTask(task)) {
+    if (phase === 'checkpoint') return 20_000 + planIndex;
+    if (phase === 'final_summary') return 90_000 + planIndex;
+    return planIndex;
+  }
+  const layer = workflowDispatchLayer(parent, child);
+  return (Math.max(1, layer) * 10_000) + planIndex;
+}
+
 function sortWorkflowChildren(parent = {}, children = []) {
   return [...children].sort((a, b) => {
-    const leftIndex = workflowChildPlanIndex(parent, a);
-    const rightIndex = workflowChildPlanIndex(parent, b);
+    const leftIndex = workflowChildSortKey(parent, a);
+    const rightIndex = workflowChildSortKey(parent, b);
     if (leftIndex !== rightIndex) return leftIndex - rightIndex;
     const created = String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
     if (created) return created;
@@ -10245,7 +10272,9 @@ function workflowLeaderActionProtocol(parent = {}) {
     ? [
       'Set ICP, positioning, and proof before selecting channels.',
       'Pick the first media lane and explain why it wins against the next-best lane.',
-      'Keep a leader approval queue before connector execution.'
+      'Keep a leader approval queue before connector execution.',
+      'At checkpoint, use the completed planning layer (research, teardown, data analysis, media planner, SEO/LP if present) before releasing execution agents.',
+      'At final summary, cite concrete specialist findings by task name; never deliver only a generic plan or another research approval request.'
     ]
     : primary === 'build_team_leader' || primary === 'cto_leader'
       ? [
@@ -10276,8 +10305,8 @@ function workflowLeaderActionProtocol(parent = {}) {
     rules: [...commonRules, ...primaryExtras],
     phaseGuidance: {
       initial: 'Establish evidence questions and decision criteria before assigning action-layer specialists.',
-      checkpoint: 'After layer-1 completion, choose the next executable lane and emit approval-ready action packets.',
-      final_summary: 'After specialist execution, synthesize the evidence, final recommendation, open risks, and immediate next actions into one delivery.'
+      checkpoint: 'After layer-1 completion, summarize the evidence received, choose the next executable lane, and emit approval-ready action packets.',
+      final_summary: 'After specialist execution, synthesize the evidence, final recommendation, open risks, immediate next actions, and exact downloadable/approval artifacts into one delivery.'
     }
   };
 }
@@ -10288,8 +10317,8 @@ function workflowDispatchLayer(parent = {}, child = {}) {
   const primary = workflowPrimaryTask(parent);
   const cmoOrLaunch = primary === 'cmo_leader' || primary === 'free_web_growth_leader';
   if (cmoOrLaunch) {
-    if (['research', 'teardown', 'seo_gap', 'landing', 'data_analysis'].includes(task)) return 1;
-    if (['media_planner', 'citation_ops', 'growth'].includes(task)) return 2;
+    if (['research', 'teardown', 'seo_gap', 'landing', 'data_analysis', 'media_planner'].includes(task)) return 1;
+    if (['citation_ops', 'growth'].includes(task)) return 2;
     if (['directory_submission', 'acquisition_automation', 'email_ops', 'list_creator', 'instagram', 'x_post', 'reddit', 'indie_hackers', 'writing'].includes(task)) return 3;
     if (task === 'cold_email') return 4;
     if (task === 'summary') return 5;
@@ -10752,6 +10781,74 @@ async function runQueuedBuiltInDispatchSweep(storage, env, options = {}) {
     });
   }
   return { ok: true, scheduled_count: scheduled.length, job_ids: scheduled };
+}
+
+async function runWorkflowTimeoutRetrySweep(storage, env, options = {}) {
+  const limit = Math.max(1, Math.min(10, Number(options.limit || 3) || 3));
+  const waitUntil = typeof options.waitUntil === 'function' ? options.waitUntil : null;
+  const retried = [];
+  for (let i = 0; i < limit; i += 1) {
+    const state = await storage.getState();
+    const candidate = state.jobs
+      .filter((job) => String(job.status || '').trim().toLowerCase() === 'timed_out')
+      .filter((job) => job.workflowParentId)
+      .sort((a, b) => String(a.timedOutAt || a.failedAt || a.createdAt || '').localeCompare(String(b.timedOutAt || b.failedAt || b.createdAt || '')))
+      .find((job) => {
+        const parent = state.jobs.find((item) => item.id === job.workflowParentId && item.jobKind === 'workflow');
+        return shouldAutoRetryTimedOutWorkflowChild(parent, job)
+          && state.agents.some((item) => item.id === job.assignedAgentId);
+      });
+    if (!candidate) break;
+    const agent = state.agents.find((item) => item.id === candidate.assignedAgentId);
+    if (!agent) break;
+    const attempts = Number(candidate.dispatch?.attempts || 0) + 1;
+    const queued = await storage.mutate(async (draft) => {
+      const draftJob = draft.jobs.find((item) => item.id === candidate.id);
+      if (!draftJob) return null;
+      const parent = draft.jobs.find((item) => item.id === draftJob.workflowParentId && item.jobKind === 'workflow');
+      if (!shouldAutoRetryTimedOutWorkflowChild(parent, draftJob)) return null;
+      draftJob.status = 'queued';
+      draftJob.failedAt = null;
+      draftJob.timedOutAt = null;
+      draftJob.completedAt = null;
+      draftJob.failureReason = null;
+      draftJob.failureCategory = null;
+      draftJob.dispatchedAt = null;
+      draftJob.startedAt = null;
+      draftJob.logs = [
+        ...(draftJob.logs || []),
+        `leader auto retry queued timed-out workflow child (attempt=${attempts})`
+      ];
+      draftJob.dispatch = {
+        ...(draftJob.dispatch || {}),
+        attempts,
+        retryable: true,
+        nextRetryAt: null,
+        completionStatus: 'leader_auto_retry_queued',
+        retriedAt: nowIso(),
+        maxRetries: maxDispatchRetriesForJob(draftJob)
+      };
+      return cloneJob(draftJob);
+    });
+    if (!queued) break;
+    retried.push(queued.id);
+    await touchEvent(storage, 'RETRY', `${queued.taskType}/${queued.id.slice(0, 6)} leader auto retry queued`, {
+      kind: 'leader_auto_retry',
+      jobId: queued.id,
+      parentJobId: queued.workflowParentId || null,
+      taskType: queued.workflowTask || queued.taskType || '',
+      attempts
+    });
+    if (queued.workflowParentId) await reconcileWorkflowParent(storage, queued.workflowParentId);
+    const scheduled = await scheduleProgressDispatchForJobId(storage, env, waitUntil, queued.workflowParentId || queued.id, 'leader auto retry dispatch');
+    if (!scheduled?.scheduled) {
+      const dispatchPromise = dispatchExistingJobToAssignedAgent(storage, env, queued.id, agent.id)
+        .catch((error) => touchEvent(storage, 'FAILED', `${queued.taskType}/${queued.id.slice(0, 6)} leader auto retry exception ${String(error?.message || error).slice(0, 120)}`));
+      if (waitUntil) waitUntil(dispatchPromise);
+      else await dispatchPromise;
+    }
+  }
+  return { ok: true, retried_count: retried.length, job_ids: retried };
 }
 
 async function completeJobFromAgentResult(storage, jobId, agentId, payload = {}, meta = {}) {
@@ -12522,7 +12619,10 @@ async function handleTimeoutSweep(storage, request, env) {
     staleMs,
     eventSource: 'dev_api'
   });
-  return json({ ok: true, swept: result.swept, count: result.swept.length });
+  const retry = await runWorkflowTimeoutRetrySweep(storage, env, {
+    limit: body.retry_limit || body.retryLimit || 3
+  });
+  return json({ ok: true, swept: result.swept, count: result.swept.length, retry });
 }
 
 function timeoutFloorMsForJob(job = {}, agent = null) {
@@ -12533,7 +12633,25 @@ function timeoutFloorMsForJob(job = {}, agent = null) {
     return Math.max(WORKFLOW_PARENT_TIMEOUT_FLOOR_MS, estimateMs);
   }
   if (job?.jobKind === 'workflow_child' || job?.workflowParentId) {
-    return Math.max(WORKFLOW_CHILD_TIMEOUT_FLOOR_MS, estimateMs);
+    const task = String(job?.workflowTask || job?.taskType || '').trim().toLowerCase();
+    const longRunningWorkflowTasks = new Set([
+      'cmo_leader',
+      'research',
+      'teardown',
+      'data_analysis',
+      'media_planner',
+      'seo_gap',
+      'landing',
+      'growth',
+      'directory_submission',
+      'acquisition_automation',
+      'email_ops',
+      'x_post'
+    ]);
+    const floorMs = longRunningWorkflowTasks.has(task)
+      ? WORKFLOW_ACTION_CHILD_TIMEOUT_FLOOR_MS
+      : WORKFLOW_CHILD_TIMEOUT_FLOOR_MS;
+    return Math.max(floorMs, estimateMs);
   }
   if (agent && sampleKindFromAgent(agent)) {
     return Math.max(BUILT_IN_JOB_TIMEOUT_FLOOR_MS, estimateMs);
@@ -13329,9 +13447,17 @@ export default {
   async scheduled(controller, env, ctx) {
     const storage = runtimeStorage(env);
     const cron = controller?.cron || '';
-    ctx.waitUntil(sweepTimedOutJobs(storage, {
-      eventSource: 'cron'
-    }));
+    ctx.waitUntil((async () => {
+      await sweepTimedOutJobs(storage, {
+        eventSource: 'cron'
+      });
+      await runWorkflowTimeoutRetrySweep(storage, env, {
+        source: 'cron',
+        cron,
+        limit: Number(env?.WORKFLOW_TIMEOUT_RETRY_SWEEP_LIMIT || 3) || 3,
+        waitUntil: (promise) => ctx.waitUntil(promise)
+      });
+    })());
     if (cron !== '* * * * *') {
       ctx.waitUntil(runRecurringOrderSweep(storage, env, {
         source: 'cron',

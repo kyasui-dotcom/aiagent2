@@ -2565,6 +2565,12 @@ function isFreeWebGrowthIntentText(taskType = '', prompt = '') {
   return /(free web growth|free marketing|organic growth|organic acquisition|no[-\s]?ads?|without ads|web.*free|free.*web|無料.*(web|ウェブ|施策|集客|流入|マーケ|SEO)|(?:web|ウェブ).*(無料|施策|集客|流入|マーケ)|広告費.*(なし|使わない|ゼロ)|自然流入|オーガニック.*(集客|流入|成長)|無料で.*(集客|伸ば|売上|ユーザー))/i.test(String(prompt || ''));
 }
 
+function isCmoExternalExecutionIntentText(taskType = '', prompt = '') {
+  const explicit = String(taskType || '').trim().toLowerCase();
+  if (['x_post', 'email_ops', 'cold_email', 'instagram', 'reddit', 'indie_hackers', 'directory_submission', 'acquisition_automation'].includes(explicit)) return true;
+  return /(external connector|external execution|connector handoff|connector execution|oauth|publish(?:ing)?|post(?:ing)?|send(?:ing)?|schedule(?:ing)?|execute(?: the)? action|run through action|action handoff|action packet|外部コネクタ|外部コネクター|コネクタ.*(?:実行|連携|接続|handoff|ハンドオフ)|コネクター.*(?:実行|連携|接続|handoff|ハンドオフ)|実行反映|実行まで|反映まで|アクションまで|actionまで|投稿まで|公開まで|送信まで|配信まで|掲載まで|実際に.*(?:投稿|公開|送信|配信|掲載|反映|実行)|(?:x|twitter|ツイッター).*(?:投稿|ポスト|スレッド)|(?:メール|gmail).*(?:送信|配信|スケジュール)|(?:github|ギットハブ).*(?:pr|pull request|プルリク|反映))/i.test(String(prompt || ''));
+}
+
 function isDirectorySubmissionIntentText(taskType = '', prompt = '') {
   const explicit = String(taskType || '').trim().toLowerCase();
   if (['directory_submission', 'directory_listing', 'launch_directory', 'startup_directory', 'ai_tool_directory', 'media_listing', 'free_listing'].includes(explicit)) return true;
@@ -2593,13 +2599,23 @@ function pushAgentTeamLaunchTasks(push) {
   ['cmo_leader', 'media_planner', 'citation_ops', 'growth', 'directory_submission', 'acquisition_automation', 'list_creator', 'cold_email', 'teardown', 'landing', 'instagram', 'x_post', 'reddit', 'indie_hackers', 'data_analysis'].forEach(push);
 }
 
-function pushCmoGrowthTasks(push) {
+function pushCmoGrowthTasks(push, options = {}) {
   ['cmo_leader', 'research', 'teardown', 'data_analysis', 'media_planner', 'seo_gap', 'landing', 'growth'].forEach(push);
+  if (options.execution) {
+    ['directory_submission', 'acquisition_automation'].forEach(push);
+    if (options.social || options.connector) push('x_post');
+    if (options.email) push('email_ops');
+    if (options.community) ['reddit', 'indie_hackers'].forEach(push);
+  }
 }
 
 function inferClientTaskSequence(taskType, prompt = '') {
   const explicit = String(taskType || '').trim().toLowerCase();
   const text = openChatIntentMatchText(prompt);
+  const cmoExternalExecutionIntent = isCmoExternalExecutionIntentText(explicit, text);
+  const socialExecutionIntent = /(x\.com|\bx post\b|\bx posts\b|\bx thread\b|twitter|tweet|tweets|social post|sns|ツイート|x投稿|ポスト|スレッド|sns|ソーシャル|投稿|発信)/i.test(text);
+  const emailExecutionIntent = /(email ops|email campaign|newsletter|gmail|mailbox|send email|cold email|outbound email|メール|メアド|gmail|配信|送信|コールドメール|営業メール)/i.test(text);
+  const communityExecutionIntent = /(reddit|indie hackers|indiehackers|product hunt|community|subreddit|レディット|インディーハッカー|インディーハッカーズ|プロダクトハント|コミュニティ)/i.test(text);
   const ordered = [];
   const push = (value) => {
     const safe = String(value || '').trim().toLowerCase();
@@ -2611,6 +2627,7 @@ function inferClientTaskSequence(taskType, prompt = '') {
   if (structuredTask) push(structuredTask);
   if (isFreeWebGrowthIntentText(explicit, text)) push('cmo_leader');
   if (isAgentTeamLaunchIntentText(explicit, text)) push('cmo_leader');
+  if (cmoExternalExecutionIntent) push('cmo_leader');
   if (isMediaPlannerIntentText(explicit, text)) push('media_planner');
   if (isListCreatorIntentText(explicit, text)) push('list_creator');
   if (isDirectorySubmissionIntentText(explicit, text)) push('directory_submission');
@@ -2652,11 +2669,17 @@ function inferClientTaskSequence(taskType, prompt = '') {
       const safe = String(value || '').trim().toLowerCase();
       if (safe && !expanded.includes(safe)) expanded.push(safe);
     };
-    pushCmoGrowthTasks(pushExpanded);
+    pushCmoGrowthTasks(pushExpanded, {
+      execution: cmoExternalExecutionIntent || isAgentTeamLaunchIntentText(explicit, text),
+      social: socialExecutionIntent,
+      email: emailExecutionIntent,
+      community: communityExecutionIntent,
+      connector: /connector|コネクタ|コネクター|外部実行|外部コネクタ|外部コネクター/i.test(text)
+    });
     ordered
       .filter((task) => ['citation_ops', 'directory_submission', 'acquisition_automation', 'email_ops', 'list_creator', 'cold_email', 'instagram', 'x_post', 'reddit', 'indie_hackers'].includes(String(task || '').trim().toLowerCase()))
       .forEach(pushExpanded);
-    return expanded.slice(0, 11);
+    return expanded.slice(0, 14);
   }
   if (primary === 'agent_team_launch') {
     const expanded = [];
@@ -2677,6 +2700,12 @@ function inferClientTaskSequence(taskType, prompt = '') {
   if (primary === 'cmo_leader') {
     const explicitSpecialists = ordered.filter((task) => ['citation_ops', 'seo_gap', 'landing', 'growth', 'directory_submission', 'acquisition_automation', 'email_ops', 'list_creator', 'cold_email', 'instagram', 'x_post', 'reddit', 'indie_hackers'].includes(String(task || '').trim().toLowerCase()));
     ['research', 'teardown', 'data_analysis', 'media_planner'].forEach(push);
+    if (cmoExternalExecutionIntent || isAgentTeamLaunchIntentText(explicit, text) || isFreeWebGrowthIntentText(explicit, text)) {
+      ['seo_gap', 'landing', 'growth', 'directory_submission', 'acquisition_automation'].forEach(push);
+      if (socialExecutionIntent || /connector|コネクタ|コネクター|外部実行|外部コネクタ|外部コネクター/i.test(text)) push('x_post');
+      if (emailExecutionIntent) push('email_ops');
+      if (communityExecutionIntent) ['reddit', 'indie_hackers'].forEach(push);
+    }
     if (explicitSpecialists.includes('cold_email') && !explicitSpecialists.includes('list_creator')) push('list_creator');
     explicitSpecialists.forEach(push);
     if (ordered.includes('cold_email') && ordered.includes('list_creator')) {
@@ -2688,6 +2717,7 @@ function inferClientTaskSequence(taskType, prompt = '') {
       }
     }
     if (!explicitSpecialists.length) push('growth');
+    return ordered.slice(0, (cmoExternalExecutionIntent || explicitSpecialists.length || isFreeWebGrowthIntentText(explicit, text)) ? 14 : 8);
   }
   if (primary === 'cto_leader') {
     ['code', 'debug', 'ops', 'automation', 'summary'].forEach(push);
@@ -2746,6 +2776,7 @@ function inferClientTaskSequence(taskType, prompt = '') {
 function inferPrimaryTaskSequence(taskType, prompt = '') {
   const explicit = String(taskType || '').trim().toLowerCase();
   const text = openChatIntentMatchText(prompt);
+  const cmoExternalExecutionIntent = isCmoExternalExecutionIntentText(explicit, text);
   const ordered = [];
   const push = (value) => {
     const safe = String(value || '').trim().toLowerCase();
@@ -2757,6 +2788,7 @@ function inferPrimaryTaskSequence(taskType, prompt = '') {
   if (structuredTask) push(structuredTask);
   if (isFreeWebGrowthIntentText(explicit, text)) push('cmo_leader');
   if (isAgentTeamLaunchIntentText(explicit, text)) push('cmo_leader');
+  if (cmoExternalExecutionIntent) push('cmo_leader');
   if (/(research team|analysis team|decision team|調査チーム|分析チーム|複数.*(調査|分析)|競合.*データ.*調査)/i.test(text)) push('research_team_leader');
   if (/(build team|coding team|implementation team|engineering team|開発チーム|実装チーム|複数.*(実装|修正|開発)|コード.*運用.*テスト)/i.test(text)) push('build_team_leader');
   if (/(?:\bcmo\b|chief marketing|marketing leader|マーケ責任者|cmo的|マーケ部長|マーケティング責任者)/i.test(text)) push('cmo_leader');
@@ -2789,9 +2821,9 @@ function inferPrimaryTaskSequence(taskType, prompt = '') {
       const safe = String(value || '').trim().toLowerCase();
       if (safe && !expanded.includes(safe)) expanded.push(safe);
     };
-    pushCmoGrowthTasks(pushExpanded);
+    pushCmoGrowthTasks(pushExpanded, { execution: cmoExternalExecutionIntent });
     ordered.forEach(pushExpanded);
-    return expanded.slice(0, 11);
+    return expanded.slice(0, 14);
   }
   if (ordered[0] === 'agent_team_launch') {
     const expanded = [];

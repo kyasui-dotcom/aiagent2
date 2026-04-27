@@ -23,6 +23,11 @@ import { isBuiltInSampleAgent, isBuiltInSampleHealthcheckUrl, isBuiltInSampleJob
 const builtInAgentSource = readFileSync(new URL('../lib/builtin-agents.js', import.meta.url), 'utf8');
 assert.ok(builtInAgentSource.includes("required: ['summary', 'report_summary', 'bullets', 'next_action', 'file_markdown', 'confidence', 'authority_request']"));
 assert.ok(builtInAgentSource.includes("If no external authority or source selection is needed, set authority_request to null."));
+assert.ok(builtInAgentSource.includes("tools: [{ type: 'web_search' }]"), 'OpenAI built-in web search should be enabled for source-sensitive work');
+assert.ok(builtInAgentSource.includes('webSourcesOf(payload)'), 'OpenAI web search sources should be extracted from Responses payloads');
+assert.ok(builtInAgentSource.includes('web_sources'), 'OpenAI web sources should be surfaced in report/runtime payloads');
+assert.ok(builtInAgentSource.includes('Specialist evidence used'), 'Leader final deliveries should include specialist evidence tables');
+assert.ok(builtInAgentSource.includes('target URL/path, H1 or title, section outline, CTA copy'), 'Growth operator output must include executable artifact packets');
 
 function builtInSeedManifest(seed = {}) {
   const manifest = seed?.metadata?.manifest && typeof seed.metadata.manifest === 'object'
