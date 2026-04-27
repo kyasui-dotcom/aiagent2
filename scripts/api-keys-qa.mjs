@@ -6,6 +6,7 @@ import {
   sanitizeAccountSettingsForClient,
   touchOrderApiKeyUsageInState
 } from '../lib/shared.js';
+import { createD1LikeStorage } from '../lib/storage.js';
 
 const state = { agents: [], jobs: [], events: [], accounts: [] };
 
@@ -67,5 +68,31 @@ assert.ok(revoked);
 assert.equal(revoked.apiKey.active, false);
 assert.ok(revoked.apiKey.revokedAt);
 assert.equal(authenticateOrderApiKey(state, created.apiKey.token), null);
+
+const storage = createD1LikeStorage(null, { allowInMemory: true, stateCacheTtlMs: 0 });
+await storage.replaceState({ agents: [], jobs: [], events: [], accounts: [] });
+let persistedToken = '';
+await storage.mutate(async (draft) => {
+  const issued = createOrderApiKeyInState(
+    draft,
+    'bob',
+    { login: 'bob', name: 'Bob Example', email: 'bob@example.com' },
+    'email',
+    { label: 'stale-merge-guard' }
+  );
+  persistedToken = issued.apiKey.token;
+});
+const persistedState = await storage.getState();
+assert.ok(authenticateOrderApiKey(persistedState, persistedToken), 'persisted key should authenticate before stale merge');
+const staleSanitizedAccount = sanitizeAccountSettingsForClient(persistedState.accounts[0]);
+staleSanitizedAccount.updatedAt = new Date(Date.now() + 60_000).toISOString();
+await storage.mutate(async (draft) => {
+  draft.accounts = [staleSanitizedAccount];
+});
+const afterStaleMerge = await storage.getState();
+assert.ok(
+  authenticateOrderApiKey(afterStaleMerge, persistedToken),
+  'stale sanitized account writes must not erase API key hashes'
+);
 
 console.log('api keys qa passed');
