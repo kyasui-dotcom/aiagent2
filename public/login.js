@@ -16,6 +16,7 @@ const els = {
 
 let runtimeVisitorId = '';
 let authStatusChecked = false;
+const AUTH_STATUS_TIMEOUT_MS = 3500;
 
 function safeString(value = '', max = 100) {
   return String(value ?? '')
@@ -152,10 +153,16 @@ function applyProviderAvailability(status = {}) {
 async function loadAuthStatus(route = currentRoute()) {
   authStatusChecked = false;
   showLoginPanel(false);
-  setCheckingStatus('Checking your session. The page stays here until the session check finishes.');
+  setCheckingStatus('Checking your session. This should only take a moment; if it times out, login options will appear.');
   applyProviderAvailability({});
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), AUTH_STATUS_TIMEOUT_MS);
   try {
-    const response = await fetch('/auth/status', { credentials: 'same-origin' });
+    const response = await fetch('/auth/status', {
+      credentials: 'same-origin',
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error('Auth status check failed');
     const status = await response.json().catch(() => ({}));
     const nextPath = postLoginPath(route.next);
     authStatusChecked = true;
@@ -194,6 +201,8 @@ async function loadAuthStatus(route = currentRoute()) {
     }
     if (els.status) els.status.textContent = 'Could not verify login provider status. You can still try a provider below.';
     await track('sign_in_required_shown', { source: `login_page:${route.source}`, status: 'unknown' });
+  } finally {
+    window.clearTimeout(timeout);
   }
 }
 

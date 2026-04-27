@@ -24147,6 +24147,9 @@ async function bootstrapInitialSnapshot() {
     await refresh();
   } catch (error) {
     flash(error.message || 'Initial data load failed. Refresh the page or sign in again.', 'error');
+    if (startedOnAuthCheck && state.currentTab === 'auth-check') {
+      requireStartLoginGate(state.pendingAuthTab || 'work', 'Session check timed out. Sign in to continue.');
+    }
   } finally {
     state.initialSnapshotLoading = false;
     trackPageViewOnce();

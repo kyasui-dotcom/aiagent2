@@ -31,21 +31,23 @@
   };
   if (targetTab) showScreen('auth-check');
   statusPromise.then((status) => {
-    if (!status) return;
-    window.__CAIT_FAST_AUTH_RESOLVED__ = status;
-    if (targetTab && status.loggedIn) {
+    const resolvedStatus = status && typeof status === 'object'
+      ? status
+      : { loggedIn: false, authProvider: 'unknown', fastAuthFallback: true };
+    window.__CAIT_FAST_AUTH_RESOLVED__ = resolvedStatus;
+    if (targetTab && resolvedStatus.loggedIn) {
       showScreen(targetTab);
       return;
     }
-    if (targetTab && !status.loggedIn) {
+    if (targetTab && !resolvedStatus.loggedIn) {
       const loginUrl = new URL('/login.html', window.location.origin);
-      loginUrl.searchParams.set('source', `gate_${targetTab}`);
+      loginUrl.searchParams.set('source', resolvedStatus.fastAuthFallback ? `gate_timeout_${targetTab}` : `gate_${targetTab}`);
       loginUrl.searchParams.set('next', nextPath);
       loginUrl.searchParams.set('visitor_id', visitorId);
       window.location.replace(`${loginUrl.pathname}${loginUrl.search}`);
       return;
     }
-    if (!targetTab && status.loggedIn) {
+    if (!targetTab && resolvedStatus.loggedIn) {
       showScreen('work');
     }
   });
