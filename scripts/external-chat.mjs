@@ -394,6 +394,7 @@ async function main() {
       order_strategy: options.strategy,
       prompt: options.prompt
     };
+    if (options.watch) payload.respond_async = true;
     if (options.agentId) payload.agent_id = options.agentId;
     if (options.skipIntake) payload.skip_intake = true;
     const result = await requestJson('/api/jobs', {
