@@ -22857,21 +22857,6 @@ async function createAndOptionallyRunJob() {
     if (handleOrderPreflightPrompt(error, draft, { analytics: analyticsDraft, source: 'work_chat_validation' })) return;
     throw error;
   }
-  const serverPreflight = await preflightWorkOrderViaApi(draft);
-  if (serverPreflight && !serverPreflight.ok) {
-    clearOpenChatPendingDispatchMessage();
-    const preflightError = new Error(serverPreflight.error || 'Order preflight blocked dispatch.');
-    preflightError.data = serverPreflight;
-    preflightError.preflight = preflightFromError(preflightError);
-    const blockedStatus = String(serverPreflight.error || 'Order blocked before dispatch.').slice(0, 240);
-    void trackChatTranscript(draft.prompt, {
-      kind: 'error',
-      body: blockedStatus,
-      status: blockedStatus
-    }, { ...analyticsDraft, status: 'blocked', transcriptId: submittedTranscriptId });
-    if (handleOrderPreflightPrompt(preflightError, draft, { analytics: analyticsDraft, source: 'work_chat_server_preflight' })) return;
-    throw preflightError;
-  }
   const payload = {
     ...apiPayloadFromOrderDraft(draft),
     agent_id: draft.agent_id || undefined,

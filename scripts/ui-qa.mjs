@@ -11,6 +11,7 @@ const fastAuthJsPath = new URL('../public/fast-auth.js', import.meta.url);
 const analyticsLoaderPath = new URL('../public/analytics-loader.js', import.meta.url);
 const cssPath = new URL('../public/styles.css', import.meta.url);
 const headersPath = new URL('../public/_headers', import.meta.url);
+const workerPath = new URL('../worker.js', import.meta.url);
 
 execFileSync(process.execPath, ['--check', fileURLToPath(jsPath)], { stdio: 'pipe' });
 execFileSync(process.execPath, ['--check', fileURLToPath(loginJsPath)], { stdio: 'pipe' });
@@ -25,6 +26,7 @@ const fastAuthJs = readFileSync(fastAuthJsPath, 'utf8');
 const analyticsLoader = readFileSync(analyticsLoaderPath, 'utf8');
 const css = readFileSync(cssPath, 'utf8');
 const headers = readFileSync(headersPath, 'utf8');
+const worker = readFileSync(workerPath, 'utf8');
 const htmlFiles = readdirSync(fileURLToPath(new URL('../public/', import.meta.url)))
   .filter((name) => name.endsWith('.html'));
 
@@ -215,6 +217,8 @@ assert.ok(js.includes('void backfillTrackedJobsIntoSnapshot(snapshot).catch(() =
 assert.ok(js.includes('void backfillTrackedJobsIntoSnapshot(state.snapshot || {});'));
 assert.ok(!js.includes("state.stripeStatus = await api('/api/stripe/status'"));
 assert.ok(js.includes("void api('/api/stripe/status', { preserveAuthOn401: true })"));
+assert.ok(!js.includes('work_chat_server_preflight'));
+assert.ok(worker.includes('if (!asyncDispatch) {\n    resolved = await maybeRefineWorkflowPlanWithLeaderLlm'));
 assert.ok(js.includes('function setOrderStrategyChoice'));
 assert.ok(js.includes('function renderOrderStrategyControls'));
 assert.ok(js.includes("els.executionAutoBtn.onclick = () => setOrderStrategyChoice('auto')"));

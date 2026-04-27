@@ -1354,7 +1354,6 @@ async function executeDeliveryActionRequest(storage, request, env) {
     }
     const requestedStrategy = normalizeOrderStrategy(nextBody.order_strategy || nextBody.orderStrategy || nextBody.execution_mode || nextBody.executionMode);
     let resolved = resolveOrderStrategy(state.agents || [], nextBody, requestedStrategy);
-    resolved = await maybeRefineWorkflowPlanWithLeaderLlm(state.agents || [], nextBody, resolved, env);
     const guestPrepared = await prepareGuestTrialOrderContext(storage, orderCurrent, nextBody, resolved);
     if (guestPrepared.error) return guestPrepared;
     const preparedCurrent = guestPrepared.current;
@@ -11735,16 +11734,18 @@ async function handleCreateJob(storage, request, env, ctx = null) {
     return json(promptPolicyBlockPayload(promptInjection), 400);
   }
   const requestedStrategy = normalizeOrderStrategy(body.order_strategy || body.orderStrategy || body.execution_mode || body.executionMode);
+  const asyncDispatch = body.async_dispatch === true || body.asyncDispatch === true || body.respond_async === true || body.respondAsync === true;
   const state = requestedStrategy !== 'single' ? await storage.getState() : null;
   let resolved = resolveOrderStrategy(state?.agents || [], body, requestedStrategy);
-  resolved = await maybeRefineWorkflowPlanWithLeaderLlm(state?.agents || [], body, resolved, env);
+  if (!asyncDispatch) {
+    resolved = await maybeRefineWorkflowPlanWithLeaderLlm(state?.agents || [], body, resolved, env);
+  }
   const guestPrepared = await prepareGuestTrialOrderContext(storage, current, body, resolved);
   if (guestPrepared.error) return json(guestPrepared, guestPrepared.statusCode || 400);
   current = guestPrepared.current;
   body = guestPrepared.body;
   const access = requireOrderWriteAccess(current, env);
   if (access.error) return json({ error: access.error }, access.statusCode || 400);
-  const asyncDispatch = body.async_dispatch === true || body.asyncDispatch === true || body.respond_async === true || body.respondAsync === true;
   const waitUntil = ctx && typeof ctx.waitUntil === 'function'
     ? (promise) => ctx.waitUntil(promise)
     : null;
