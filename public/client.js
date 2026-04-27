@@ -536,6 +536,7 @@ const OPEN_CHAT_SESSION_MAX_MESSAGES = 16;
 const OPEN_CHAT_SESSION_MAX_SESSIONS = 30;
 const OPEN_CHAT_ORDER_PROGRESS_POLL_MS = 4000;
 const OPEN_CHAT_ORDER_PROGRESS_MAX_POLLS = 300;
+const OPEN_CHAT_ACCEPTANCE_PROGRESS_TICK_MS = 1200;
 const LIVE_SNAPSHOT_REFRESH_MS = 5000;
 
 function normalizeOpenChatMode(value = '') {
@@ -662,6 +663,7 @@ const state = {
 
 let openChatTypingTimer = null;
 let openChatOrderProgressTimer = null;
+let openChatAcceptanceProgressTimer = null;
 let liveSnapshotRefreshTimer = null;
 let openChatMessageSequence = 0;
 let openChatTranscriptSequence = 0;
@@ -842,6 +844,12 @@ function clearOpenChatOrderProgressTimer() {
   openChatOrderProgressTimer = null;
 }
 
+function clearOpenChatAcceptanceProgressTimer() {
+  if (!openChatAcceptanceProgressTimer) return;
+  window.clearInterval(openChatAcceptanceProgressTimer);
+  openChatAcceptanceProgressTimer = null;
+}
+
 function clearLiveSnapshotRefreshTimer() {
   if (!liveSnapshotRefreshTimer) return;
   window.clearTimeout(liveSnapshotRefreshTimer);
@@ -976,6 +984,91 @@ function orderProgressMeta(subject = {}, options = {}) {
     states,
     route: String(subject?.assignedAgentId || subject?.matched_agent_id || (isWorkflow ? (subject?.workflow?.teamName || 'Agent Team') : 'auto-routing')).trim() || 'auto-routing'
   };
+}
+
+function orderAcceptanceProgressPhase(elapsedMs = 0) {
+  const elapsed = Math.max(0, Number(elapsedMs || 0));
+  if (elapsed < 1200) return 0;
+  if (elapsed < 3500) return 1;
+  if (elapsed < 7500) return 2;
+  return 3;
+}
+
+function orderAcceptanceProgressMeta(phase = 0, options = {}) {
+  const safePhase = Math.max(0, Math.min(3, Number(phase || 0)));
+  const total = 4;
+  const completed = safePhase;
+  const running = safePhase >= total ? 0 : 1;
+  const queued = Math.max(0, total - completed - running);
+  const states = [
+    ...Array.from({ length: completed }, () => 'completed'),
+    ...(running ? ['running'] : []),
+    ...Array.from({ length: queued }, () => 'queued')
+  ].slice(0, total);
+  while (states.length < total) states.push('queued');
+  return {
+    status: 'created',
+    isWorkflow: true,
+    total,
+    shown: total,
+    overflow: 0,
+    completed,
+    running,
+    queued,
+    failed: 0,
+    blocked: 0,
+    percent: [12, 36, 64, 84][safePhase] || 12,
+    states,
+    route: options.ja ? '受付処理' : 'Order acceptance'
+  };
+}
+
+function orderAcceptanceProgressBody(prompt = '', startedAt = Date.now(), options = {}) {
+  const ja = options.ja ?? looksJapanese(prompt);
+  const elapsedSec = Math.max(0, Math.floor((Date.now() - Number(startedAt || Date.now())) / 1000));
+  const phase = orderAcceptanceProgressPhase(Date.now() - Number(startedAt || Date.now()));
+  const phasesJa = [
+    'ブラウザ側の入力・ログイン確認は完了しています。',
+    'サーバー側で請求条件とルーティングを確認しています。',
+    'Order ID とエージェントrunを保存しています。',
+    '受付応答を待っています。時間がかかっても二重送信しないでください。'
+  ];
+  const phasesEn = [
+    'Browser-side input and sign-in checks are complete.',
+    'Server-side billing and routing checks are running.',
+    'CAIt is saving the Order ID and agent runs.',
+    'Waiting for the acceptance response. Do not send the order twice.'
+  ];
+  const phaseText = ja ? phasesJa[phase] : phasesEn[phase];
+  return [
+    ja ? 'SEND ORDERを処理中です。' : 'SEND ORDER is being processed.',
+    '',
+    ja ? `経過: ${elapsedSec}秒` : `Elapsed: ${elapsedSec}s`,
+    ja ? `現在: ${phaseText}` : `Now: ${phaseText}`,
+    ja
+      ? '受付が完了したら、このメッセージをOrder ID付きの進捗表示に置き換えます。'
+      : 'When accepted, this message will become the Order ID progress card.'
+  ].join('\n');
+}
+
+function updateOpenChatAcceptanceProgress(prompt = '', startedAt = Date.now(), options = {}) {
+  const ja = options.ja ?? looksJapanese(prompt);
+  const phase = orderAcceptanceProgressPhase(Date.now() - Number(startedAt || Date.now()));
+  upsertOpenChatPendingDispatchMessage(orderAcceptanceProgressBody(prompt, startedAt, { ja }), {
+    tone: 'info',
+    ja,
+    progressMeta: orderAcceptanceProgressMeta(phase, { ja })
+  });
+}
+
+function startOpenChatAcceptanceProgress(prompt = '', options = {}) {
+  clearOpenChatAcceptanceProgressTimer();
+  const startedAt = Date.now();
+  updateOpenChatAcceptanceProgress(prompt, startedAt, options);
+  openChatAcceptanceProgressTimer = window.setInterval(() => {
+    updateOpenChatAcceptanceProgress(prompt, startedAt, options);
+  }, OPEN_CHAT_ACCEPTANCE_PROGRESS_TICK_MS);
+  return clearOpenChatAcceptanceProgressTimer;
 }
 
 function orderProgressSummaryFromJob(job = {}) {
@@ -1505,7 +1598,8 @@ function upsertOpenChatPendingDispatchMessage(body = '', options = {}) {
     discussionTurns: [],
     typing: false,
     pendingDispatch: true,
-    orderProgressStatus: 'created'
+    orderProgressStatus: 'created',
+    progressMeta: options.progressMeta || null
   };
   if (index >= 0) messages[index] = message;
   else messages.push(message);
@@ -1520,6 +1614,7 @@ function upsertOpenChatPendingDispatchMessage(body = '', options = {}) {
 }
 
 function clearOpenChatPendingDispatchMessage(options = {}) {
+  clearOpenChatAcceptanceProgressTimer();
   const pendingId = String(state.openChatPendingDispatchMessageId || '').trim();
   const messages = Array.isArray(state.orderChatMessages) ? state.orderChatMessages : [];
   if (!messages.length && !pendingId) {
@@ -3646,6 +3741,7 @@ function loadOpenChatSession(sessionId = '') {
   }
   finishOpenChatTyping({ render: false });
   clearOpenChatOrderProgressTimer();
+  clearOpenChatAcceptanceProgressTimer();
   clearLiveSnapshotRefreshTimer();
   state.openChatProgressOrderId = '';
   state.openChatProgressLastKey = '';
@@ -3695,6 +3791,7 @@ function loadOpenChatSession(sessionId = '') {
 function startNewOpenChatSession(options = {}) {
   finishOpenChatTyping({ render: false });
   clearOpenChatOrderProgressTimer();
+  clearOpenChatAcceptanceProgressTimer();
   clearLiveSnapshotRefreshTimer();
   state.currentOpenChatSessionId = '';
   state.orderChatMessages = [];
@@ -19826,6 +19923,7 @@ function pauseWorkChatOnTabLeave() {
   if (!hasBoundaryState) return;
   finishOpenChatTyping({ render: false });
   clearOpenChatOrderProgressTimer();
+  clearOpenChatAcceptanceProgressTimer();
   state.openChatProgressOrderId = '';
   state.openChatProgressLastKey = '';
   state.openChatProgressPollCount = 0;
@@ -22857,6 +22955,7 @@ async function createAndOptionallyRunJob() {
     if (handleOrderPreflightPrompt(error, draft, { analytics: analyticsDraft, source: 'work_chat_validation' })) return;
     throw error;
   }
+  let stopAcceptanceProgress = () => {};
   const payload = {
     ...apiPayloadFromOrderDraft(draft),
     agent_id: draft.agent_id || undefined,
@@ -22880,11 +22979,13 @@ async function createAndOptionallyRunJob() {
     tone: 'info',
     ja: sendingJa
   });
+  stopAcceptanceProgress = startOpenChatAcceptanceProgress(payload.prompt, { ja: sendingJa });
   flash(sendingJa ? '発注を送信中です。' : 'Sending order request...', 'info');
   let created;
   try {
     created = await api('/api/jobs', { method: 'POST', body: JSON.stringify(payload) });
   } catch (error) {
+    stopAcceptanceProgress();
     clearOpenChatPendingDispatchMessage();
     const failedStatus = String(error?.message || 'Order request failed before dispatch.').slice(0, 240);
     void trackChatTranscript(payload.prompt, {
@@ -22900,6 +23001,7 @@ async function createAndOptionallyRunJob() {
     }
     throw error;
   }
+  stopAcceptanceProgress();
   clearOpenChatPendingDispatchMessage();
   if (created?.needs_input || created?.status === 'needs_input') {
     void trackConversionEvent('intake_questions_shown', { ...analyticsDraft, status: 'needs_input' });
