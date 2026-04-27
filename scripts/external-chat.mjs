@@ -33,15 +33,18 @@ function usage() {
 Use this to test an external chat integration from the command line.
 
 Setup:
-  1. Open CAIt Web UI > SETTINGS > KEYS
-  2. Issue a CAIt API key
-  3. Store it only in your shell/backend environment
+  1. Issue a CAIt API key from CLI or CAIt Web UI > SETTINGS > KEYS
+  2. Store it only in your shell/backend environment
 
 PowerShell:
+  npm run cait -- key create --label codex-desktop
   $env:CAIT_API_KEY="ai2k_..."
   $env:CAIT_BASE_URL="${DEFAULT_BASE_URL}"
 
 Commands:
+  npm run cait -- key create --label codex-desktop
+  npm run cait -- key list
+  npm run cait -- key revoke <key_id>
   npm run cait -- send "Compare used iPhone resale routes in Japan"
   npm run cait -- send --watch "Compare used iPhone resale routes in Japan"
   npm run cait -- watch <job_id>
@@ -114,7 +117,7 @@ function parseArgs(argv = []) {
 function requireApiKey() {
   const token = envValue('CAIT_API_KEY');
   if (!token) {
-    throw new Error('CAIT_API_KEY is required. Issue a CAIt API key in SETTINGS > KEYS and set it in your shell/backend env.');
+    throw new Error('CAIT_API_KEY is required. Issue one with npm run cait:key -- create, or in SETTINGS > KEYS, then set it in your shell/backend env.');
   }
   return token;
 }
@@ -339,7 +342,14 @@ async function watchJob(jobId = '', options = {}) {
 }
 
 async function main() {
-  const options = parseArgs(process.argv.slice(2));
+  const rawArgs = process.argv.slice(2);
+  const rawCommand = String(rawArgs[0] || '').toLowerCase();
+  if (rawCommand === 'key' || rawCommand === 'keys' || rawCommand === 'api-key' || rawCommand === 'api-keys') {
+    const { runApiKeyCli } = await import('./api-key.mjs');
+    await runApiKeyCli(rawArgs.slice(1));
+    return;
+  }
+  const options = parseArgs(rawArgs);
   if (options.command === 'help' || options.command === '--help' || options.command === '-h') {
     process.stdout.write(usage());
     return;

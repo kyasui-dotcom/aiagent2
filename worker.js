@@ -3573,6 +3573,37 @@ function secretEquals(left = '', right = '') {
   if (a.byteLength !== b.byteLength) return false;
   return timingSafeEqual(a, b);
 }
+function configuredCaitAdminApiTokens(env) {
+  return [...new Set(String(env?.CAIT_ADMIN_API_TOKENS || env?.CAIT_ADMIN_API_TOKEN || env?.CAIT_OPERATOR_TOKEN || '')
+    .split(',')
+    .map((value) => String(value || '').trim())
+    .filter(Boolean))];
+}
+function extractCaitAdminApiToken(request) {
+  const direct = String(request.headers.get('x-cait-admin-token') || request.headers.get('x-admin-token') || '').trim();
+  if (direct) return direct;
+  const authHeader = String(request.headers.get('authorization') || '').trim();
+  if (authHeader.toLowerCase().startsWith('bearer ')) return authHeader.slice(7).trim();
+  return '';
+}
+async function authorizeCaitAdminApiKeyIssuer(request, env) {
+  const providedToken = extractCaitAdminApiToken(request);
+  const configuredTokens = configuredCaitAdminApiTokens(env);
+  if (providedToken) {
+    if (configuredTokens.some((token) => secretEquals(providedToken, token))) {
+      return { ok: true, authMode: 'operator-token', actor: 'operator-token' };
+    }
+    return { error: 'Invalid admin API token', statusCode: 401 };
+  }
+  const current = await currentUserContext(request, env);
+  if (canViewAdminDashboard(current, env)) {
+    return { ok: true, authMode: 'admin-session', actor: current.login || 'admin-session', current };
+  }
+  return {
+    error: configuredTokens.length ? 'Admin API token or platform admin login required' : 'Admin API key issuance is disabled',
+    statusCode: configuredTokens.length ? 401 : 404
+  };
+}
 function extractAgentToken(request) {
   const headerToken = String(request.headers.get('x-agent-token') || '').trim();
   if (headerToken) return headerToken;
@@ -4737,6 +4768,61 @@ async function createOrderApiKey(storage, request, env) {
     ok: true,
     apiKey: created.apiKey,
     account: sanitizeAccountSettingsForClient(created.account)
+  };
+}
+
+function sanitizeAdminApiKeyLogin(body = {}) {
+  const login = String(body?.login || body?.account_login || body?.accountLogin || body?.email || '').trim().toLowerCase();
+  if (!login) return { error: 'login is required' };
+  if (login.length > 160) return { error: 'login is too long' };
+  if (!/^[a-z0-9._%+\-@]+$/i.test(login)) return { error: 'login contains unsupported characters' };
+  return { login };
+}
+
+async function createAdminOrderApiKey(storage, request, env) {
+  const authorization = await authorizeCaitAdminApiKeyIssuer(request, env);
+  if (authorization.error) return authorization;
+  let body;
+  try {
+    body = await parseBody(request);
+  } catch (error) {
+    return { error: error.message, statusCode: 400 };
+  }
+  const target = sanitizeAdminApiKeyLogin(body || {});
+  if (target.error) return { error: target.error, statusCode: 400 };
+  if (runtimePolicy(env).releaseStage === 'public' && String(body?.mode || 'live').toLowerCase() === 'test') {
+    return { error: 'Test API keys are disabled on the public deployment.', statusCode: 403 };
+  }
+  let created = null;
+  await storage.mutate(async (draft) => {
+    const existing = (Array.isArray(draft.accounts) ? draft.accounts : [])
+      .find((account) => String(account?.login || '').trim().toLowerCase() === target.login);
+    const existingUser = accountUserFromSettings(existing);
+    const user = existingUser || {
+      login: target.login,
+      name: String(body?.name || target.login).trim() || target.login,
+      email: String(body?.email || (target.login.includes('@') ? target.login : '')).trim(),
+      accountId: accountIdForLogin(target.login)
+    };
+    const authProvider = existing?.authProvider || 'operator-cli';
+    created = createOrderApiKeyInState(draft, target.login, user, authProvider, {
+      label: body?.label || 'cli',
+      mode: body?.mode || 'live'
+    });
+  });
+  await touchEvent(storage, 'API_KEY', `${authorization.actor} issued ${created.apiKey.mode} CAIt API key ${created.apiKey.label} for ${target.login}`, {
+    source: 'admin_api_key_cli',
+    actor: authorization.actor,
+    authMode: authorization.authMode,
+    targetLogin: target.login,
+    keyId: created.apiKey.id
+  });
+  return {
+    ok: true,
+    apiKey: created.apiKey,
+    account: sanitizeAccountSettingsForClient(created.account),
+    issuedBy: authorization.actor,
+    authMode: authorization.authMode
   };
 }
 
@@ -12552,6 +12638,11 @@ export default {
       const result = await createOrderApiKey(storage, request, env);
       if (result.error) return json({ error: result.error }, result.statusCode || 400);
       return json({ ok: true, api_key: result.apiKey, account: result.account }, 201);
+    }
+    if (url.pathname === '/api/admin/api-keys' && request.method === 'POST') {
+      const result = await createAdminOrderApiKey(storage, request, env);
+      if (result.error) return json({ error: result.error }, result.statusCode || 400);
+      return json({ ok: true, api_key: result.apiKey, account: result.account, issued_by: result.issuedBy, auth_mode: result.authMode }, 201);
     }
     if (/^\/api\/settings\/api-keys\/[^/]+$/.test(url.pathname) && request.method === 'DELETE') {
       const result = await revokeOrderApiKey(storage, request, env, url.pathname.split('/')[4] || '');

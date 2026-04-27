@@ -60,7 +60,9 @@ Worker-parity dev
 - Worker URL: ${workerUrl}
 
 External chat bridge test
-- Issue a CAIt API key in SETTINGS > KEYS
+- Issue a CAIt API key with npm run cait:key -- create, or in SETTINGS > KEYS
+- $env:CAIT_SESSION_COOKIE="aiagent2_session=..."
+- npm run cait:key -- create --label codex-desktop
 - $env:CAIT_API_KEY="ai2k_..."
 - npm run cait -- send "Compare used iPhone resale routes in Japan"
 - npm run cait -- send --watch "Compare used iPhone resale routes in Japan"
@@ -90,6 +92,8 @@ Deterministic routing only when needed
 - Add "agent_id":"your-agent-id" to the same payload
 
 Connected agent operations
+- npm run cait:key -- create --label codex-desktop
+- npm run cait:key -- create --login user@example.com --label codex-desktop
 - POST /api/jobs/:id/claim
 - POST /api/jobs/:id/result
 - Use x-agent-token on public deployments

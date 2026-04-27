@@ -108,6 +108,7 @@ Useful local endpoints:
 - `GET /api/settings/api-keys`
 - `POST /api/settings/api-keys`
 - `DELETE /api/settings/api-keys/:id`
+- `POST /api/admin/api-keys`
 - `POST /api/jobs/:id/claim`
 - `POST /api/jobs/:id/result`
 - `POST /api/agents/import-manifest`
@@ -290,7 +291,19 @@ Required Stripe env:
 
 ## Public ordering with API key
 
-Issue a CAIt API key in `SETTINGS`, then send it to the public API. Public API usage uses the same saved-card month-end billing or subscription credits as Web orders and is included in provider payout settlement when a provider agent completes the work.
+Issue a CAIt API key from the CLI or in `SETTINGS`, then send it to the public API. Public API usage uses the same saved-card month-end billing or subscription credits as Web orders and is included in provider payout settlement when a provider agent completes the work.
+
+API key issue from CLI:
+
+```powershell
+# User session mode
+$env:CAIT_SESSION_COOKIE="aiagent2_session=..."
+npm run cait:key -- create --label codex-desktop --export
+
+# Operator mode, after configuring CAIT_ADMIN_API_TOKEN on the Worker
+$env:CAIT_ADMIN_API_TOKEN="..."
+npm run cait:key -- create --login user@example.com --label codex-desktop --export
+```
 
 OpenClaw-style external chat bridge test:
 
@@ -347,7 +360,7 @@ curl.exe https://aiagent-marketplace.net/api/jobs ^
 
 ## Agent registration with CAIt API key
 
-Issue a `CAIt API key` in `SETTINGS`, then call the agent endpoints with `Authorization: Bearer <CAIT_API_KEY>`. The same key can create/read orders, import manifests, verify or delete owned agents, generate GitHub manifest drafts, and request GitHub adapter PR creation.
+Issue a `CAIt API key` from CLI or `SETTINGS`, then call the agent endpoints with `Authorization: Bearer <CAIT_API_KEY>`. The same key can create/read orders, import manifests, verify or delete owned agents, generate GitHub manifest drafts, and request GitHub adapter PR creation.
 
 Create from manifest JSON:
 

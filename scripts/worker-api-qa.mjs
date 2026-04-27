@@ -15,6 +15,7 @@ const env = {
   STRIPE_WEBHOOK_SECRET: 'whsec_worker_api_qa',
   STRIPE_DEFAULT_CURRENCY: 'USD',
   BASE_URL: 'https://example.test',
+  CAIT_ADMIN_API_TOKEN: 'worker-api-qa-admin-token',
   ALLOW_IN_MEMORY_STORAGE: '1',
   GOOGLE_CLIENT_ID: 'google-worker-api-qa-client-id',
   GOOGLE_CLIENT_SECRET: 'google-worker-api-qa-client-secret',
@@ -542,6 +543,47 @@ const crossSiteBlocked = await request('/api/settings/api-keys', {
   body: JSON.stringify({ label: 'csrf-cross-site' })
 }, { sessionCookie: daveSession, skipCsrf: true });
 assert.equal(crossSiteBlocked.status, 403, 'cross-site cookie-authenticated writes should be blocked');
+
+const adminKeyMissingAuth = await request('/api/admin/api-keys', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ login: 'cli-target@example.com', label: 'missing-admin-auth' })
+});
+assert.equal(adminKeyMissingAuth.status, 401, 'operator API key issue requires an admin token or admin session');
+
+const adminKeyBadToken = await request('/api/admin/api-keys', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: 'Bearer wrong-admin-token' },
+  body: JSON.stringify({ login: 'cli-target@example.com', label: 'bad-admin-auth' })
+});
+assert.equal(adminKeyBadToken.status, 401, 'operator API key issue rejects invalid admin tokens');
+
+const adminIssuedKey = await request('/api/admin/api-keys', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${env.CAIT_ADMIN_API_TOKEN}` },
+  body: JSON.stringify({ login: 'cli-target@example.com', label: 'operator-cli', mode: 'live' })
+});
+assert.equal(adminIssuedKey.status, 201);
+assert.ok(adminIssuedKey.body.api_key.token.startsWith('ai2k_'));
+const adminIssuedKeyJobs = await request('/api/jobs', {
+  headers: { authorization: `Bearer ${adminIssuedKey.body.api_key.token}` }
+}, { env: publicLockedEnv });
+assert.equal(adminIssuedKeyJobs.status, 200, 'operator-issued API key should authenticate against the public API');
+
+const adminSessionIssuedKey = await request('/api/admin/api-keys', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ login: 'session-cli-target@example.com', label: 'admin-session-cli' })
+}, { sessionCookie: adminSession });
+assert.equal(adminSessionIssuedKey.status, 201);
+assert.ok(adminSessionIssuedKey.body.api_key.token.startsWith('ai2k_'));
+
+const publicTestKeyBlocked = await request('/api/admin/api-keys', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', authorization: `Bearer ${env.CAIT_ADMIN_API_TOKEN}` },
+  body: JSON.stringify({ login: 'cli-target@example.com', label: 'public-test-key', mode: 'test' })
+}, { env: publicLockedEnv });
+assert.equal(publicTestKeyBlocked.status, 403, 'public deployment should reject test keys from the CLI issuer');
 
 const executionConfirmationActions = ['x_post', 'instagram_post', 'gmail_send', 'resend_send', 'github_pr', 'report_next'];
 for (const actionKind of executionConfirmationActions) {

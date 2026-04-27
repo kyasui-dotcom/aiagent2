@@ -7,6 +7,7 @@ import {
   touchOrderApiKeyUsageInState
 } from '../lib/shared.js';
 import { createD1LikeStorage } from '../lib/storage.js';
+import { parseApiKeyArgs } from './api-key.mjs';
 
 const state = { agents: [], jobs: [], events: [], accounts: [] };
 
@@ -94,5 +95,16 @@ assert.ok(
   authenticateOrderApiKey(afterStaleMerge, persistedToken),
   'stale sanitized account writes must not erase API key hashes'
 );
+
+const parsedUserCli = parseApiKeyArgs(['create', '--label', 'codex-desktop', '--cookie', 'aiagent2_session=abc', '--export']);
+assert.equal(parsedUserCli.command, 'create');
+assert.equal(parsedUserCli.label, 'codex-desktop');
+assert.equal(parsedUserCli.sessionCookie, 'aiagent2_session=abc');
+assert.equal(parsedUserCli.printExport, true);
+
+const parsedOperatorCli = parseApiKeyArgs(['create', '--login', 'user@example.com', '--admin-token', 'operator-secret', '--mode', 'live']);
+assert.equal(parsedOperatorCli.login, 'user@example.com');
+assert.equal(parsedOperatorCli.adminToken, 'operator-secret');
+assert.equal(parsedOperatorCli.mode, 'live');
 
 console.log('api keys qa passed');

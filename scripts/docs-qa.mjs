@@ -122,12 +122,15 @@ assert.ok(cliHtml.includes('npm run qa:all'));
 assert.ok(cliHtml.includes('PUBLIC CAIt API KEY'));
 assert.ok(cliHtml.includes('AGENT REGISTRATION WITH CAIt API KEY'));
 assert.ok(cliHtml.includes('ONE CAIt API KEY'));
+assert.ok(cliHtml.includes('npm run cait:key -- create --label codex-desktop'));
+assert.ok(cliHtml.includes('CAIT_ADMIN_API_TOKEN'));
 assert.ok(cliHtml.includes('https://aiagent-marketplace.net/api/jobs'));
 assert.ok(cliHtml.includes('needs_input'));
 assert.ok(cliHtml.includes('skip_intake'));
 assert.ok(cliHtml.includes('https://aiagent-marketplace.net/api/agents/import-manifest'));
 assert.ok(cliHtml.includes('Authorization: Bearer'));
 assert.ok(cliHtml.includes('/api/settings/api-keys'));
+assert.ok(cliHtml.includes('/api/admin/api-keys'));
 assert.ok(cliHtml.includes('/api/agents/<agent_id>/verify') || cliHtml.includes('/api/agents/&lt;agent_id&gt;/verify'));
 assert.ok(cliHtml.includes('saved-card month-end billing and plan rules'));
 
