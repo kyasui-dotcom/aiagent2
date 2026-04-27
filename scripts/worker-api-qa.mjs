@@ -1583,6 +1583,8 @@ try {
       headers: { authorization: `Bearer ${issuedOrderKey.body.api_key.token}` }
     }, { env: publicLockedEnv });
     assert.equal(apiKeyRead.status, 200, `CAIt API key should remain valid before order attempt ${attempt + 1}`);
+    assert.ok((apiKeyRead.body.jobs || []).length <= 1, 'CAIt API job list limit should be applied before returning');
+    assert.equal(apiKeyRead.body.pagination?.limit, 1);
   }
 
   const apiKeyOrder = await request('/api/jobs', {
@@ -1605,6 +1607,8 @@ try {
       headers: { authorization: `Bearer ${issuedOrderKey.body.api_key.token}` }
     }, { env: publicLockedEnv });
     assert.equal(apiKeyReadAfterOrder.status, 200, `CAIt API key should remain valid after order attempt ${attempt + 1}`);
+    assert.ok((apiKeyReadAfterOrder.body.jobs || []).length <= 1, 'CAIt API job list limit should stay applied after orders');
+    assert.equal(apiKeyReadAfterOrder.body.pagination?.limit, 1);
   }
 
   const apiKeyJob = await request(`/api/jobs/${apiKeyOrder.body.job_id}`, {}, { sessionCookie: daveSession });

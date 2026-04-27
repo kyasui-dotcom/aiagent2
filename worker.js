@@ -3747,6 +3747,41 @@ function visibleJobsForRequest(state, current, env, request = null) {
       return String(right?.id || '').localeCompare(String(left?.id || ''));
     });
 }
+function jobListPaginationFromRequest(request = null) {
+  let limit = 50;
+  let offset = 0;
+  try {
+    const url = new URL(request?.url || 'https://example.test/');
+    limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') || 50) || 50));
+    const page = Math.max(1, Number(url.searchParams.get('page') || 1) || 1);
+    offset = Math.max(0, Number(url.searchParams.get('offset') || ((page - 1) * limit)) || 0);
+  } catch {}
+  return { limit, offset };
+}
+async function visibleJobsForRequestFast(storage, current, env, request = null) {
+  const pagination = jobListPaginationFromRequest(request);
+  if (typeof storage.listJobs !== 'function') {
+    const state = await storage.getState();
+    return {
+      jobs: visibleJobsForRequest(state, current, env, request).slice(pagination.offset, pagination.offset + pagination.limit),
+      pagination
+    };
+  }
+  const identityLogins = identityLoginsForCurrent(current);
+  const jobs = await storage.listJobs({
+    admin: canViewAdminDashboard(current, env),
+    identityLogins,
+    accountIds: identityLogins.map((login) => `acct:${login}`),
+    limit: pagination.limit,
+    offset: pagination.offset
+  });
+  return {
+    jobs: (Array.isArray(jobs) ? jobs : [])
+      .map((job) => sanitizeJobForViewer(job, env))
+      .filter(Boolean),
+    pagination
+  };
+}
 function visibleBillingAuditsForRequest(state, current, env, jobs = null) {
   const visibleJobs = Array.isArray(jobs) ? jobs : visibleJobsForRequest(state, current, env);
   return billingAuditsForJobIds(state.events, visibleJobs.map((job) => job.id));
@@ -11894,24 +11929,36 @@ async function handleResolveJob(storage, request, env) {
 async function handleGetJob(storage, request, env, jobId, ctx = null) {
   const current = await currentOrderRequesterContext(storage, request, env);
   if (!current.user && current.apiKeyStatus === 'invalid') return json({ error: 'Invalid API key' }, 401);
-  let state = await storage.getState();
-  let job = state.jobs.find((item) => item.id === jobId);
-  if (!job || !canViewJobFromRequest(state, current, env, job, request)) return json({ error: 'Job not found' }, 404);
-  if (job.jobKind === 'workflow') {
-    await refreshWorkflowLeaderHandoffForJobId(storage, job.id);
-    await reconcileWorkflowParent(storage, job.id);
-    state = await storage.getState();
-    job = state.jobs.find((item) => item.id === jobId) || job;
-  }
+  const loadJob = async () => (
+    typeof storage.getJobById === 'function'
+      ? storage.getJobById(jobId)
+      : (await storage.getState()).jobs.find((item) => item.id === jobId)
+  );
+  let job = await loadJob();
+  if (!job || !canViewJobFromRequest({ jobs: [job] }, current, env, job, request)) return json({ error: 'Job not found' }, 404);
   const waitUntil = ctx && typeof ctx.waitUntil === 'function'
     ? (promise) => ctx.waitUntil(promise)
     : null;
-  const scheduled = waitUntil
-    ? await scheduleProgressDispatchesForJobId(storage, env, waitUntil, job.id, 'progress poll', { maxTargets: 8 })
-    : null;
-  if (scheduled?.scheduled) {
-    state = await storage.getState();
-    job = state.jobs.find((item) => item.id === jobId) || job;
+  const shouldRunProgress = !['completed', 'failed', 'timed_out'].includes(String(job.status || '').toLowerCase());
+  if (shouldRunProgress) {
+    const progressWork = (async () => {
+      if (job.jobKind === 'workflow') {
+        await refreshWorkflowLeaderHandoffForJobId(storage, job.id);
+        await reconcileWorkflowParent(storage, job.id);
+      }
+      return scheduleProgressDispatchesForJobId(storage, env, null, job.id, 'progress poll', {
+        maxTargets: 8,
+        awaitDispatch: true
+      });
+    })();
+    if (waitUntil) {
+      waitUntil(progressWork.catch((error) => touchEvent(storage, 'FAILED', `progress poll exception ${String(error?.message || error).slice(0, 120)}`)));
+    } else {
+      const scheduled = await progressWork;
+      if (job.jobKind === 'workflow' || scheduled?.scheduled) {
+        job = await loadJob() || job;
+      }
+    }
   }
   if (current.apiKey?.id) await recordOrderApiKeyUsage(storage, current, request);
   return json({ job: sanitizeJobForViewer(job, env) });
@@ -12614,12 +12661,11 @@ export default {
     }
     if (url.pathname === '/api/jobs') {
       if (request.method === 'GET') {
-        const state = await storage.getState();
         const current = await currentOrderRequesterContext(storage, request, env);
         if (!current.user && current.apiKeyStatus === 'invalid') return json({ error: 'Invalid API key' }, 401);
-        const jobs = visibleJobsForRequest(state, current, env, request);
+        const result = await visibleJobsForRequestFast(storage, current, env, request);
         if (current.apiKey?.id) await recordOrderApiKeyUsage(storage, current, request);
-        return json({ jobs });
+        return json({ jobs: result.jobs, pagination: result.pagination });
       }
       if (request.method === 'POST') return handleCreateJob(storage, request, env, ctx);
     }
