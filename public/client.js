@@ -574,6 +574,7 @@ const state = {
   eventFilter: '',
   currentTab: 'start',
   pendingAuthTab: '',
+  initialSnapshotLoading: false,
   runSearch: '',
   runRequesterFilter: 'all',
   jobAgentSearch: '',
@@ -4351,6 +4352,52 @@ function openLoginForProtectedAction(source = 'protected_action', fallbackTab = 
 function openGithubSignIn() {
   trackLoginStarted('github');
   window.location.href = githubAuthActionUrl(state.snapshot?.auth || {});
+}
+
+async function fetchFastAuthStatus(timeoutMs = 2500) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), Math.max(500, Number(timeoutMs) || 2500));
+  try {
+    const response = await fetch('/auth/status', {
+      credentials: 'same-origin',
+      signal: controller.signal
+    });
+    if (!response.ok) return null;
+    return await response.json().catch(() => null);
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function applyFastAuthStatusForAuthCheck(authStatus = null) {
+  if (!authStatus || state.currentTab !== 'auth-check') return false;
+  const targetTab = state.pendingAuthTab || 'work';
+  const auth = {
+    ...(state.snapshot?.auth || {}),
+    ...authStatus
+  };
+  state.snapshot = {
+    ...(state.snapshot || {}),
+    auth
+  };
+  rememberAuthState(Boolean(auth.loggedIn));
+  renderReleaseAccess(auth);
+  if (auth.loggedIn) {
+    state.pendingAuthTab = '';
+    switchTab(targetTab);
+  } else {
+    state.pendingAuthTab = '';
+    requireStartLoginGate(targetTab, 'Sign in from START first. The product experience is private after login.');
+  }
+  return true;
+}
+
+async function primeAuthCheckFromStatus() {
+  if (state.currentTab !== 'auth-check') return;
+  const status = await fetchFastAuthStatus();
+  applyFastAuthStatusForAuthCheck(status);
 }
 
 function readRememberedAuthState() {
@@ -19750,7 +19797,7 @@ function switchTab(tab, options = {}) {
   syncRouteState();
   if (nextTab === 'work') trackConversionOnce('work_chat_opened', { source: 'tab' }, 'work_chat_opened');
   if (nextTab === 'agents') trackConversionOnce('agent_catalog_opened', { source: 'tab' }, 'agent_catalog_opened');
-  if (nextTab === 'settings' && state.snapshot) {
+  if (nextTab === 'settings' && state.snapshot && !state.initialSnapshotLoading) {
     void refresh().catch((error) => {
       flash(error.message, 'error');
     });
@@ -24023,6 +24070,7 @@ loadManifestExample();
   state.routeAgentId = initialRoute.agentId;
   if (initialRoute.settingsSection) state.settingsSection = initialRoute.settingsSection;
   switchTab(initialRoute.tab || readRememberedTab() || 'start', { allowBootstrapAccess: true });
+  void primeAuthCheckFromStatus();
   if (initialRoute.stripeState) {
     const currentUrl = new URL(window.location.href);
     currentUrl.searchParams.delete('stripe');
@@ -24078,5 +24126,10 @@ function ensureGithubLinkedAccess(options = {}) {
   return false;
 }
 
-await refresh();
+state.initialSnapshotLoading = true;
+try {
+  await refresh();
+} finally {
+  state.initialSnapshotLoading = false;
+}
 trackPageViewOnce();
