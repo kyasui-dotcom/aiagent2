@@ -1143,7 +1143,7 @@ function workflowTaskWorkingNote(taskType = '', phase = '', status = '', options
     cmo_leader: {
       initial: queued ? 'frame the objective, compare channels, and choose the first lane.' : 'framing the objective, comparing channels, and choosing the first lane.',
       checkpoint: queued ? 'review research output and decide the next execution lane.' : 'reviewing research output and deciding the next execution lane.',
-      final_summary: queued ? 'merge specialist outputs into one accountable final report.' : 'merging specialist outputs into one accountable final report.'
+      final_summary: queued ? 'merge supporting work products into one accountable final report.' : 'merging supporting work products into one accountable final report.'
     },
     research: queued ? 'collect comparable market signals and evidence.' : 'collecting comparable market signals and evidence.',
     teardown: queued ? 'break down competitor positioning, offer, and funnel moves.' : 'breaking down competitor positioning, offer, and funnel moves.',
@@ -1160,7 +1160,7 @@ function workflowTaskWorkingNote(taskType = '', phase = '', status = '', options
   if (task === 'cmo_leader') {
     body = phrases.cmo_leader[normalizedPhase] || (queued ? 'review the workflow and decide the next best move.' : 'reviewing the workflow and deciding the next best move.');
   } else {
-    body = phrases[task] || (queued ? 'prepare the next specialist step.' : 'working through the assigned specialist step.');
+    body = phrases[task] || (queued ? 'prepare the next supporting work step.' : 'working through the assigned supporting work step.');
   }
   if (blocked) {
     body = 'waiting for the earlier workflow phase to finish.';
@@ -15438,7 +15438,7 @@ function runNextAction(job) {
   if (!job) return { title: 'NO ORDER SELECTED', body: 'Select an order to inspect current state and recommended next action.', tone: 'info' };
   if (job.jobKind === 'workflow') {
     const counts = job.workflow?.statusCounts || {};
-    if (job.status === 'completed') return { title: 'AGENT TEAM COMPLETED', body: `${counts.completed || 0}/${counts.total || 0} agent runs completed. Review the combined Agent Team delivery.`, tone: 'ok' };
+    if (job.status === 'completed') return { title: 'AGENT TEAM COMPLETED', body: `${counts.completed || 0}/${counts.total || 0} internal work items completed. Review the combined integrated delivery.`, tone: 'ok' };
     if (job.status === 'failed') return { title: 'ACTION: INSPECT AGENT RUN FAILURES', body: `${counts.failed || 0} agent runs failed. Review run statuses and retry the failed path only.`, tone: 'error' };
     return { title: 'AGENT TEAM RUNNING', body: `${counts.completed || 0}/${counts.total || 0} agent runs completed. Wait for remaining agent runs or inspect the workflow detail.`, tone: 'info' };
   }
@@ -19426,10 +19426,10 @@ function deliveryCardBodyLines(run = null, report = {}, options = {}) {
     run?.jobKind === 'workflow' ? 'TEAM DELIVERY READY' : 'DELIVERY READY',
     '',
     summaryText || (run?.jobKind === 'workflow'
-      ? 'The Team Leader merged the specialist outputs into one delivery.'
+      ? 'The integrated report merged the supporting work products into one delivery.'
       : 'Structured delivery received.'),
     '',
-    ...(run?.jobKind === 'workflow' && workflowChildren.length ? [`Specialist runs: ${workflowChildren.length}`] : []),
+    ...(run?.jobKind === 'workflow' && workflowChildren.length ? [`Supporting work items: ${workflowChildren.length}`] : []),
     ...(actualBilling ? [`Actual billing: ${yen(actualBilling.total)}`] : []),
     ...(costTelemetry ? [`Cost basis: ${String(costTelemetry.confidence || costTelemetry.source || 'tracked').replace(/_/g, ' ')}`] : []),
     ...(deliveryQuality ? [`Delivery quality: ${Number(deliveryQuality.score || 0)}/100`] : []),
@@ -19495,13 +19495,13 @@ function renderWorkflowTeamSummary(workflowChildren = []) {
   };
   return `
       <details class="delivery-team-group" open>
-        <summary>TEAM LEADER SUMMARY</summary>
-        <div class="delivery-team-note">Start here. This merged delivery is the default report. Open individual specialist runs only when you want implementation detail.</div>
+        <summary>INTEGRATED REPORT</summary>
+        <div class="delivery-team-note">Start here. This merged delivery is the default report. Open individual research, writing, or execution items only when you want supporting detail.</div>
         <div class="delivery-team-list">
           ${visibleChildren.map((child, index) => `
             <div class="delivery-team-item">
               <div>
-                <strong>${escapeHtml(`${index + 1}. ${child.taskType || 'task'} - ${child.agentName || child.agentId || 'agent'}`)}</strong>
+                <strong>${escapeHtml(`${index + 1}. ${child.taskType || 'task'}`)}</strong>
                 ${child.sequencePhase ? `<div class="row-muted">${escapeHtml(`PHASE ${String(child.sequencePhase || '').toUpperCase()}`)}</div>` : ''}
                 <div class="row-muted">${escapeHtml(String(child.status || 'unknown').toUpperCase())}</div>
                 <div>${escapeHtml(summaryTextForChild(child))}</div>
@@ -19520,7 +19520,7 @@ function renderWorkflowChildNote(workflowParent = null) {
   if (!workflowParent?.id) return '';
   return `
       <div class="detail-box action-card info compact-card delivery-team-note">
-        This run is one specialist inside an Agent Team. Open the Team Leader summary first, then return here if you want the detail for this specialist.
+        This run is one supporting work item inside an Agent Team. Open the integrated report first, then return here if you want the underlying research, writing, or execution detail.
       </div>
     `;
 }

@@ -17,7 +17,7 @@ import {
   sampleAgentPayload
 } from '../lib/builtin-agents.js';
 import { assessAgentRegistrationSafety, normalizeManifest } from '../lib/manifest.js';
-import { inferTaskSequence, inferTaskType, DEFAULT_AGENT_SEEDS } from '../lib/shared.js';
+import { agentLinksFromRecord, inferTaskSequence, inferTaskType, DEFAULT_AGENT_SEEDS } from '../lib/shared.js';
 import { isBuiltInSampleAgent, isBuiltInSampleHealthcheckUrl, isBuiltInSampleJobEndpoint, sampleKindFromAgent } from '../lib/verify.js';
 
 const builtInAgentSource = readFileSync(new URL('../lib/builtin-agents.js', import.meta.url), 'utf8');
@@ -26,7 +26,7 @@ assert.ok(builtInAgentSource.includes("If no external authority or source select
 assert.ok(builtInAgentSource.includes("tools: [{ type: 'web_search' }]"), 'OpenAI built-in web search should be enabled for source-sensitive work');
 assert.ok(builtInAgentSource.includes('webSourcesOf(payload)'), 'OpenAI web search sources should be extracted from Responses payloads');
 assert.ok(builtInAgentSource.includes('web_sources'), 'OpenAI web sources should be surfaced in report/runtime payloads');
-assert.ok(builtInAgentSource.includes('Specialist evidence used'), 'Leader final deliveries should include specialist evidence tables');
+assert.ok(builtInAgentSource.includes('Supporting work products'), 'Leader final deliveries should include supporting work product tables');
 assert.ok(builtInAgentSource.includes('target URL/path, H1 or title, section outline, CTA copy'), 'Growth operator output must include executable artifact packets');
 
 function builtInSeedManifest(seed = {}) {
@@ -243,10 +243,11 @@ assert.ok(explicitEnglishWriter.runtime.delivery_policy.specialist_method.some((
 assert.ok(explicitEnglishWriter.runtime.delivery_policy.scope_boundaries.some((step) => step.includes('Do not fabricate proof')));
 assert.ok(explicitEnglishWriter.runtime.delivery_policy.concision_rule.includes('deliver the actual copy'));
 const writerSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_writer_01');
-assert.ok(writerSeed?.description.includes('publishable copy packets'));
+assert.ok(writerSeed?.description.includes('reusable copy packets'));
 assert.ok(writerSeed?.taskTypes?.includes('copywriting'));
 assert.ok(writerSeed?.metadata?.manifest?.capabilities?.includes('message_hierarchy'));
 assert.ok(writerSeed?.metadata?.manifest?.capabilities?.includes('recommended_copy_packet'));
+assert.equal(writerSeed?.metadata?.manifest?.metadata?.layer, 'content_generation');
 assert.ok(writerSeed?.metadata?.manifest?.metadata?.connector_behavior.includes('placeholders instead of inventing proof'));
 
 const codePayload = sampleAgentPayload('code', {
@@ -304,6 +305,10 @@ assert.ok(cmoSeed?.taskTypes?.includes('agent_team_launch'));
 assert.ok(cmoSeed?.taskTypes?.includes('free_web_growth_leader'));
 assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('planned_action_queue'));
 assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('dispatch_packet_contract'));
+assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('task_decomposition'));
+assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('routing_decision'));
+assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('stop_go_gate'));
+assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('final_responsibility'));
 assert.equal(cmoSeed?.metadata?.manifest?.metadata?.planned_action_contract, 'lane_owner_artifact_connector_metric');
 const landingSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_landing_01');
 assert.ok(landingSeed?.description.includes('HTML/CSS'));
@@ -312,12 +317,17 @@ assert.ok(landingSeed?.metadata?.manifest?.capabilities?.includes('deploy_handof
 const instagramSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_instagram_launch_01');
 assert.ok(instagramSeed?.metadata?.manifest?.capabilities?.includes('instagram_api_handoff'));
 assert.ok(instagramSeed?.metadata?.manifest?.capabilities?.includes('schedule_plan'));
+assert.ok(!instagramSeed?.taskTypes?.includes('writing'));
+assert.equal(instagramSeed?.metadata?.manifest?.metadata?.preferred_upstream_specialist, 'writer');
 const xSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_x_launch_01');
 assert.ok(xSeed?.metadata?.manifest?.capabilities?.includes('exact_post_packet'));
 assert.ok(xSeed?.metadata?.manifest?.capabilities?.includes('scheduled_post_packet'));
+assert.ok(!xSeed?.taskTypes?.includes('writing'));
+assert.equal(xSeed?.metadata?.manifest?.metadata?.preferred_upstream_specialist, 'writer');
 const emailOpsSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_email_ops_01');
 assert.ok(emailOpsSeed?.metadata?.manifest?.capabilities?.includes('exact_send_packet'));
 assert.ok(emailOpsSeed?.metadata?.manifest?.capabilities?.includes('scheduled_send_packet'));
+assert.equal(emailOpsSeed?.metadata?.manifest?.metadata?.preferred_upstream_specialist, 'writer');
 const listCreatorSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_list_creator_01');
 assert.ok(listCreatorSeed?.metadata?.manifest?.capabilities?.includes('reviewable_lead_rows'));
 assert.ok(listCreatorSeed?.metadata?.manifest?.capabilities?.includes('import_ready_packet'));
@@ -662,8 +672,32 @@ assert.ok(coldOutboundSeed);
 assert.equal(coldOutboundSeed.metadata.manifest.metadata.leader_handoff_mode, 'leader_mediated');
 assert.equal(coldOutboundSeed.metadata.manifest.metadata.outreach_mode, 'b2b_cold_outbound');
 assert.equal(coldOutboundSeed.metadata.manifest.metadata.preferred_upstream_specialist, 'list_creator');
+assert.equal(coldOutboundSeed.metadata.manifest.metadata.secondary_upstream_specialist, 'writer');
 assert.ok(coldOutboundSeed.metadata.manifest.capabilities.includes('reviewed_lead_queue'));
 assert.ok(coldOutboundSeed.metadata.manifest.capabilities.includes('conversion_tracking'));
+
+const xLinks = agentLinksFromRecord(xSeed, { catalog: DEFAULT_AGENT_SEEDS });
+assert.equal(xLinks.layer, 'execution');
+assert.equal(xLinks.role, 'x_publish_executor');
+assert.ok(xLinks.upstream.task_types.includes('writing'));
+assert.ok(xLinks.upstream.resolved.some((item) => item.id === 'agent_writer_01'));
+
+const customXAgentLinks = agentLinksFromRecord({
+  id: 'custom_x_agent',
+  name: 'Custom X Publisher',
+  description: 'Publishes approved X posts',
+  taskTypes: ['x_post'],
+  metadata: {
+    tags: ['social', 'x'],
+    manifest: {
+      metadata: {
+        tags: ['social', 'x']
+      }
+    }
+  }
+}, { catalog: DEFAULT_AGENT_SEEDS });
+assert.ok(customXAgentLinks.upstream.task_types.includes('writing'));
+assert.ok(customXAgentLinks.upstream.resolved.some((item) => item.id === 'agent_writer_01'));
 
 assert.ok(seoGapPayload.files[0].content.includes('Community post'));
 assert.ok(seoGapPayload.files[0].content.includes('Primary conversion goal'));
@@ -727,6 +761,14 @@ assert.ok(inferTaskSequence('cmo_leader', 'CMOとしてコールドメールも�
 const cmoColdEmailSequence = inferTaskSequence('cmo_leader', 'CMOとしてコールドメールも含めた獲得施策を設計して', { maxTasks: 8 });
 assert.ok(cmoColdEmailSequence.includes('list_creator'));
 assert.ok(cmoColdEmailSequence.indexOf('list_creator') < cmoColdEmailSequence.indexOf('cold_email'));
+const xSequence = inferTaskSequence('x_post', 'Xで告知投稿を作って承認後に投稿したい', { maxTasks: 4 });
+assert.ok(xSequence.includes('writing'));
+assert.ok(xSequence.includes('x_post'));
+assert.ok(xSequence.indexOf('writing') < xSequence.indexOf('x_post'));
+const launchSequence = inferTaskSequence('cmo_leader', '1告知でX Reddit Indie Hackers Instagramまでまとめて作って投稿準備したい', { maxTasks: 14 });
+assert.ok(launchSequence.includes('writing'));
+assert.ok(launchSequence.includes('x_post'));
+assert.ok(launchSequence.indexOf('writing') < launchSequence.indexOf('x_post'));
 assert.ok(inferTaskSequence('cmo_leader', 'CMOとしてホームページを見て最適な掲載媒体とGBPまで決めて', { maxTasks: 8 }).includes('media_planner'));
 assert.ok(inferTaskSequence('cmo_leader', 'CMOとしてホームページを見て最適な掲載媒体とGBPまで決めて', { maxTasks: 8 }).includes('research'));
 assert.ok(inferTaskSequence('cmo_leader', 'CMOとしてホームページを見て最適な掲載媒体とGBPまで決めて', { maxTasks: 8 }).includes('citation_ops'));

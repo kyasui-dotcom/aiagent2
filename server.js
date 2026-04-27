@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { createD1LikeStorage } from './lib/storage.js';
 import { BUILT_IN_KINDS, builtInAgentHealthPayload, runBuiltInAgent } from './lib/builtin-agents.js';
 import { GITHUB_ADAPTER_MARKER, adapterNextStepText, buildGithubAdapterPlan, createGithubBranch, createGithubPullRequest, fetchGithubBranchSha, fetchGithubRepoTree, fetchGithubTextFile, findKnownBrokerPath, upsertGithubTextFile } from './lib/github-adapter.js';
-import { BILLING_DISPLAY_CURRENCY, WELCOME_CREDITS_GRANT_AMOUNT, accountIdForLogin, accountIdentityForProvider, accountSettingsForIdentity, accountSettingsForLogin, aliasLoginsForAccount, applyStripeRefundToAccount, applySubscriptionRefillToAccount, authenticateOrderApiKey, billingAuditsForJobIds, billingModeFromJob, billingPeriodId, billingProfileForAccount, buildAdminDashboard, buildAgentId, buildConversionAnalytics, buildFollowupConversationContext, buildIntakeClarification, buildMonthlyAccountSummary, chatSessionIdForJob, chatTrainingExamplesForClient, chatTranscriptsForClient, computeScore, connectorActionLabel, connectorOAuthActionInstruction, createChatTranscript, createConversionEventPayload, createFeedbackReport, createOrderApiKeyInState, createRecurringOrderInState, defaultLoginForAuthUser, deleteRecurringOrderInState, displayCurrencyToLedgerAmount, dueRecurringOrders, estimateBilling, estimateRunWindow, feedbackReportsForClient, formatFeedbackReportEmail, hideChatMemoryTranscriptForLoginInState, inferTaskSequence, inferTaskType, isAgentOwnedByLogin, isBillableJob, isJobVisibleToLogin, isPrivateNetworkHostname, jobsVisibleToLogin, ledgerAmountToDisplayCurrency, linkIdentityToAccountInState, makeEvent, markRecurringOrderRunInState, maybeGrantWelcomeCreditsForSignupInState, maybeGrantWelcomeCreditsForVerifiedAgentInState, mergeAccountsInState, mergeProtectedPromptSourceIntoInput, normalizeTaskTypes, nowIso, optimizeOrderPromptForBroker, promptInjectionGuardForPrompt, providerMonthlyBillingLedgerForLogin, providerPayoutLedgerForLogin, publicEventView, recordProviderMonthlyChargeInAccount, recurringOrderToJobPayload, recurringOrdersVisibleToLogin, recordStripeTopupInAccount, recoverMissingAccountsInState, releaseBillingReservationInState, requesterContextFromUser, reserveBillingEstimateInState, revokeOrderApiKeyInState, sanitizeAccountSettingsForClient, sanitizeBillingSettingsPatch, sanitizeExecutorPreferencesPatch, sanitizeFeedbackReportForClient, sanitizePayoutSettingsPatch, settleBillingForJobInState, touchOrderApiKeyUsageInState, updateChatTranscriptReviewInState, updateFeedbackReportInState, updateRecurringOrderInState, upsertAccountSettingsForIdentityInState, upsertAccountSettingsInState } from './lib/shared.js';
+import { BILLING_DISPLAY_CURRENCY, WELCOME_CREDITS_GRANT_AMOUNT, accountIdForLogin, accountIdentityForProvider, accountSettingsForIdentity, accountSettingsForLogin, agentLinksFromRecord, agentTagsFromRecord, aliasLoginsForAccount, applyStripeRefundToAccount, applySubscriptionRefillToAccount, authenticateOrderApiKey, billingAuditsForJobIds, billingModeFromJob, billingPeriodId, billingProfileForAccount, buildAdminDashboard, buildAgentId, buildConversionAnalytics, buildFollowupConversationContext, buildIntakeClarification, buildMonthlyAccountSummary, chatSessionIdForJob, chatTrainingExamplesForClient, chatTranscriptsForClient, computeScore, connectorActionLabel, connectorOAuthActionInstruction, createChatTranscript, createConversionEventPayload, createFeedbackReport, createOrderApiKeyInState, createRecurringOrderInState, defaultLoginForAuthUser, deleteRecurringOrderInState, displayCurrencyToLedgerAmount, dueRecurringOrders, estimateBilling, estimateRunWindow, feedbackReportsForClient, formatFeedbackReportEmail, hideChatMemoryTranscriptForLoginInState, inferAgentTagsFromSignals, inferTaskSequence, inferTaskType, isAgentOwnedByLogin, isBillableJob, isJobVisibleToLogin, isPrivateNetworkHostname, jobsVisibleToLogin, ledgerAmountToDisplayCurrency, linkIdentityToAccountInState, makeEvent, markRecurringOrderRunInState, maybeGrantWelcomeCreditsForSignupInState, maybeGrantWelcomeCreditsForVerifiedAgentInState, mergeAccountsInState, mergeProtectedPromptSourceIntoInput, normalizeTaskTypes, nowIso, optimizeOrderPromptForBroker, promptInjectionGuardForPrompt, providerMonthlyBillingLedgerForLogin, providerPayoutLedgerForLogin, publicEventView, recordProviderMonthlyChargeInAccount, recurringOrderToJobPayload, recurringOrdersVisibleToLogin, recordStripeTopupInAccount, recoverMissingAccountsInState, releaseBillingReservationInState, requesterContextFromUser, reserveBillingEstimateInState, revokeOrderApiKeyInState, sanitizeAccountSettingsForClient, sanitizeBillingSettingsPatch, sanitizeExecutorPreferencesPatch, sanitizeFeedbackReportForClient, sanitizePayoutSettingsPatch, settleBillingForJobInState, touchOrderApiKeyUsageInState, updateChatTranscriptReviewInState, updateFeedbackReportInState, updateRecurringOrderInState, upsertAccountSettingsForIdentityInState, upsertAccountSettingsInState } from './lib/shared.js';
 import { agentPatternFitScore, applyGuestTrialSignupDebitInState, buildAgentTeamDeliveryOutput, deliveryQualityScoreForJob, ensureGuestTrialAccountInState, guestTrialLoginForVisitorId, guestTrialUsageForVisitorInState, isAgentTeamLaunchIntent, isFreeWebGrowthIntent, isLargeAgentTeamIntent, normalizeGuestTrialRequest, orderPreflightForAgent, ownChatMemoryForClient } from './lib/shared.js';
 import { amountFromMinorUnits, createConnectedAccount, createConnectedAccountTransfer, createConnectOnboardingLink, createOffSessionMonthlyInvoicePaymentIntent, createOffSessionProviderMonthlyPaymentIntent, createSetupCheckoutSession, createSubscriptionCheckoutSession, ensureStripeCustomer, resolveSubscriptionPlanFromPriceId, retrieveConnectedAccount, retrievePaymentIntent, retrieveSetupIntent, retrieveSubscription, stripeConfigFromEnv, stripeConfigured, stripePublicConfig, updateCustomerDefaultPaymentMethod, verifyStripeWebhookSignature } from './lib/stripe.js';
 import { MANIFEST_CANDIDATE_PATHS, assessAgentRegistrationSafety, buildDraftManifestFromAgentSkill, buildDraftManifestFromRepoAnalysis, deriveManifestSignalPaths, normalizeManifest, parseAndValidateManifest, sanitizeManifestForPublic, validateManifest } from './lib/manifest.js';
@@ -3591,7 +3591,7 @@ function statsOf(state) {
     totalJobs: state.jobs.length
   };
 }
-function publicAgent(agent) {
+function publicAgent(agent, catalog = []) {
   const metadata = agent?.metadata && typeof agent.metadata === 'object' ? agent.metadata : {};
   if (
     metadata.hidden_from_catalog
@@ -3602,7 +3602,10 @@ function publicAgent(agent) {
   ) return null;
   const { token, ...rest } = agent;
   const cloned = structuredClone(rest);
+  const tags = agentTagsFromRecord(cloned);
+  if (tags.length) cloned.tags = tags;
   if (cloned.metadata?.manifest) cloned.metadata.manifest = sanitizeManifestForPublic(cloned.metadata.manifest);
+  cloned.links = agentLinksFromRecord(cloned, { catalog });
   return cloned;
 }
 function cloneJob(job) {
@@ -3616,6 +3619,16 @@ function createAgentFromInput(body = {}) {
   const verificationDetails = body.verification_details || body.verificationDetails || null;
   const agentReviewStatus = body.agent_review_status || body.agentReviewStatus || 'pending';
   const agentReview = body.agent_review || body.agentReview || null;
+  const baseMetadata = { ...(body.metadata || {}) };
+  const tags = inferAgentTagsFromSignals({
+    tags: body.tags || body.team_tags || body.teamTags || baseMetadata.tags || baseMetadata.team_tags || baseMetadata.teamTags || baseMetadata.agent_tags,
+    taskTypes,
+    name: body.name || 'agent',
+    description: body.description || 'Custom registered agent.',
+    kind: body.kind || body.agent_kind || baseMetadata.category || baseMetadata.kind,
+    agentRole: body.agent_role || body.agentRole || baseMetadata.agentRole || baseMetadata.agent_role,
+    metadata: baseMetadata
+  });
   return {
     id: buildAgentId(body.name || 'agent'),
     name: String(body.name || 'custom_agent').toUpperCase(),
@@ -3641,7 +3654,8 @@ function createAgentFromInput(body = {}) {
     owner: body.owner || 'samurai',
     manifestUrl: body.manifest_url || body.manifestUrl || null,
     manifestSource: body.manifest_source || body.manifestSource || null,
-    metadata: body.metadata || {},
+    tags,
+    metadata: { ...baseMetadata, tags, teamTags: tags, team_tags: tags },
     verificationStatus,
     verificationCheckedAt,
     verificationError,
@@ -3653,10 +3667,24 @@ function createAgentFromInput(body = {}) {
   };
 }
 function createAgentFromManifest(manifest, ownerInfo = { owner: 'samurai', metadata: {} }, options = {}) {
+  const tags = inferAgentTagsFromSignals({
+    tags: manifest.tags || manifest.raw?.tags || manifest.raw?.team_tags || manifest.raw?.teamTags || manifest.metadata?.tags || manifest.metadata?.team_tags || manifest.metadata?.teamTags,
+    taskTypes: manifest.taskTypes,
+    name: manifest.name,
+    description: manifest.description,
+    kind: manifest.kind,
+    agentRole: manifest.agentRole || 'worker',
+    metadata: {
+      ...ownerInfo.metadata,
+      ...(manifest.metadata || {}),
+      manifest: manifest.raw || {}
+    }
+  });
   return createAgentFromInput({
     name: manifest.name,
     description: manifest.description || `Imported from manifest ${options.manifestUrl || ''}`.trim(),
     task_types: manifest.taskTypes,
+    tags,
     provider_markup_rate: manifest.providerMarkupRate,
     pricing_model: manifest.pricingModel,
     fixed_run_price_usd: manifest.fixedRunPriceUsd,
@@ -3676,6 +3704,9 @@ function createAgentFromManifest(manifest, ownerInfo = { owner: 'samurai', metad
     metadata: {
       ...ownerInfo.metadata,
       ...(manifest.metadata || {}),
+      tags,
+      teamTags: tags,
+      team_tags: tags,
       agentRole: manifest.agentRole || 'worker',
       importMode: options.importMode || 'manifest',
       manifest: {
@@ -3683,6 +3714,8 @@ function createAgentFromManifest(manifest, ownerInfo = { owner: 'samurai', metad
         schema_version: manifest.schemaVersion,
         kind: manifest.kind,
         agent_role: manifest.agentRole || 'worker',
+        tags,
+        team_tags: tags,
         task_types: manifest.taskTypes,
         execution_pattern: manifest.executionPattern,
         input_types: manifest.inputTypes,
@@ -5161,7 +5194,7 @@ async function snapshot(req) {
   const jobs = visibleJobsForRequest(state, req, current);
   const payload = {
     stats: statsOf(state),
-    agents: state.agents.map(publicAgent).filter(Boolean),
+    agents: state.agents.map((agent) => publicAgent(agent, state.agents)).filter(Boolean),
     jobs,
     events: visibleEventsForRequest(state, req, current),
     billingAudits: visibleBillingAuditsForRequest(state, req, jobs, current),
