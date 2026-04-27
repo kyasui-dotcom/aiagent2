@@ -1578,6 +1578,12 @@ try {
   }, { sessionCookie: daveSession });
   assert.equal(issuedOrderKey.status, 201);
   assert.ok(issuedOrderKey.body.api_key.token.startsWith('ai2k_'));
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const apiKeyRead = await request('/api/jobs?limit=1', {
+      headers: { authorization: `Bearer ${issuedOrderKey.body.api_key.token}` }
+    }, { env: publicLockedEnv });
+    assert.equal(apiKeyRead.status, 200, `CAIt API key should remain valid before order attempt ${attempt + 1}`);
+  }
 
   const apiKeyOrder = await request('/api/jobs', {
     method: 'POST',
@@ -1594,6 +1600,12 @@ try {
   }, { env: publicLockedEnv });
   assert.equal(apiKeyOrder.status, 201);
   assert.equal(apiKeyOrder.body.status, 'completed');
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const apiKeyReadAfterOrder = await request('/api/jobs?limit=1', {
+      headers: { authorization: `Bearer ${issuedOrderKey.body.api_key.token}` }
+    }, { env: publicLockedEnv });
+    assert.equal(apiKeyReadAfterOrder.status, 200, `CAIt API key should remain valid after order attempt ${attempt + 1}`);
+  }
 
   const apiKeyJob = await request(`/api/jobs/${apiKeyOrder.body.job_id}`, {}, { sessionCookie: daveSession });
   assert.equal(apiKeyJob.status, 200);

@@ -3179,7 +3179,11 @@ function resolveOrderApiKeyContext(state, request) {
 async function currentOrderRequesterContext(storage, request, env) {
   const current = await currentUserContext(request, env);
   if (current?.user) return { ...current, apiKeyStatus: 'session', apiKey: null };
-  const state = await storage.getState();
+  const token = extractOrderApiKey(request);
+  if (!token) return resolveOrderApiKeyContext({ accounts: [] }, request);
+  const state = typeof storage.getFreshState === 'function'
+    ? await storage.getFreshState()
+    : await storage.getState();
   return resolveOrderApiKeyContext(state, request);
 }
 function resolveCaitApiKeyAgentContext(state, request) {
@@ -3203,7 +3207,11 @@ function resolveCaitApiKeyAgentContext(state, request) {
 async function currentAgentRequesterContext(storage, request, env) {
   const current = await currentUserContext(request, env);
   if (current?.user) return { ...current, apiKeyStatus: 'session', apiKey: null };
-  const state = await storage.getState();
+  const token = extractOrderApiKey(request);
+  if (!token) return resolveCaitApiKeyAgentContext({ accounts: [] }, request);
+  const state = typeof storage.getFreshState === 'function'
+    ? await storage.getFreshState()
+    : await storage.getState();
   return resolveCaitApiKeyAgentContext(state, request);
 }
 function requireOrderWriteAccess(current, env) {
