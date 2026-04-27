@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import worker from '../worker.js';
+import { createD1LikeStorage } from '../lib/storage.js';
 
 const env = {
   APP_VERSION: '0.2.0-test',
@@ -22,6 +23,8 @@ const env = {
     }
   }
 };
+
+const storage = createD1LikeStorage(env.MY_BINDING, { allowInMemory: true, stateCacheTtlMs: 0 });
 
 async function request(path, init = {}) {
   const waitUntilPromises = [];
@@ -112,6 +115,22 @@ for (const testCase of cases) {
   assert.equal(Number(job.workflow?.statusCounts?.queued || 0), 0, `${testCase.taskType} should not leave queued child runs at completion`);
   assert.equal(Number(job.workflow?.statusCounts?.running || 0), 0, `${testCase.taskType} should not leave running child runs at completion`);
   assert.ok(String(job.output?.summary || '').trim(), `${testCase.taskType} should produce a final summary`);
+
+  const rawState = await storage.getState();
+  const rawChildren = rawState.jobs.filter((item) => item.workflowParentId === created.body.workflow_job_id);
+  const initialLeader = rawChildren.find((item) => item.taskType === testCase.taskType && item.input?._broker?.workflow?.sequencePhase === 'initial');
+  assert.equal(initialLeader?.input?._broker?.workflow?.forceWebSearch, true, `${testCase.taskType} initial leader run should force web search`);
+  assert.equal(initialLeader?.input?._broker?.workflow?.webSearchRequiredReason, 'leader_initial_planning', `${testCase.taskType} initial leader run should explain forced search`);
+  const researchLayerChildren = rawChildren.filter((item) => item.taskType !== testCase.taskType && item.input?._broker?.workflow?.sequencePhase === 'research');
+  assert.ok(researchLayerChildren.length >= 1, `${testCase.taskType} should have research-layer specialist children`);
+  assert.ok(
+    researchLayerChildren.every((item) => item.input?._broker?.workflow?.forceWebSearch === true),
+    `${testCase.taskType} research-layer children should force web search`
+  );
+  assert.ok(
+    researchLayerChildren.every((item) => item.input?._broker?.workflow?.webSearchRequiredReason === 'leader_research_layer'),
+    `${testCase.taskType} research-layer children should explain forced search`
+  );
 }
 
 console.log('leader workflows qa passed');

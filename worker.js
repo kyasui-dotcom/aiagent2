@@ -11363,6 +11363,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
     const layer = workflowDispatchLayer(workflowPseudoParent, { workflowTask: safeTask, taskType: safeTask });
     const phase = String(options.sequencePhase || '').trim().toLowerCase()
       || (isWorkflowLeaderTask(safeTask) ? 'initial' : (layer <= 1 ? 'research' : 'action'));
+    const requiresInitialResearchSearch = phase === 'research' || (phase === 'initial' && isWorkflowLeaderTask(safeTask));
     const childInputBase = body.input && typeof body.input === 'object' ? body.input : {};
     const childBrokerBase = childInputBase._broker && typeof childInputBase._broker === 'object'
       ? childInputBase._broker
@@ -11379,7 +11380,11 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
           ...workflowSharedMeta,
           parentJobId: parentJob.id,
           dispatchLayer: layer,
-          sequencePhase: phase
+          sequencePhase: phase,
+          ...(requiresInitialResearchSearch ? {
+            forceWebSearch: true,
+            webSearchRequiredReason: phase === 'research' ? 'leader_research_layer' : 'leader_initial_planning'
+          } : {})
         }
       }
     };

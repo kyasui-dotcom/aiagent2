@@ -133,6 +133,10 @@ assert.ok(englishResearch.runtime.delivery_policy.freshness_policy.includes('obs
 assert.ok(englishResearch.runtime.delivery_policy.sensitive_data_policy.includes('private material'));
 assert.ok(englishResearch.runtime.delivery_policy.cost_control_policy.includes('decision impact'));
 assert.equal(builtInShouldUseWebSearchForKind('research', { prompt: 'What is the highest Rolex price today?' }), true);
+assert.equal(builtInShouldUseWebSearchForKind('code', {
+  prompt: 'Review the implementation plan.',
+  input: { _broker: { workflow: { forceWebSearch: true, webSearchRequiredReason: 'leader_research_layer' } } }
+}), true);
 assert.ok(!englishResearch.files[0].content.includes('市場比較の要点を抽出'));
 assert.ok(!englishResearch.files[0].content.includes('Extract the key comparison points'));
 
@@ -862,10 +866,10 @@ const expectedWebSearchModes = {
   directory_submission: 'default',
   citation_ops: 'default',
   research_team_leader: 'default',
-  build_team_leader: 'when_current',
+  build_team_leader: 'default',
   cmo_leader: 'default',
-  cto_leader: 'when_current',
-  cpo_leader: 'when_current',
+  cto_leader: 'default',
+  cpo_leader: 'default',
   cfo_leader: 'default',
   legal_leader: 'default',
   instagram: 'default',
@@ -938,7 +942,7 @@ assert.ok(promptBrushupHealth.cost_control_policy.includes('cheap planning pass'
 const ctoHealth = builtInAgentHealthPayload('cto_leader', { OPENAI_API_KEY: 'test-key' });
 assert.equal(ctoHealth.model, 'gpt-5.4-mini');
 assert.equal(ctoHealth.model_tier, 'code');
-assert.equal(ctoHealth.tool_strategy.web_search, 'when_current');
+assert.equal(ctoHealth.tool_strategy.web_search, 'default');
 assert.ok(ctoHealth.specialist_method.some((step) => step.includes('rollout')));
 assert.ok(ctoHealth.scope_boundaries.some((step) => step.includes('architecture changes')));
 assert.ok(ctoHealth.freshness_policy.includes('version-sensitive'));
