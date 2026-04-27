@@ -4851,6 +4851,17 @@ async function hideOwnChatMemory(storage, request, env, memoryId) {
   if (!safeMemoryId) return { error: 'Chat memory id is required', statusCode: 400 };
   const activeStatuses = new Set(['queued', 'claimed', 'running', 'dispatched']);
   const stateBefore = await storage.getState();
+  const ownMemoryBefore = current?.login ? ownChatMemoryForClient(stateBefore, current.login, 100) : [];
+  const targetMemory = ownMemoryBefore.find((item) => {
+    const id = String(item?.id || '').trim();
+    const sessionId = String(item?.sessionId || '').trim();
+    const linkedOrderId = String(item?.linkedOrderId || '').trim();
+    return safeMemoryId === id || safeMemoryId === sessionId || safeMemoryId === linkedOrderId;
+  }) || null;
+  const targetActiveJobIds = new Set([
+    ...(Array.isArray(targetMemory?.activeJobIds) ? targetMemory.activeJobIds : []),
+    targetMemory?.linkedOrderId || ''
+  ].map((item) => String(item || '').trim()).filter(Boolean));
   const visibleJobs = jobsVisibleToLogin(stateBefore, current.login, {
     account: accountSettingsForLogin(stateBefore, current.login, current.user, current.authProvider)
   });
@@ -4860,7 +4871,12 @@ async function hideOwnChatMemory(storage, request, env, memoryId) {
       const jobId = String(job?.id || '').trim();
       const sessionId = chatSessionIdForJob(job);
       const syntheticSessionId = jobId ? `job_${jobId}` : '';
-      return safeMemoryId === jobId || safeMemoryId === sessionId || safeMemoryId === syntheticSessionId;
+      const rootJobId = String(job?.workflowParentId || jobId || '').trim();
+      return safeMemoryId === jobId
+        || safeMemoryId === sessionId
+        || safeMemoryId === syntheticSessionId
+        || targetActiveJobIds.has(jobId)
+        || targetActiveJobIds.has(rootJobId);
     })
     .map((job) => String(job?.workflowParentId || job?.id || '').trim())
     .filter(Boolean))];

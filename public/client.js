@@ -1543,6 +1543,7 @@ function upsertOpenChatOrderProgressMessage(orderId = '', body = '', options = {
   state.orderChatMessages = messages.slice(-OPEN_CHAT_SESSION_MAX_MESSAGES);
   state.openChatLastStatus = safeBody;
   state.openChatLastStatusTone = tone;
+  markCurrentOpenChatSessionLinkedOrder(safeOrderId, { status: options.status || message.orderProgressStatus || '' });
   const statusParts = safeBody.split(/\n\n+/);
   updateWorkChatStatusCard(statusParts.shift() || 'Order status updated.', statusParts.join('\n\n') || '', tone);
   renderWorkChatThread();
@@ -3408,12 +3409,12 @@ function normalizeOpenChatSession(session = {}) {
     createdAt,
     updatedAt,
     serverManaged: Boolean(session.serverManaged),
-    sessionId: compactChatText(session.sessionId || '', 120),
+    sessionId: compactChatText(session.sessionId || session.session_id || '', 120),
     activeWork: Boolean(session.activeWork),
-    activeJobIds: Array.isArray(session.activeJobIds)
-      ? session.activeJobIds.map((item) => compactChatText(item, 120)).filter(Boolean).slice(0, 24)
+    activeJobIds: Array.isArray(session.activeJobIds || session.active_job_ids)
+      ? (session.activeJobIds || session.active_job_ids).map((item) => compactChatText(item, 120)).filter(Boolean).slice(0, 24)
       : [],
-    linkedOrderId: compactChatText(session.linkedOrderId || '', 120),
+    linkedOrderId: compactChatText(session.linkedOrderId || session.linked_order_id || session.orderId || session.order_id || '', 120),
     openChatMode: normalizeOpenChatMode(session.openChatMode || 'order'),
     openChatPreparedBrief: compactChatText(session.openChatPreparedBrief || '', 9000),
     openChatParallelPlan: Array.isArray(session.openChatParallelPlan) ? session.openChatParallelPlan.slice(0, 8) : [],
@@ -3446,23 +3447,133 @@ function hasOpenChatSessionPayloadContent(payload = {}) {
   );
 }
 
+function openChatSessionIdentityKeys(session = {}) {
+  const keys = new Set();
+  const id = compactChatText(session.id || '', 120);
+  const sessionId = compactChatText(session.sessionId || session.session_id || '', 120);
+  const linkedOrderId = compactChatText(session.linkedOrderId || session.linked_order_id || session.orderId || session.order_id || '', 120);
+  if (id) keys.add(`id:${id}`);
+  if (id.startsWith('job_') && id.length > 4) keys.add(`order:${id.slice(4)}`);
+  if (sessionId) keys.add(`session:${sessionId}`);
+  if (linkedOrderId) keys.add(`order:${linkedOrderId}`);
+  const activeJobIds = Array.isArray(session.activeJobIds || session.active_job_ids)
+    ? (session.activeJobIds || session.active_job_ids)
+    : [];
+  for (const jobId of activeJobIds) {
+    const safeJobId = compactChatText(jobId, 120);
+    if (safeJobId) keys.add(`order:${safeJobId}`);
+  }
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  for (const message of messages) {
+    const progressOrderId = compactChatText(message?.orderProgressId || '', 120);
+    if (progressOrderId) keys.add(`order:${progressOrderId}`);
+  }
+  return keys;
+}
+
+function findMatchingOpenChatSessionKey(map, incoming = {}) {
+  if (!incoming?.id) return '';
+  if (map.has(incoming.id)) return incoming.id;
+  const incomingKeys = openChatSessionIdentityKeys(incoming);
+  for (const [key, existing] of map.entries()) {
+    const existingKeys = openChatSessionIdentityKeys(existing);
+    for (const identity of incomingKeys) {
+      if (existingKeys.has(identity)) return key;
+    }
+  }
+  return '';
+}
+
+function mergeOpenChatSessionMessages(existingMessages = [], incomingMessages = []) {
+  const merged = [];
+  const keyOf = (message = {}) => {
+    const progressOrderId = compactChatText(message.orderProgressId || '', 120);
+    if (progressOrderId) return `order:${progressOrderId}`;
+    return [
+      compactChatText(message.role || '', 40),
+      compactChatText(message.label || '', 80),
+      compactChatText(message.body || message.fullBody || '', 900)
+    ].join('|');
+  };
+  for (const rawMessage of [...existingMessages, ...incomingMessages]) {
+    const message = serializeOpenChatMessageForSession(rawMessage);
+    if (!String(message.body || '').trim()) continue;
+    const key = keyOf(message);
+    const index = merged.findIndex((item) => keyOf(item) === key);
+    if (index >= 0) {
+      merged[index] = { ...merged[index], ...message };
+    } else {
+      merged.push(message);
+    }
+  }
+  return merged.slice(-OPEN_CHAT_SESSION_MAX_MESSAGES);
+}
+
+function mergeOpenChatSessionRecords(existing = {}, incoming = {}) {
+  const existingUpdatedAt = String(existing.updatedAt || '');
+  const incomingUpdatedAt = String(incoming.updatedAt || '');
+  const preferIncoming = incomingUpdatedAt.localeCompare(existingUpdatedAt) >= 0;
+  const base = preferIncoming ? { ...existing, ...incoming } : { ...incoming, ...existing };
+  const idCandidates = [existing.id, incoming.id].map((value) => compactChatText(value, 120)).filter(Boolean);
+  const chosenId = idCandidates.includes(state.currentOpenChatSessionId)
+    ? state.currentOpenChatSessionId
+    : (existing.id || incoming.id);
+  let activeJobIds = [...new Set([
+    ...(Array.isArray(existing.activeJobIds) ? existing.activeJobIds : []),
+    ...(Array.isArray(incoming.activeJobIds) ? incoming.activeJobIds : [])
+  ].map((item) => compactChatText(item, 120)).filter(Boolean))].slice(0, 24);
+  const incomingClearsActiveWork = preferIncoming
+    && !incoming.activeWork
+    && Boolean(incoming.linkedOrderId || incoming.orderProgressId)
+    && !(Array.isArray(incoming.activeJobIds) && incoming.activeJobIds.length);
+  if (incomingClearsActiveWork) {
+    const clearedOrderId = compactChatText(incoming.linkedOrderId || incoming.orderProgressId || '', 120);
+    activeJobIds = activeJobIds.filter((item) => item !== clearedOrderId);
+  }
+  return normalizeOpenChatSession({
+    ...base,
+    id: chosenId,
+    createdAt: String(existing.createdAt || '').localeCompare(String(incoming.createdAt || '')) <= 0
+      ? (existing.createdAt || incoming.createdAt)
+      : (incoming.createdAt || existing.createdAt),
+    updatedAt: String(existing.updatedAt || '').localeCompare(String(incoming.updatedAt || '')) > 0
+      ? existing.updatedAt
+      : incoming.updatedAt,
+    serverManaged: Boolean(existing.serverManaged || incoming.serverManaged),
+    sessionId: existing.sessionId || incoming.sessionId || '',
+    activeWork: incomingClearsActiveWork ? false : Boolean(existing.activeWork || incoming.activeWork),
+    activeJobIds,
+    linkedOrderId: existing.linkedOrderId || incoming.linkedOrderId || activeJobIds[0] || '',
+    messages: mergeOpenChatSessionMessages(existing.messages || [], incoming.messages || [])
+  });
+}
+
 function upsertOpenChatSessionCollection(sessions = [], session = null) {
   const incoming = session ? normalizeOpenChatSession(session) : null;
   const map = new Map();
   for (const item of Array.isArray(sessions) ? sessions : []) {
     if (!item?.id) continue;
-    map.set(item.id, normalizeOpenChatSession(item));
+    const normalized = normalizeOpenChatSession(item);
+    const existingKey = findMatchingOpenChatSessionKey(map, normalized);
+    if (existingKey) {
+      const existing = map.get(existingKey) || null;
+      const merged = mergeOpenChatSessionRecords(existing, normalized);
+      map.delete(existingKey);
+      map.set(merged.id, merged);
+    } else {
+      map.set(normalized.id, normalized);
+    }
   }
   if (incoming?.id) {
-    const existing = map.get(incoming.id) || null;
-    map.set(incoming.id, existing ? normalizeOpenChatSession({
-      ...existing,
-      ...incoming,
-      createdAt: existing.createdAt || incoming.createdAt,
-      updatedAt: String(existing.updatedAt || '').localeCompare(String(incoming.updatedAt || '')) > 0
-        ? existing.updatedAt
-        : incoming.updatedAt
-    }) : incoming);
+    const existingKey = findMatchingOpenChatSessionKey(map, incoming);
+    const existing = existingKey ? map.get(existingKey) : null;
+    if (existing) {
+      const merged = mergeOpenChatSessionRecords(existing, incoming);
+      map.delete(existingKey);
+      map.set(merged.id, merged);
+    } else {
+      map.set(incoming.id, incoming);
+    }
   }
   return [...map.values()]
     .sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
@@ -3551,6 +3662,7 @@ function sessionFromServerChatMemory(item = {}) {
   const updatedAt = Number.isFinite(Date.parse(item.updatedAt || '')) ? new Date(item.updatedAt).toISOString() : createdAt;
   return normalizeOpenChatSession({
     id,
+    sessionId,
     serverManaged: true,
     activeWork: Boolean(item.activeWork),
     activeJobIds: Array.isArray(item.activeJobIds) ? item.activeJobIds.slice(0, 24) : [],
@@ -3641,6 +3753,32 @@ function persistCurrentOpenChatSession() {
   if (!session || !hasOpenChatSessionPayloadContent(session)) return null;
   state.currentOpenChatSessionId = session.id;
   const runtimeSessions = Array.isArray(state.openChatRuntimeSessions) ? state.openChatRuntimeSessions : [];
+  writeOpenChatSessions(upsertOpenChatSessionCollection(runtimeSessions, session));
+  renderOpenChatSessionControls();
+  return session;
+}
+
+function markCurrentOpenChatSessionLinkedOrder(orderId = '', options = {}) {
+  const safeOrderId = compactChatText(orderId || '', 120);
+  if (!safeOrderId) return null;
+  ensureCurrentOpenChatSessionId({ force: true });
+  const runtimeSessions = Array.isArray(state.openChatRuntimeSessions) ? state.openChatRuntimeSessions : [];
+  const current = currentOpenChatSessionPayload(runtimeSessions, { createId: true }) || {
+    id: state.currentOpenChatSessionId,
+    messages: []
+  };
+  const active = !isTerminalOrderStatus(options.status || '');
+  const nextActiveJobIds = [...new Set([
+    ...(Array.isArray(current.activeJobIds) ? current.activeJobIds : []),
+    safeOrderId
+  ].map((item) => compactChatText(item, 120)).filter(Boolean))]
+    .filter((item) => active || item !== safeOrderId);
+  const session = normalizeOpenChatSession({
+    ...current,
+    activeWork: active ? true : nextActiveJobIds.length > 0,
+    linkedOrderId: current.linkedOrderId || safeOrderId,
+    activeJobIds: nextActiveJobIds
+  });
   writeOpenChatSessions(upsertOpenChatSessionCollection(runtimeSessions, session));
   renderOpenChatSessionControls();
   return session;
@@ -13451,6 +13589,30 @@ function apiPayloadFromOrderDraft(draft = {}) {
   return payload;
 }
 
+function apiPayloadFromOrderDraftWithChatSession(draft = {}, sessionId = '') {
+  const payload = apiPayloadFromOrderDraft(draft);
+  const safeSessionId = compactChatText(sessionId || state.currentOpenChatSessionId || '', 120);
+  if (!safeSessionId) return payload;
+  const input = payload.input && typeof payload.input === 'object' && !Array.isArray(payload.input)
+    ? payload.input
+    : {};
+  const broker = input._broker && typeof input._broker === 'object' && !Array.isArray(input._broker)
+    ? input._broker
+    : {};
+  return {
+    ...payload,
+    session_id: payload.session_id || payload.sessionId || safeSessionId,
+    input: {
+      ...input,
+      ...(input.session_id || input.sessionId ? {} : { session_id: safeSessionId }),
+      _broker: {
+        ...broker,
+        chatSessionId: broker.chatSessionId || safeSessionId
+      }
+    }
+  };
+}
+
 function estimateWindowOfDraft(draft) {
   if (!draft) return null;
   if (resolvedOrderStrategyOfDraft(draft) === 'multi') {
@@ -19450,8 +19612,9 @@ async function sendFollowupToAgentFromDelivery() {
     if (handleOrderPreflightPrompt(error, draft, { analytics: analyticsDraft, source: 'delivery_followup_validation' })) return;
     throw error;
   }
+  const followupSessionId = ensureCurrentOpenChatSessionId({ force: true });
   const payload = {
-    ...apiPayloadFromOrderDraft(draft),
+    ...apiPayloadFromOrderDraftWithChatSession(draft, followupSessionId),
     visitor_id: visitorId(),
     async_dispatch: true
   };
@@ -19491,6 +19654,7 @@ async function sendFollowupToAgentFromDelivery() {
     source: 'delivery_followup_direct'
   });
   if (createdOrderId) {
+    markCurrentOpenChatSessionLinkedOrder(createdOrderId, { status: createdOrderStatus });
     upsertOpenChatOrderProgressMessage(createdOrderId, createdOrderBody, {
       status: createdOrderStatus,
       tone: orderProgressTone(createdOrderStatus),
@@ -22956,8 +23120,9 @@ async function createAndOptionallyRunJob() {
     throw error;
   }
   let stopAcceptanceProgress = () => {};
+  const dispatchSessionId = ensureCurrentOpenChatSessionId({ force: true });
   const payload = {
-    ...apiPayloadFromOrderDraft(draft),
+    ...apiPayloadFromOrderDraftWithChatSession(draft, dispatchSessionId),
     agent_id: draft.agent_id || undefined,
     prompt: draft.prompt || fallbackPromptFromOrderInput(draft.input),
     visitor_id: visitorId(),
@@ -23027,6 +23192,9 @@ async function createAndOptionallyRunJob() {
     status: createdOrderStatus
   });
   state.pendingOrderConfirmation = null;
+  if (createdOrderId) {
+    markCurrentOpenChatSessionLinkedOrder(createdOrderId, { status: createdOrderStatus });
+  }
   if (createdOrderId) {
     upsertOpenChatOrderProgressMessage(createdOrderId, createdOrderBody, {
       status: createdOrderStatus,

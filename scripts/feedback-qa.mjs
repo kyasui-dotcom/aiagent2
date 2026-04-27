@@ -166,6 +166,40 @@ try {
   assert.ok(groupedMember);
   assert.equal(groupedMember.turnCount, 2);
   assert.equal(groupedMember.handlingStatus, 'clarified');
+  const promptMergedActiveDashboard = buildAdminDashboard({
+    accounts: [],
+    agents: [],
+    feedbackReports: [],
+    events: [],
+    chatTranscripts: [
+      createChatTranscript({
+        prompt: 'Prompt-matched active order should stay in one chat row',
+        answer: 'Order draft accepted.',
+        answerKind: 'assist',
+        sessionId: 'prompt_merge_session_1'
+      }, {
+        loggedIn: true,
+        authProvider: 'google-oauth',
+        login: 'member@example.com',
+        now: created.createdAt
+      })
+    ],
+    jobs: [{
+      id: 'job_prompt_merge_1',
+      jobKind: 'job',
+      parentAgentId: 'qa-runner',
+      taskType: 'ops',
+      prompt: 'Prompt-matched active order should stay in one chat row',
+      status: 'queued',
+      input: {},
+      createdAt: followupCreatedAt
+    }]
+  }, { operator: 'nobody@example.com' });
+  const promptMergedChats = promptMergedActiveDashboard.chats.filter((chat) => chat.prompt === 'Prompt-matched active order should stay in one chat row');
+  assert.equal(promptMergedChats.length, 1, 'admin active work should merge into the matching transcript row instead of adding a second chat row');
+  assert.equal(promptMergedChats[0].sessionId, 'prompt_merge_session_1');
+  assert.equal(Boolean(promptMergedChats[0].activeWork), true);
+  assert.ok(Array.isArray(promptMergedChats[0].activeJobIds) && promptMergedChats[0].activeJobIds.includes('job_prompt_merge_1'));
 
   const dashboardCountState = {
     accounts: Array.from({ length: 240 }, (_, index) => ({

@@ -1090,6 +1090,55 @@ try {
   assert.equal(acceptedAgent.status, 201);
   assert.equal(acceptedAgent.body.agent.verificationStatus, 'verified');
 
+  const mergedSessionId = `qa-merged-session-${Date.now()}`;
+  const mergedPrompt = 'Keep this active and merge it into the existing Work Chat transcript even when the order payload omits session_id.';
+  const mergedTranscript = await request('/api/analytics/chat-transcripts', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      prompt: mergedPrompt,
+      answer: 'Order draft accepted in Work Chat.',
+      answer_kind: 'assist',
+      status: 'assist',
+      session_id: mergedSessionId,
+      visitor_id: 'worker-api-qa-merged-chat'
+    })
+  }, { sessionCookie: aliceSession });
+  assert.equal(mergedTranscript.status, 201);
+
+  const unlinkedActiveOrder = await request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      parent_agent_id: 'qa-runner',
+      agent_id: acceptedAgent.body.agent.id,
+      task_type: 'ops',
+      prompt: mergedPrompt,
+      skip_intake: true
+    })
+  }, { sessionCookie: aliceSession });
+  assert.equal(unlinkedActiveOrder.status, 201);
+  assert.ok(['queued', 'dispatched'].includes(String(unlinkedActiveOrder.body.status || '')));
+
+  const mergedSnapshot = await request('/api/snapshot', {}, { sessionCookie: aliceSession });
+  assert.equal(mergedSnapshot.status, 200);
+  const mergedMemory = Array.isArray(mergedSnapshot.body.chatMemory) ? mergedSnapshot.body.chatMemory : [];
+  const mergedMatches = mergedMemory.filter((item) => item.prompt === mergedPrompt);
+  assert.equal(mergedMatches.length, 1, 'active work should not create a second chat-history row when it matches the transcript prompt');
+  assert.equal(mergedMatches[0].sessionId, mergedSessionId);
+  assert.equal(Boolean(mergedMatches[0].activeWork), true);
+  assert.ok(Array.isArray(mergedMatches[0].activeJobIds) && mergedMatches[0].activeJobIds.includes(unlinkedActiveOrder.body.job_id));
+
+  const deleteMergedSession = await request(`/api/settings/chat-memory/${encodeURIComponent(mergedSessionId)}`, {
+    method: 'DELETE'
+  }, { sessionCookie: aliceSession });
+  assert.equal(deleteMergedSession.status, 200);
+  assert.ok(
+    Array.isArray(deleteMergedSession.body.cancelled_job_ids)
+      && deleteMergedSession.body.cancelled_job_ids.includes(unlinkedActiveOrder.body.job_id),
+    'deleting a prompt-merged chat session should stop its linked active work'
+  );
+
   const linkedSessionId = `qa-linked-session-${Date.now()}`;
   const acceptedOrder = await request('/api/jobs', {
     method: 'POST',
