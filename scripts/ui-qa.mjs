@@ -99,6 +99,8 @@ assert.ok(loginJs.includes('showLoginPanel(false);'));
 assert.ok(loginJs.includes('showLoginPanel(true);'));
 assert.ok(loginJs.includes('AUTH_STATUS_TIMEOUT_MS'));
 assert.ok(loginJs.includes('controller.abort()'));
+assert.ok(loginJs.includes('function gatedSourceTabLabel('));
+assert.ok(loginJs.includes("replace(/^gate_timeout_/, '')"));
 assert.ok(loginJs.includes("els.continueBtn.onclick = () => { window.location.replace(nextPath); };"));
 assert.ok(loginJs.includes('window.location.replace(nextPath);'));
 assert.ok(loginJs.includes("url.searchParams.set('visitor_id', visitorId());"));

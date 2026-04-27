@@ -150,6 +150,15 @@ function applyProviderAvailability(status = {}) {
   }
 }
 
+function gatedSourceTabLabel(source = '') {
+  const safe = safeString(source, 80)
+    .replace(/^gate_timeout_/, '')
+    .replace(/^gate_/, '')
+    .replace(/[^a-z0-9_-]/gi, '')
+    .trim();
+  return (safe || 'work').toUpperCase();
+}
+
 async function loadAuthStatus(route = currentRoute()) {
   authStatusChecked = false;
   showLoginPanel(false);
@@ -259,7 +268,7 @@ async function requestEmailLink(route = currentRoute()) {
 async function init() {
   const route = currentRoute();
   if (els.hint && route.source.startsWith('gate_')) {
-    const gatedTab = route.source.replace(/^gate_/, '').toUpperCase();
+    const gatedTab = gatedSourceTabLabel(route.source);
     els.hint.textContent = `${gatedTab} is private after login. Sign in here, then CAIt opens that area.`;
   }
   if (route.authError) {
