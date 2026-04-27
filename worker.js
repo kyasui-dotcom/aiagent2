@@ -3164,7 +3164,13 @@ function resolveOrderApiKeyContext(state, request) {
   const token = extractOrderApiKey(request);
   if (!token) return { session: null, user: null, login: '', authProvider: 'guest', apiKeyStatus: 'missing', apiKey: null };
   const matched = authenticateOrderApiKey(state, token);
-  if (!matched) return { session: null, user: null, login: '', authProvider: 'guest', apiKeyStatus: 'invalid', apiKey: null };
+  if (!matched) return invalidOrderApiKeyContext();
+  return orderApiKeyContextFromMatch(matched);
+}
+function invalidOrderApiKeyContext() {
+  return { session: null, user: null, login: '', authProvider: 'guest', apiKeyStatus: 'invalid', apiKey: null };
+}
+function orderApiKeyContextFromMatch(matched) {
   return {
     session: null,
     user: accountUserFromSettings(matched.account),
@@ -3181,6 +3187,10 @@ async function currentOrderRequesterContext(storage, request, env) {
   if (current?.user) return { ...current, apiKeyStatus: 'session', apiKey: null };
   const token = extractOrderApiKey(request);
   if (!token) return resolveOrderApiKeyContext({ accounts: [] }, request);
+  if (typeof storage.authenticateOrderApiKey === 'function') {
+    const matched = await storage.authenticateOrderApiKey(token);
+    return matched ? orderApiKeyContextFromMatch(matched) : invalidOrderApiKeyContext();
+  }
   const state = typeof storage.getFreshState === 'function'
     ? await storage.getFreshState()
     : await storage.getState();
@@ -3190,7 +3200,10 @@ function resolveCaitApiKeyAgentContext(state, request) {
   const token = extractOrderApiKey(request);
   if (!token) return { session: null, user: null, login: '', authProvider: 'guest', apiKeyStatus: 'missing', apiKey: null };
   const matched = authenticateOrderApiKey(state, token);
-  if (!matched) return { session: null, user: null, login: '', authProvider: 'guest', apiKeyStatus: 'invalid', apiKey: null };
+  if (!matched) return invalidOrderApiKeyContext();
+  return agentApiKeyContextFromMatch(matched);
+}
+function agentApiKeyContextFromMatch(matched) {
   return {
     session: null,
     user: accountUserFromSettings(matched.account),
@@ -3209,6 +3222,10 @@ async function currentAgentRequesterContext(storage, request, env) {
   if (current?.user) return { ...current, apiKeyStatus: 'session', apiKey: null };
   const token = extractOrderApiKey(request);
   if (!token) return resolveCaitApiKeyAgentContext({ accounts: [] }, request);
+  if (typeof storage.authenticateOrderApiKey === 'function') {
+    const matched = await storage.authenticateOrderApiKey(token);
+    return matched ? agentApiKeyContextFromMatch(matched) : invalidOrderApiKeyContext();
+  }
   const state = typeof storage.getFreshState === 'function'
     ? await storage.getFreshState()
     : await storage.getState();
@@ -4744,8 +4761,10 @@ async function listChatTrainingData(storage, request, env) {
 async function listOrderApiKeys(storage, request, env) {
   const current = await currentUserContext(request, env);
   if (!current.user) return { error: 'Login required', statusCode: 401 };
-  const state = await storage.getState();
-  const account = accountSettingsForLogin(state, current.login, current.user, current.authProvider);
+  const storedAccount = typeof storage.getAccountByLogin === 'function'
+    ? await storage.getAccountByLogin(current.login)
+    : null;
+  const account = storedAccount || accountSettingsForLogin({ accounts: [] }, current.login, current.user, current.authProvider);
   return { apiKeys: sanitizeAccountSettingsForClient(account)?.apiAccess?.orderKeys || [] };
 }
 
@@ -4763,7 +4782,10 @@ async function createOrderApiKey(storage, request, env) {
   }
   let created = null;
   try {
-    await storage.mutate(async (draft) => {
+    const mutate = typeof storage.mutateAccount === 'function'
+      ? (mutator) => storage.mutateAccount(current.login, mutator)
+      : (mutator) => storage.mutate(mutator);
+    await mutate(async (draft) => {
       created = createOrderApiKeyInState(draft, current.login, current.user, current.authProvider, {
         label: body?.label || '',
         mode: body?.mode || 'live'
@@ -4807,7 +4829,10 @@ async function createAdminOrderApiKey(storage, request, env) {
   }
   let created = null;
   try {
-    await storage.mutate(async (draft) => {
+    const mutate = typeof storage.mutateAccount === 'function'
+      ? (mutator) => storage.mutateAccount(target.login, mutator)
+      : (mutator) => storage.mutate(mutator);
+    await mutate(async (draft) => {
       const existing = (Array.isArray(draft.accounts) ? draft.accounts : [])
         .find((account) => String(account?.login || '').trim().toLowerCase() === target.login);
       const existingUser = accountUserFromSettings(existing);
@@ -4849,7 +4874,10 @@ async function revokeOrderApiKey(storage, request, env, keyId) {
   const current = await currentUserContext(request, env);
   if (!current.user) return { error: 'Login required', statusCode: 401 };
   let revoked = null;
-  await storage.mutate(async (draft) => {
+  const mutate = typeof storage.mutateAccount === 'function'
+    ? (mutator) => storage.mutateAccount(current.login, mutator)
+    : (mutator) => storage.mutate(mutator);
+  await mutate(async (draft) => {
     revoked = revokeOrderApiKeyInState(draft, current.login, keyId, current.user, current.authProvider);
   });
   if (!revoked) return { error: 'API key not found', statusCode: 404 };
