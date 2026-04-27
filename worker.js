@@ -55,9 +55,13 @@ function runtimeStorage(env) {
   const appVersion = String(env?.APP_VERSION || '').trim().toLowerCase();
   const isExplicitTestRuntime = appVersion.includes('test') || String(env?.NODE_ENV || '').trim().toLowerCase() === 'test';
   const allowInMemory = isExplicitTestRuntime && String(env?.ALLOW_IN_MEMORY_STORAGE || '').trim() === '1';
+  const configuredCacheTtl = String(env?.D1_STATE_CACHE_TTL_MS ?? '').trim();
+  const productionCacheTtlMs = configuredCacheTtl
+    ? Math.max(0, Math.min(60_000, Number(configuredCacheTtl) || 0))
+    : 10_000;
   return createD1LikeStorage(env.MY_BINDING || env.DB || null, {
     allowInMemory,
-    stateCacheTtlMs: isExplicitTestRuntime ? 0 : undefined
+    stateCacheTtlMs: isExplicitTestRuntime ? 0 : productionCacheTtlMs
   });
 }
 

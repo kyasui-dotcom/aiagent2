@@ -22280,18 +22280,22 @@ async function refresh() {
   const snapshot = await api(`/api/snapshot?period=${period}`);
   state.snapshot = snapshot;
   state.stripeStatus = null;
-  if (snapshot?.auth?.loggedIn) {
-    try {
-      state.stripeStatus = await api('/api/stripe/status', { preserveAuthOn401: true });
-    } catch {
-      state.stripeStatus = null;
-    }
-  }
   render(snapshot);
   syncOpenChatTrackedJobsFromSnapshot(snapshot);
-  await backfillTrackedJobsIntoSnapshot(snapshot);
   scheduleLiveSnapshotRefresh(snapshot);
-  await maybeAutoLoadRepos(snapshot.auth);
+  if (snapshot?.auth?.loggedIn) {
+    void api('/api/stripe/status', { preserveAuthOn401: true })
+      .then((stripeStatus) => {
+        if (state.snapshot !== snapshot) return;
+        state.stripeStatus = stripeStatus;
+        render(state.snapshot);
+      })
+      .catch(() => {
+        if (state.snapshot === snapshot) state.stripeStatus = null;
+      });
+  }
+  void backfillTrackedJobsIntoSnapshot(snapshot).catch(() => {});
+  void maybeAutoLoadRepos(snapshot.auth).catch(() => {});
 }
 
 function showSelectedRepo() {
