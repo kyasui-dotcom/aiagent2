@@ -3918,6 +3918,262 @@ function providerAuthorityRequestFromPayload(payload = {}) {
   return request && typeof request === 'object' ? request : null;
 }
 
+function authorityStringList(value, maxItems = 12, maxLen = 160) {
+  const raw = Array.isArray(value)
+    ? value
+    : (typeof value === 'string' ? value.split(/[,\n]/) : []);
+  return raw
+    .map((item) => String(item || '').trim().slice(0, maxLen))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function authorityBool(value) {
+  return value === true || value === 'true' || value === 1;
+}
+
+function authorityRequestFromReport(report = {}) {
+  const body = report && typeof report === 'object' ? report : {};
+  return body.authority_request
+    || body.authorityRequest
+    || body.action_required
+    || body.actionRequired
+    || body.executor_request
+    || body.executorRequest
+    || (Array.isArray(body.authority_requests) ? body.authority_requests[0] : null)
+    || (Array.isArray(body.authorityRequests) ? body.authorityRequests[0] : null)
+    || null;
+}
+
+function normalizeAuthorityRequest(request = null, defaults = {}) {
+  if (!request || typeof request !== 'object') return null;
+  const missingConnectors = authorityStringList(
+    request.missing_connectors
+      || request.missingConnectors
+      || request.connectors
+      || request.required_connectors
+      || request.requiredConnectors,
+    8,
+    60
+  ).map((item) => item.toLowerCase());
+  const missingConnectorCapabilities = authorityStringList(
+    request.missing_connector_capabilities
+      || request.missingConnectorCapabilities
+      || request.required_connector_capabilities
+      || request.requiredConnectorCapabilities
+      || request.capabilities,
+    16,
+    120
+  );
+  const requiredGoogleSources = authorityStringList(
+    request.required_google_sources
+      || request.requiredGoogleSources
+      || request.google_source_types
+      || request.googleSourceTypes,
+    8,
+    40
+  ).map((item) => item.toLowerCase());
+  const reason = String(
+    request.reason
+      || request.message
+      || request.summary
+      || defaults.reason
+      || 'Additional connector authority is required before continuing.'
+  ).trim().slice(0, 500);
+  const ownerLabel = String(
+    request.owner_label
+      || request.ownerLabel
+      || request.requested_by
+      || request.requestedBy
+      || request.agent_name
+      || request.agentName
+      || defaults.ownerLabel
+      || 'CAIt'
+  ).trim().slice(0, 120);
+  const source = String(request.source || request.kind || defaults.source || 'agent_delivery').trim().slice(0, 80);
+  const requiredRepositorySelection = authorityBool(
+    request.required_repository_selection
+      || request.requiredRepositorySelection
+      || request.require_repository_selection
+      || request.requireRepositorySelection
+  );
+  const repoCandidates = authorityStringList(
+    request.repo_candidates
+      || request.repoCandidates
+      || request.repositories,
+    20,
+    120
+  );
+  const requiredChannelSelection = authorityBool(
+    request.required_channel_selection
+      || request.requiredChannelSelection
+      || request.require_channel_selection
+      || request.requireChannelSelection
+  );
+  const channelCandidates = authorityStringList(
+    request.channel_candidates
+      || request.channelCandidates
+      || request.channels,
+    12,
+    60
+  ).map((item) => item.toLowerCase());
+  if (
+    !reason
+    && !missingConnectors.length
+    && !missingConnectorCapabilities.length
+    && !requiredGoogleSources.length
+    && !requiredRepositorySelection
+    && !requiredChannelSelection
+  ) {
+    return null;
+  }
+  return {
+    reason,
+    missing_connectors: missingConnectors,
+    missing_connector_capabilities: missingConnectorCapabilities,
+    required_google_sources: requiredGoogleSources,
+    owner_label: ownerLabel,
+    source,
+    requested_at: String(request.requested_at || request.requestedAt || defaults.requestedAt || nowIso()).trim().slice(0, 80),
+    required_repository_selection: requiredRepositorySelection,
+    repo_candidates: repoCandidates,
+    required_channel_selection: requiredChannelSelection,
+    channel_candidates: channelCandidates
+  };
+}
+
+function deliveryAuthorityScanText(job = {}) {
+  const output = job?.output && typeof job.output === 'object' ? job.output : {};
+  const report = output.report && typeof output.report === 'object' ? output.report : {};
+  const files = Array.isArray(output.files) ? output.files : [];
+  return [
+    job.prompt,
+    job.originalPrompt,
+    output.summary,
+    report.summary,
+    report.nextAction,
+    report.next_action,
+    ...(Array.isArray(report.bullets) ? report.bullets : []),
+    ...files.map((file) => `${file?.name || ''}\n${file?.content || ''}`)
+  ].map((value) => typeof value === 'string' ? value : JSON.stringify(value || '')).join('\n');
+}
+
+function inferredAuthorityChannelsFromText(text = '') {
+  const source = String(text || '').toLowerCase();
+  const channels = [];
+  const connectors = [];
+  const capabilities = [];
+  const push = (list, value) => {
+    if (value && !list.includes(value)) list.push(value);
+  };
+  if (/(^|\W)(x|twitter|tweet|tweets)(\W|$)|x投稿|ツイート|ポスト|スレッド/i.test(source)) {
+    push(channels, 'x');
+    push(connectors, 'x');
+    push(capabilities, 'x.post');
+  }
+  if (/instagram|insta|インスタ|インスタグラム/i.test(source)) {
+    push(channels, 'instagram');
+  }
+  if (/reddit|subreddit|レディット/i.test(source)) {
+    push(channels, 'reddit');
+  }
+  if (/indie hackers|indiehackers|インディーハッカー/i.test(source)) {
+    push(channels, 'indie_hackers');
+  }
+  if (/(gmail|email|mailbox|newsletter|send email|cold email|メール|送信)/i.test(source)) {
+    push(channels, 'email');
+    push(connectors, 'google');
+    push(capabilities, 'google.send_gmail');
+  }
+  if (/(github|pull request|\bpr\b|repository|repo|リポジトリ|プルリク)/i.test(source)) {
+    push(channels, 'github');
+    push(connectors, 'github');
+    push(capabilities, 'github.write_pr');
+  }
+  if (/(search console|\bgsc\b|ga4|analytics|google analytics|サーチコンソール|アクセス解析)/i.test(source)) {
+    push(connectors, 'google');
+    if (/search console|\bgsc\b|サーチコンソール/i.test(source)) push(capabilities, 'google.read_gsc');
+    if (/ga4|analytics|google analytics|アクセス解析/i.test(source)) push(capabilities, 'google.read_ga4');
+  }
+  return { channels, connectors, capabilities };
+}
+
+function synthesizeAuthorityRequestFromDelivery(job = {}, agent = null) {
+  const text = deliveryAuthorityScanText(job);
+  const task = String(job.workflowTask || job.taskType || '').trim().toLowerCase();
+  const agentName = String(job.workflowAgentName || agent?.name || '').trim();
+  const leaderLike = task.endsWith('_leader') || /team leader/i.test(agentName);
+  const mentionsExternalAction = /(connector|oauth|authority|approval|approve|handoff|publish|posting|send|schedule|external|承認|接続|投稿|送信|配信)/i.test(text);
+  const mentionsExecution = mentionsExternalAction
+    || (/(execute|execution|実行)/i.test(text) && /(connector|external|handoff|publish|posting|send|schedule|投稿|送信|配信)/i.test(text));
+  const mentionsBlock = /(blocked|required|needs|missing|pause|paused|guardrail|until|before|必要|未接続|停止|承認後|接続後)/i.test(text);
+  if (!mentionsExecution || (!mentionsBlock && !leaderLike)) return null;
+  const inferred = inferredAuthorityChannelsFromText(text);
+  const source = leaderLike ? 'leader_execution_approval' : 'delivery_text_inference';
+  const ownerLabel = agentName || (leaderLike ? 'Team Leader' : 'CAIt');
+  const requireChannel = leaderLike && /(connector|handoff|publish|posting|send|schedule|external|投稿|送信|配信)/i.test(text);
+  if (!inferred.connectors.length && !inferred.capabilities.length && !requireChannel) return null;
+  return normalizeAuthorityRequest({
+    reason: leaderLike
+      ? `${ownerLabel} paused external execution until the exact connector/channel action is approved.`
+      : 'External connector execution requires explicit approval before continuing.',
+    missing_connectors: inferred.connectors,
+    missing_connector_capabilities: inferred.capabilities,
+    required_google_sources: [],
+    owner_label: ownerLabel,
+    source,
+    required_channel_selection: requireChannel,
+    channel_candidates: inferred.channels
+  });
+}
+
+function executorStatePatchFromAuthorityRequest(request = null, existingExecutorState = {}) {
+  const normalized = normalizeAuthorityRequest(request, {
+    requestedAt: existingExecutorState?.authorityRequired?.requestedAt || nowIso()
+  });
+  if (!normalized) return null;
+  const patch = sanitizeExecutorStatePatch({
+    googleIncludeGroups: normalized.required_google_sources,
+    authorityRequired: {
+      reason: normalized.reason,
+      missingConnectors: normalized.missing_connectors,
+      missingConnectorCapabilities: normalized.missing_connector_capabilities,
+      source: normalized.source,
+      requestedAt: normalized.requested_at,
+      ownerLabel: normalized.owner_label,
+      requiredRepositorySelection: normalized.required_repository_selection,
+      repoCandidates: normalized.repo_candidates,
+      requiredChannelSelection: normalized.required_channel_selection,
+      channelCandidates: normalized.channel_candidates
+    }
+  });
+  return patch.authorityRequired ? patch : null;
+}
+
+function syncJobAuthorityRequest(job = {}, agent = null) {
+  if (!job?.output || typeof job.output !== 'object') return null;
+  const report = job.output.report && typeof job.output.report === 'object' ? job.output.report : {};
+  const existingRequest = authorityRequestFromReport(report);
+  const request = normalizeAuthorityRequest(existingRequest, {
+    ownerLabel: String(job.workflowAgentName || agent?.name || '').trim() || 'CAIt',
+    source: 'agent_delivery'
+  }) || synthesizeAuthorityRequestFromDelivery(job, agent);
+  if (!request) return null;
+  job.output.report = {
+    ...report,
+    authority_request: request
+  };
+  const existingExecutorState = job.executorState && typeof job.executorState === 'object' ? job.executorState : {};
+  const patch = executorStatePatchFromAuthorityRequest(request, existingExecutorState);
+  if (!patch) return request;
+  job.executorState = {
+    ...existingExecutorState,
+    ...patch,
+    updatedAt: nowIso()
+  };
+  return request;
+}
+
 function normalizeAgentReportPayload(payload = {}, reportCandidate = null) {
   const report = reportCandidate && typeof reportCandidate === 'object'
     ? { ...reportCandidate }
@@ -9352,6 +9608,7 @@ async function reconcileWorkflowParent(storage, parentJobId) {
         parent.failedAt = nowIso();
         parent.failureReason = 'Leader run failed before research checkpoint';
         parent.output = buildAgentTeamDeliveryOutput(parent, children);
+        syncJobAuthorityRequest(parent);
         return cloneJob(parent);
       }
       if (['failed', 'timed_out'].includes(finalSummaryStatus)) {
@@ -9368,6 +9625,7 @@ async function reconcileWorkflowParent(storage, parentJobId) {
         parent.failedAt = finalSummaryJob?.failedAt || finalSummaryJob?.timedOutAt || nowIso();
         parent.failureReason = 'Leader final summary failed after specialist execution';
         parent.output = buildAgentTeamDeliveryOutput(parent, children);
+        syncJobAuthorityRequest(parent);
         return cloneJob(parent);
       }
       if (leaderSequence.status !== 'completed' && checkpointStatus === 'completed') {
@@ -9406,10 +9664,12 @@ async function reconcileWorkflowParent(storage, parentJobId) {
         parent.failedAt = checkpointJob?.failedAt || checkpointJob?.timedOutAt || nowIso();
         parent.failureReason = 'Leader checkpoint failed before action execution';
         parent.output = buildAgentTeamDeliveryOutput(parent, children);
+        syncJobAuthorityRequest(parent);
         return cloneJob(parent);
       }
       if (finalSummaryJobId && finalSummaryStatus !== 'completed') {
         parent.output = buildAgentTeamDeliveryOutput(parent, children);
+        syncJobAuthorityRequest(parent);
         parent.status = children.some((item) => active.has(item.status)) ? 'running' : 'queued';
         parent.completedAt = null;
         parent.failedAt = null;
@@ -9418,6 +9678,7 @@ async function reconcileWorkflowParent(storage, parentJobId) {
       }
     }
     parent.output = buildAgentTeamDeliveryOutput(parent, children);
+    syncJobAuthorityRequest(parent);
     if (!children.length) {
       parent.status = 'failed';
       parent.failedAt = nowIso();
@@ -9655,6 +9916,7 @@ async function dispatchExistingJobToAssignedAgent(storage, env, jobId, agentId) 
           files: dispatch.normalized.files,
           returnTargets: dispatch.normalized.returnTargets
         };
+        syncJobAuthorityRequest(draftJob, draftAgent);
         draftJob.actualBilling = billing;
         draftJob.deliveryQuality = {
           score: deliveryQualityScoreForJob(draftJob),
@@ -10410,6 +10672,7 @@ async function completeJobFromAgentResult(storage, jobId, agentId, payload = {},
       files: Array.isArray(payload.files) ? payload.files : [],
       returnTargets: payload.return_targets || payload.returnTargets || ['chat', 'api', 'webhook']
     };
+    syncJobAuthorityRequest(job, agent);
     job.completedAt = completionAt;
     job.failedAt = null;
     job.failureReason = null;
@@ -10579,7 +10842,12 @@ async function performSingleJobCreate(storage, env, current, body, options = {})
   const preflight = orderPreflightForAgent(picked.agent, current, account, body, {
     scheduled: Boolean(body?.input?._broker?.recurring)
   });
-  if (!preflight.ok) {
+  const authorityBlockedDraft = !preflight.ok
+    && options.allowAuthorityBlockedDraft === true
+    && Boolean(body.workflow_parent_id)
+    && Boolean(sampleKindFromAgent(picked.agent))
+    && ['connector_required', 'confirmation_required'].includes(String(preflight.code || '').trim());
+  if (!preflight.ok && !authorityBlockedDraft) {
     await touchUsage();
     return {
       ...preflight,
@@ -10590,13 +10858,15 @@ async function performSingleJobCreate(storage, env, current, body, options = {})
   }
   input._broker.agentPreflight = {
     agentId: picked.agent.id,
-    riskLevel: preflight.profile?.riskLevel || 'safe',
-    requiredConnectors: preflight.profile?.requiredConnectors || [],
-    requiredConnectorCapabilities: preflight.profile?.requiredConnectorCapabilities || [],
-    authorityStatus: preflight.authority_status || 'ready',
+    riskLevel: preflight.profile?.riskLevel || preflight.risk_level || 'safe',
+    requiredConnectors: preflight.profile?.requiredConnectors || preflight.required_connectors || [],
+    requiredConnectorCapabilities: preflight.profile?.requiredConnectorCapabilities || preflight.required_connector_capabilities || [],
+    authorityStatus: preflight.authority_status || (authorityBlockedDraft ? 'action_required' : 'ready'),
     connectorStatus: preflight.connector_status || {},
     grantedConnectorCapabilities: preflight.granted_connector_capabilities || [],
-    warning: preflight.warning || ''
+    missingConnectors: preflight.missing_connectors || [],
+    missingConnectorCapabilities: preflight.missing_connector_capabilities || [],
+    warning: preflight.warning || (authorityBlockedDraft ? preflight.error || preflight.code || 'authority required before external execution' : '')
   };
 
   const estimatedBilling = estimateBilling(picked.agent, {
@@ -10630,9 +10900,10 @@ async function performSingleJobCreate(storage, env, current, body, options = {})
       ...(followupConversation ? [`follow-up to ${followupConversation.followupToJobId} turn=${followupConversation.turn}`] : []),
       ...(optimizationLog ? [optimizationLog] : []),
       preflight.warning ? `preflight warning: ${preflight.warning}` : 'preflight ok',
+      authorityBlockedDraft ? `authority blocker captured for draft handoff: ${preflight.code || 'authority_required'}` : null,
       `${picked.selectionMode === 'manual' ? 'manually selected' : 'matched to'} ${picked.agent.id} score=${picked.score} source=${isBuiltInAgent(picked.agent) ? 'built-in-fallback' : 'provider'}`,
       `inferred taskType=${taskType}`
-    ],
+    ].filter(Boolean),
     selectionMode: picked.selectionMode
   };
   let funding = null;
@@ -10919,6 +11190,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       ...options,
       request,
       skipIntake: true,
+      allowAuthorityBlockedDraft: true,
       asyncDispatch: options.asyncDispatch && !sampleKindFromAgent(selection.agent),
       deferDispatch: Boolean(options.asyncDispatch && sampleKindFromAgent(selection.agent))
     });
@@ -10947,6 +11219,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       ...options,
       request,
       skipIntake: true,
+      allowAuthorityBlockedDraft: true,
       asyncDispatch: false,
       deferDispatch: true
     });
@@ -11035,6 +11308,7 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       ...options,
       request,
       skipIntake: true,
+      allowAuthorityBlockedDraft: true,
       asyncDispatch: false,
       deferDispatch: true
     });

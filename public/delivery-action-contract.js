@@ -472,6 +472,23 @@ export function deliveryControlFieldsForType(type = '', draft = {}, options = {}
     ];
   }
   if (normalizedType === 'report_bundle') {
+    const authority = draft?.authorityRequired && typeof draft.authorityRequired === 'object' ? draft.authorityRequired : {};
+    const needsChannel = Boolean(authority.requiredChannelSelection || authority.required_channel_selection);
+    const candidateChannels = Array.isArray(authority.channelCandidates || authority.channel_candidates)
+      ? (authority.channelCandidates || authority.channel_candidates).map((item) => String(item || '').trim()).filter(Boolean)
+      : [];
+    const defaultChannelOptions = [
+      { value: 'x', label: 'X' },
+      { value: 'instagram', label: 'Instagram' },
+      { value: 'reddit', label: 'Reddit' },
+      { value: 'indie_hackers', label: 'Indie Hackers' },
+      { value: 'email', label: 'Email' },
+      { value: 'github', label: 'GitHub' },
+      { value: 'export_only', label: 'Export only' }
+    ];
+    const channelOptions = candidateChannels.length
+      ? defaultChannelOptions.filter((option) => candidateChannels.includes(option.value))
+      : defaultChannelOptions;
     return [
       {
         kind: 'group',
@@ -487,7 +504,19 @@ export function deliveryControlFieldsForType(type = '', draft = {}, options = {}
               { value: 'execution_order', label: 'Execution order' },
               { value: 'publish_followup', label: 'Publish follow-up' }
             ]
-          }
+          },
+          ...(needsChannel
+            ? [{
+                type: 'select',
+                key: 'channel',
+                label: 'EXECUTION CHANNEL',
+                dataAttr: 'data-generic-delivery-channel',
+                options: [
+                  { value: '', label: 'Select channel' },
+                  ...channelOptions
+                ]
+              }]
+            : [])
         ]
       }
     ];

@@ -16789,10 +16789,16 @@ function genericDeliverableDraftForJob(job = {}, deliverable = null) {
     if (authoritySeed.googleIncludeGroups.length) {
       draft.googleIncludeGroups = authoritySeed.googleIncludeGroups.slice();
     }
-    if (!String(draft.repoFullName || '').trim() && Array.isArray(authoritySeed.repoCandidates) && authoritySeed.repoCandidates.length) {
+    if (authoritySeed.requiredRepositorySelection) {
+      draft.repoFullName = '';
+    }
+    if (authoritySeed.requiredChannelSelection) {
+      draft.channel = '';
+    }
+    if (!authoritySeed.requiredRepositorySelection && !String(draft.repoFullName || '').trim() && Array.isArray(authoritySeed.repoCandidates) && authoritySeed.repoCandidates.length) {
       draft.repoFullName = normalizeRepoFullName(String(authoritySeed.repoCandidates[0] || ''));
     }
-    if (!String(draft.channel || '').trim() && Array.isArray(authoritySeed.channelCandidates) && authoritySeed.channelCandidates.length) {
+    if (!authoritySeed.requiredChannelSelection && !String(draft.channel || '').trim() && Array.isArray(authoritySeed.channelCandidates) && authoritySeed.channelCandidates.length) {
       draft.channel = String(authoritySeed.channelCandidates[0] || '').trim();
     }
   }
@@ -17418,15 +17424,30 @@ function prepareGenericDeliverableOrderFromDelivery(job = null, deliverable = nu
     ];
   } else {
     const nextStep = String(draft.nextStep || 'action_plan');
+    const executionChannel = String(draft.channel || '').trim();
+    const taskTypeForChannel = executionChannel === 'x'
+      ? 'x_post'
+      : executionChannel === 'instagram'
+        ? 'instagram'
+        : executionChannel === 'reddit'
+          ? 'reddit'
+          : executionChannel === 'indie_hackers'
+            ? 'indie_hackers'
+            : executionChannel === 'email'
+              ? 'email_ops'
+              : executionChannel === 'github'
+                ? 'code'
+                : '';
     taskType = nextStep === 'publish_followup'
       ? 'writing'
-      : (nextStep === 'execution_order' ? (job.taskType || 'research') : 'research');
+      : (nextStep === 'execution_order' ? (taskTypeForChannel || job.taskType || 'research') : 'research');
     const sourceLines = [];
     if (String(draft.googleSearchConsoleSite || '').trim()) sourceLines.push(`Use Search Console site: ${String(draft.googleSearchConsoleSite || '').trim()}`);
     if (String(draft.googleGa4Property || '').trim()) sourceLines.push(`Use GA4 property: ${String(draft.googleGa4Property || '').trim()}`);
     if (String(draft.googleDriveFileId || '').trim()) sourceLines.push(`Use Google Drive file: ${String(draft.googleDriveFileId || '').trim()}`);
     if (String(draft.googleCalendarId || '').trim()) sourceLines.push(`Use Google Calendar: ${String(draft.googleCalendarId || '').trim()}`);
     if (String(draft.googleGmailLabelId || '').trim()) sourceLines.push(`Use Gmail label: ${String(draft.googleGmailLabelId || '').trim()}`);
+    if (executionChannel) sourceLines.push(`Execution channel selected by user: ${executionChannel}`);
     promptLines = [
       `Continue from the report delivered in previous order ${job.id}.`,
       '',

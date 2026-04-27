@@ -398,6 +398,39 @@ const syntheticAgentTeamOutput = buildAgentTeamDeliveryOutput({
 ]);
 assert.equal(syntheticAgentTeamOutput.files?.[0]?.content_type, 'social_post_pack', 'agent team output should promote specialist execution packets to explicit deliverables');
 assert.equal(syntheticAgentTeamOutput.report?.authority_request?.missing_connectors?.[0], 'x', 'agent team output should preserve specialist authority requests for execution gating');
+
+const connectorHandoffWorkflow = await request('/api/jobs', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    parent_agent_id: 'qa-runner',
+    task_type: 'cmo_leader',
+    prompt: 'CMO leader: research the launch, choose the channel, and proceed up to an approval-ready X post connector handoff.',
+    order_strategy: 'multi',
+    skip_intake: true,
+    budget_cap: 500
+  })
+});
+assert.equal(connectorHandoffWorkflow.status, 201);
+assert.equal(connectorHandoffWorkflow.body.mode, 'workflow');
+const connectorHandoffState = await request(`/api/jobs/${connectorHandoffWorkflow.body.workflow_job_id}`);
+assert.equal(connectorHandoffState.status, 200);
+const connectorChildRuns = Array.isArray(connectorHandoffState.body.job.workflow?.childRuns)
+  ? connectorHandoffState.body.job.workflow.childRuns
+  : [];
+assert.ok(connectorChildRuns.some((run) => run.taskType === 'x_post'), 'CMO workflow should keep the X action specialist in the plan even without X OAuth');
+const connectorHandoffRawState = await qaStorage.getState();
+const xHandoffJob = connectorHandoffRawState.jobs.find((job) => (
+  job.workflowParentId === connectorHandoffWorkflow.body.workflow_job_id
+  && job.workflowTask === 'x_post'
+));
+assert.equal(xHandoffJob?.status, 'completed', 'connector-blocked X specialist should still complete a draft handoff');
+assert.equal(xHandoffJob?.input?._broker?.agentPreflight?.authorityStatus, 'action_required', 'X specialist should receive connector authority context instead of being dropped');
+assert.equal(xHandoffJob?.output?.report?.authority_request?.missing_connector_capabilities?.[0], 'x.post', 'X specialist should emit a structured connector authority request');
+assert.equal(xHandoffJob?.executorState?.authorityRequired?.missingConnectorCapabilities?.[0], 'x.post', 'X specialist authority request should persist into executor state');
+assert.equal(connectorHandoffState.body.job.output?.report?.authority_request?.missing_connector_capabilities?.[0], 'x.post', 'workflow parent should surface child connector authority requests');
+assert.equal(connectorHandoffState.body.job.executorState?.authorityRequired?.missingConnectorCapabilities?.[0], 'x.post', 'workflow parent should persist connector authority requests for delivery UI gating');
+
 const manualParentId = 'qa-progress-parent';
 const manualChildAId = 'qa-progress-child-a';
 const manualChildBId = 'qa-progress-child-b';
