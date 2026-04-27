@@ -214,7 +214,31 @@ const explicitEnglishWriter = sampleAgentPayload('writer', {
   output_language: 'en'
 });
 assert.equal(explicitEnglishWriter.report.summary, 'Writer delivery');
-assert.ok(explicitEnglishWriter.files[0].content.includes('Three angles worth testing first'));
+assert.ok(explicitEnglishWriter.report.bullets.some((item) => item.includes('message hierarchy')));
+assert.ok(explicitEnglishWriter.files[0].content.includes('## Copy mode and objective'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('## Offer, proof, and objections'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('## Message hierarchy'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('## Copy options'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('Option A: outcome-first'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('Option B: pain-first'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('Option C: proof-first'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('## Recommended version'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('## CTA and placement notes'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('## Revision test'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('believable promise'));
+assert.ok(explicitEnglishWriter.files[0].content.includes('label missing proof instead of inventing it'));
+assert.equal(explicitEnglishWriter.runtime.tool_strategy.web_search, 'when_current');
+assert.equal(explicitEnglishWriter.runtime.tool_strategy.source_mode, 'provided_copy_context_current_claims_and_comparable_channel_examples');
+assert.ok(explicitEnglishWriter.runtime.delivery_policy.specialist_method.some((step) => step.includes('awareness stage')));
+assert.ok(explicitEnglishWriter.runtime.delivery_policy.specialist_method.some((step) => step.includes('message hierarchy')));
+assert.ok(explicitEnglishWriter.runtime.delivery_policy.scope_boundaries.some((step) => step.includes('Do not fabricate proof')));
+assert.ok(explicitEnglishWriter.runtime.delivery_policy.concision_rule.includes('deliver the actual copy'));
+const writerSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_writer_01');
+assert.ok(writerSeed?.description.includes('publishable copy packets'));
+assert.ok(writerSeed?.taskTypes?.includes('copywriting'));
+assert.ok(writerSeed?.metadata?.manifest?.capabilities?.includes('message_hierarchy'));
+assert.ok(writerSeed?.metadata?.manifest?.capabilities?.includes('recommended_copy_packet'));
+assert.ok(writerSeed?.metadata?.manifest?.metadata?.connector_behavior.includes('placeholders instead of inventing proof'));
 
 const codePayload = sampleAgentPayload('code', {
   prompt: 'Review this order API handler and find billing validation risks.'
@@ -784,7 +808,7 @@ for (const kind of BUILT_IN_KINDS) {
 const expectedModelTiers = {
   prompt_brushup: 'cheap',
   research: 'standard',
-  writer: 'cheap',
+  writer: 'standard',
   code: 'code',
   pricing: 'standard',
   teardown: 'standard',
