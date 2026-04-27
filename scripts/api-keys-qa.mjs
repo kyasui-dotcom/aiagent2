@@ -67,6 +67,10 @@ assert.ok(touched);
 assert.equal(touched.apiKey.lastUsedPath, '/api/agents/import-manifest');
 assert.equal(touched.apiKey.lastUsedMethod, 'POST');
 assert.ok(touched.apiKey.lastUsedAt);
+assert.ok(
+  authenticateOrderApiKey(state, created.apiKey.token),
+  'touching API key usage must preserve the key hash'
+);
 
 const sanitized = sanitizeAccountSettingsForClient(state.accounts[0]);
 assert.ok(Array.isArray(sanitized.apiAccess.orderKeys));
