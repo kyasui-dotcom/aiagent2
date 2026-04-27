@@ -4961,6 +4961,8 @@ async function recordChatTranscript(storage, request, env) {
   } else {
     await storage.mutate(async (draft) => {
       if (!Array.isArray(draft.chatTranscripts)) draft.chatTranscripts = [];
+      const existingIndex = draft.chatTranscripts.findIndex((item) => String(item?.id || '') === String(transcript.id || ''));
+      if (existingIndex !== -1) draft.chatTranscripts.splice(existingIndex, 1);
       draft.chatTranscripts.unshift(transcript);
       if (draft.chatTranscripts.length > 2000) draft.chatTranscripts = draft.chatTranscripts.slice(0, 2000);
     });

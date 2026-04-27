@@ -762,6 +762,37 @@ const chatTranscriptGuest = await request('/api/analytics/chat-transcripts', {
 });
 assert.equal(chatTranscriptGuest.status, 201, 'anonymous chat transcripts should be accepted without cookies');
 
+const transcriptUpsertId = 'worker-api-qa-chat-upsert';
+const chatTranscriptSubmitted = await request('/api/analytics/chat-transcripts', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    id: transcriptUpsertId,
+    prompt: 'Submitted chat should be updated by the final answer',
+    answer: 'Request received. CAIt is preparing the response.',
+    answer_kind: 'submitted',
+    status: 'submitted',
+    session_id: 'worker-api-qa-chat-session',
+    visitor_id: 'worker-api-qa-chat'
+  })
+});
+assert.equal(chatTranscriptSubmitted.status, 201, 'submitted chat transcript should be accepted');
+
+const chatTranscriptFinal = await request('/api/analytics/chat-transcripts', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    id: transcriptUpsertId,
+    prompt: 'Submitted chat should be updated by the final answer',
+    answer: 'Final answer ready.',
+    answer_kind: 'assist',
+    status: 'assist',
+    session_id: 'worker-api-qa-chat-session',
+    visitor_id: 'worker-api-qa-chat'
+  })
+});
+assert.equal(chatTranscriptFinal.status, 201, 'final chat transcript should update the submitted row');
+
 const chatTranscriptCsrfBlocked = await request('/api/analytics/chat-transcripts', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
@@ -783,6 +814,10 @@ assert.ok(analyticsSnapshot.body.conversionAnalytics.funnel.some((row) => row.ev
 assert.equal(JSON.stringify(analyticsSnapshot.body.conversionAnalytics).includes('must-not-leak'), false);
 assert.equal(JSON.stringify(analyticsSnapshot.body.chatTranscripts).includes('must-not-leak'), false);
 assert.equal(JSON.stringify(analyticsSnapshot.body.chatTranscripts).includes('buyer@example.com'), false);
+const upsertedTranscripts = analyticsSnapshot.body.chatTranscripts.filter((item) => item.id === transcriptUpsertId);
+assert.equal(upsertedTranscripts.length, 1, 'submitted and final transcript writes should not duplicate rows');
+assert.equal(upsertedTranscripts[0].answerKind, 'assist');
+assert.equal(upsertedTranscripts[0].answer, 'Final answer ready.');
 const adminSnapshot = await request('/api/snapshot', {}, { sessionCookie: adminSession });
 assert.equal(adminSnapshot.status, 200);
 assert.equal(adminSnapshot.body.auth.isPlatformAdmin, true);

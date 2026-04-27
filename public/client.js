@@ -664,8 +664,10 @@ let openChatTypingTimer = null;
 let openChatOrderProgressTimer = null;
 let liveSnapshotRefreshTimer = null;
 let openChatMessageSequence = 0;
+let openChatTranscriptSequence = 0;
 let orderComposerInputTimer = null;
 const deliveryExecutorPersistTimers = new Map();
+const openChatTranscriptWriteQueue = new Map();
 const ORDER_COMPOSER_INPUT_DEBOUNCE_MS = 260;
 
 function normalizeServerResolvedIntentPrompt(prompt = '') {
@@ -1998,26 +2000,46 @@ function chatTranscriptSourceForAnswer(answer = null) {
   return 'work_chat:local';
 }
 
+function makeOpenChatTranscriptId(sessionId = '') {
+  openChatTranscriptSequence += 1;
+  const base = safeAnalyticsString(sessionId || state.currentOpenChatSessionId || 'chat', 80)
+    .replace(/[^a-zA-Z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 80) || 'chat';
+  return `${base}_turn_${Date.now().toString(36)}_${openChatTranscriptSequence}`;
+}
+
 async function trackConversionEvent(event, meta = {}) {
   const eventName = safeAnalyticsString(event, 64).toLowerCase().replace(/[^a-z0-9_:-]+/g, '_').replace(/^_+|_+$/g, '');
   if (!eventName) return;
   try {
+    const csrfToken = state.snapshot?.auth?.csrfToken || '';
     const headers = new Headers({ 'content-type': 'application/json' });
-    if (state.snapshot?.auth?.csrfToken) headers.set('x-aiagent2-csrf', state.snapshot.auth.csrfToken);
-    await fetch('/api/analytics/events', {
+    if (csrfToken) headers.set('x-aiagent2-csrf', csrfToken);
+    const payload = JSON.stringify({
+      event: eventName,
+      visitor_id: visitorId(),
+      page_path: window.location.pathname || '/',
+      current_tab: state.currentTab || '',
+      source: 'web',
+      meta: sanitizeClientAnalyticsMeta(meta)
+    });
+    const response = await fetch('/api/analytics/events', {
       method: 'POST',
       headers,
-      credentials: 'same-origin',
+      credentials: csrfToken ? 'same-origin' : 'omit',
       keepalive: true,
-      body: JSON.stringify({
-        event: eventName,
-        visitor_id: visitorId(),
-        page_path: window.location.pathname || '/',
-        current_tab: state.currentTab || '',
-        source: 'web',
-        meta: sanitizeClientAnalyticsMeta(meta)
-      })
+      body: payload
     });
+    if (!response.ok && csrfToken && response.status === 403) {
+      await fetch('/api/analytics/events', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        credentials: 'omit',
+        keepalive: true,
+        body: payload
+      });
+    }
   } catch {
     // Analytics must never block the product flow.
   }
@@ -2030,7 +2052,11 @@ async function trackChatTranscript(prompt = '', answer = null, meta = {}) {
     const csrfToken = state.snapshot?.auth?.csrfToken || '';
     const transcriptSource = chatTranscriptSourceForAnswer(answer);
     const sessionId = ensureCurrentOpenChatSessionId({ force: true });
-    const payload = JSON.stringify({
+    const transcriptId = safeAnalyticsString(meta.transcriptId || meta.transcript_id || meta.id || '', 160)
+      .replace(/[^a-zA-Z0-9:_-]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+      .slice(0, 160);
+    const body = {
       prompt: String(prompt || '').slice(0, 8000),
       answer: answerBody.slice(0, 8000),
       answer_kind: chatAnswerKind(answer) || 'quick',
@@ -2047,28 +2073,62 @@ async function trackChatTranscript(prompt = '', answer = null, meta = {}) {
         llmProvider: answer?.llmProvider || meta.llmProvider || '',
         responseSource: answer?.responseSource || meta.responseSource || ''
       })
-    });
-    const headers = new Headers({ 'content-type': 'application/json' });
-    if (csrfToken) headers.set('x-aiagent2-csrf', csrfToken);
-    const response = await fetch('/api/analytics/chat-transcripts', {
-      method: 'POST',
-      headers,
-      credentials: csrfToken ? 'same-origin' : 'omit',
-      keepalive: true,
-      body: payload
-    });
-    if (!response.ok && csrfToken && response.status === 403) {
-      await fetch('/api/analytics/chat-transcripts', {
+    };
+    if (transcriptId) body.id = transcriptId;
+    const payload = JSON.stringify(body);
+    const previousWrite = transcriptId ? openChatTranscriptWriteQueue.get(transcriptId) : null;
+    const write = (async () => {
+      if (previousWrite) await previousWrite.catch(() => {});
+      const headers = new Headers({ 'content-type': 'application/json' });
+      if (csrfToken) headers.set('x-aiagent2-csrf', csrfToken);
+      const response = await fetch('/api/analytics/chat-transcripts', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'omit',
+        headers,
+        credentials: csrfToken ? 'same-origin' : 'omit',
         keepalive: true,
         body: payload
       });
+      if (!response.ok && csrfToken && response.status === 403) {
+        await fetch('/api/analytics/chat-transcripts', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          credentials: 'omit',
+          keepalive: true,
+          body: payload
+        });
+      }
+    })();
+    if (transcriptId) {
+      const queuedWrite = write.catch(() => {}).finally(() => {
+        if (openChatTranscriptWriteQueue.get(transcriptId) === queuedWrite) {
+          openChatTranscriptWriteQueue.delete(transcriptId);
+        }
+      });
+      openChatTranscriptWriteQueue.set(transcriptId, queuedWrite);
     }
+    await write;
   } catch {
     // Transcript logging must never block chat or order flow.
   }
+}
+
+function trackOpenChatSubmitTranscript(draft = {}, analyticsDraft = {}) {
+  const prompt = String(draft?.prompt || fallbackPromptFromOrderInput(draft?.input || null)).trim();
+  if (!prompt) return '';
+  const sessionId = ensureCurrentOpenChatSessionId({ force: true });
+  const transcriptId = makeOpenChatTranscriptId(sessionId);
+  void trackChatTranscript(prompt, {
+    kind: 'submitted',
+    body: 'Request received. CAIt is preparing the response.',
+    status: 'submitted',
+    responseSource: 'submitted'
+  }, {
+    ...analyticsDraft,
+    answerKind: 'submitted',
+    status: 'submitted',
+    transcriptId
+  });
+  return transcriptId;
 }
 
 function trackConversionOnce(event, meta = {}, key = event) {
@@ -11717,7 +11777,8 @@ function appendOrderChatExchange(prompt, answer, options = {}) {
   void trackChatTranscript(prompt, displayAnswer, {
     ...inputCounts,
     taskType: inferClientTaskSequence('', nextPrompt || prompt)[0] || currentRoutingTask() || '',
-    status: answerKind || 'quick'
+    status: answerKind || 'quick',
+    transcriptId: options.transcriptId || ''
   });
   renderOrderComposer();
   if (els.runCreateStatus) {
@@ -12502,7 +12563,7 @@ function openManualAgentSkillFlow() {
   }
 }
 
-async function handleAgentSkillMarkdownFromChat(skillMd = '') {
+async function handleAgentSkillMarkdownFromChat(skillMd = '', options = {}) {
   const res = await draftAgentSkillManifestFromText(skillMd);
   const skillName = res.skill?.name || res.draft_manifest?.name || 'Agent Skill';
   const warning = Array.isArray(res.warnings) && res.warnings.length ? `\n\nWarning: ${res.warnings[0]}` : '';
@@ -12541,7 +12602,8 @@ async function handleAgentSkillMarkdownFromChat(skillMd = '') {
   }, {
     tone: 'ok',
     steps: openChatPreviewSteps('skill', skillMd),
-    nextPrompt: ''
+    nextPrompt: '',
+    transcriptId: options.transcriptId || ''
   });
   openManualAgentSkillFlow();
   flash(`Agent Skill draft JSON created from ${skillName}. Review MANIFEST JSON, then import when ready.`, 'ok');
@@ -22590,8 +22652,9 @@ async function createAndOptionallyRunJob() {
   const originalChatPrompt = String(draft.prompt || '').trim();
   const explicitDispatchRequested = isOpenChatExplicitDispatchRequest(originalChatPrompt);
   void trackConversionEvent('chat_message_sent', analyticsDraft);
+  const submittedTranscriptId = trackOpenChatSubmitTranscript(draft, analyticsDraft);
   if (looksLikeAgentSkillMarkdown(draft.prompt)) {
-    await handleAgentSkillMarkdownFromChat(draft.prompt);
+    await handleAgentSkillMarkdownFromChat(draft.prompt, { transcriptId: submittedTranscriptId });
     return;
   }
   let structuredDispatchPrompt = isOpenChatDispatchReadyPrompt(draft.prompt);
@@ -22628,7 +22691,7 @@ async function createAndOptionallyRunJob() {
     if (resolvedIntent?.kind === 'command' && resolvedIntent.action) {
       const resolvedCommandAnswer = buildOpenChatCommandAnswer(originalChatPrompt);
       if (resolvedCommandAnswer) {
-        appendOrderChatExchange(draft.prompt, resolvedCommandAnswer);
+        appendOrderChatExchange(draft.prompt, resolvedCommandAnswer, { transcriptId: submittedTranscriptId });
         const resolvedKind = chatAnswerKind(resolvedCommandAnswer);
         flash(
           resolvedKind === 'command'
@@ -22727,7 +22790,7 @@ async function createAndOptionallyRunJob() {
     });
   }
   if (quickAnswer) {
-    appendOrderChatExchange(draft.prompt, quickAnswer);
+    appendOrderChatExchange(draft.prompt, quickAnswer, { transcriptId: submittedTranscriptId });
     const quickKind = chatAnswerKind(quickAnswer);
     flash(
       quickKind === 'assist'
@@ -22743,7 +22806,7 @@ async function createAndOptionallyRunJob() {
     const prepAnswer = buildOpenChatClarifyModeAnswer(prepPrompt, inputCounts, {
       sourceOnly: !String(draft.prompt || '').trim()
     });
-    appendOrderChatExchange(prepPrompt, prepAnswer);
+    appendOrderChatExchange(prepPrompt, prepAnswer, { transcriptId: submittedTranscriptId });
     flash('Order draft ready. Review it, then press SEND ORDER.', 'ok');
     void trackConversionEvent('draft_order_clarified', { ...analyticsDraft, source: 'clarify_mode' });
     return;
@@ -22753,7 +22816,7 @@ async function createAndOptionallyRunJob() {
     const prepAnswer = buildOpenChatImplicitOrderPrepAnswer(prepPrompt, inputCounts, {
       sourceOnly: !String(draft.prompt || '').trim()
     });
-    appendOrderChatExchange(prepPrompt, prepAnswer);
+    appendOrderChatExchange(prepPrompt, prepAnswer, { transcriptId: submittedTranscriptId });
     flash('Order prepared. Review the structured brief, then press SEND ORDER when ready.', 'ok');
     void trackConversionEvent('draft_order_created', { ...analyticsDraft, source: 'implicit_order_prep' });
     return;
@@ -22780,7 +22843,7 @@ async function createAndOptionallyRunJob() {
       kind: 'error',
       body: blockedStatus,
       status: blockedStatus
-    }, { ...analyticsDraft, status: 'blocked' });
+    }, { ...analyticsDraft, status: 'blocked', transcriptId: submittedTranscriptId });
     if (/login|sign in|sign-in|required/i.test(String(error?.message || ''))) {
       void trackConversionEvent('sign_in_required_shown', { ...analyticsDraft, status: 'blocked' });
     }
@@ -22801,7 +22864,7 @@ async function createAndOptionallyRunJob() {
       kind: 'error',
       body: blockedStatus,
       status: blockedStatus
-    }, { ...analyticsDraft, status: 'blocked' });
+    }, { ...analyticsDraft, status: 'blocked', transcriptId: submittedTranscriptId });
     if (handleOrderPreflightPrompt(preflightError, draft, { analytics: analyticsDraft, source: 'work_chat_server_preflight' })) return;
     throw preflightError;
   }
@@ -22839,7 +22902,7 @@ async function createAndOptionallyRunJob() {
       kind: 'error',
       body: failedStatus,
       status: failedStatus
-    }, { ...analyticsDraft, status: 'api_error' });
+    }, { ...analyticsDraft, status: 'api_error', transcriptId: submittedTranscriptId });
     if (handleOrderPreflightPrompt(error, draft, { analytics: analyticsDraft, source: 'work_chat_api' })) return;
     if (/payment|required|deposit|funding/i.test(String(error?.message || ''))) {
       void trackConversionEvent('payment_required_shown', { ...analyticsDraft, status: 'blocked' });
@@ -22858,7 +22921,7 @@ async function createAndOptionallyRunJob() {
         ...(Array.isArray(created?.questions) ? created.questions.map((question, index) => `${index + 1}. ${question}`) : [])
       ].filter(Boolean).join('\n'),
       status: 'needs_input'
-    }, { ...analyticsDraft, status: 'needs_input' });
+    }, { ...analyticsDraft, status: 'needs_input', transcriptId: submittedTranscriptId });
     handleNeedsInputResponse(created, draft);
     return;
   }
@@ -22896,7 +22959,8 @@ async function createAndOptionallyRunJob() {
   }, {
     ...analyticsDraft,
     status: createdOrderStatus,
-    mode: created.mode || 'run'
+    mode: created.mode || 'run',
+    transcriptId: submittedTranscriptId
   });
   state.selectedJobId = createdOrderId || state.selectedJobId;
   if (created.matched_agent_id) state.selectedAgentId = created.matched_agent_id;
