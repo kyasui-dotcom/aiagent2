@@ -10692,7 +10692,7 @@ async function refreshWorkflowLeaderHandoffForJobId(storage, jobId) {
 
 async function markDispatchScheduled(storage, jobId, agentId, reason = 'dispatch scheduled', options = {}) {
   const at = nowIso();
-  return storage.mutate(async (state) => {
+  const mutateScheduled = async (state) => {
     const job = state.jobs.find((item) => item.id === jobId);
     const agent = state.agents.find((item) => item.id === agentId);
     if (!canAutoScheduleAsyncDispatch(job, agent)) {
@@ -10733,12 +10733,15 @@ async function markDispatchScheduled(storage, jobId, agentId, reason = 'dispatch
       `${reason}; dispatch scheduled for ${agent.id}`
     ];
     return { scheduled: true, job: cloneJob(job), agent: publicAgent(agent) };
-  });
+  };
+  return typeof storage.mutateJobAndAgent === 'function'
+    ? storage.mutateJobAndAgent(jobId, agentId, mutateScheduled)
+    : storage.mutate(mutateScheduled);
 }
 
 async function scheduleProgressDispatchesForJobId(storage, env, waitUntil, jobId, reason = 'progress dispatch', options = {}) {
   if (!jobId) return { scheduled: false, scheduled_count: 0, reason: 'job_id_missing', jobs: [] };
-  await refreshWorkflowLeaderHandoffForJobId(storage, jobId);
+  if (options.refresh !== false) await refreshWorkflowLeaderHandoffForJobId(storage, jobId);
   const state = await storage.getState();
   const targets = pickProgressDispatchTargets(state, jobId, { maxTargets: options.maxTargets || 1 });
   if (!targets.length) return { scheduled: false, scheduled_count: 0, reason: 'no_dispatch_target', jobs: [] };
@@ -10776,7 +10779,8 @@ async function scheduleProgressDispatchesForJobId(storage, env, waitUntil, jobId
             await refreshWorkflowLeaderHandoffForJobId(storage, marked.job.workflowParentId);
             await scheduleProgressDispatchesForJobId(storage, env, null, marked.job.workflowParentId, 'deterministic built-in workflow handoff', {
               maxTargets: 8,
-              awaitDispatch: true
+              awaitDispatch: true,
+              refresh: false
             });
             await reconcileWorkflowParent(storage, marked.job.workflowParentId);
           }
@@ -10840,7 +10844,8 @@ async function runQueuedBuiltInDispatchSweep(storage, env, options = {}) {
     }
     if (!picked) break;
     const result = await scheduleProgressDispatchesForJobId(storage, env, options.waitUntil, picked.candidate.id, options.reason || 'cron dispatch sweep', {
-      maxTargets: Math.max(1, limit - scheduled.length)
+      maxTargets: Math.max(1, limit - scheduled.length),
+      refresh: false
     });
     if (!result?.scheduled) break;
     const scheduledIds = Array.isArray(result.jobs) && result.jobs.length
