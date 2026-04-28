@@ -11444,7 +11444,8 @@ function recentPersistedJobForCreateBody(state = {}, current = {}, body = {}, op
   const requestedParent = String(body?.parent_agent_id || '').trim();
   const requestedWorkflowParent = String(body?.workflow_parent_id || body?.workflowParentId || '').trim();
   const requestedStrategy = normalizeOrderStrategy(body?.order_strategy || body?.orderStrategy || body?.execution_mode || body?.executionMode);
-  const preferWorkflow = requestedStrategy === 'multi' || !requestedWorkflowParent;
+  const requestedSessionId = String(body?.session_id || body?.sessionId || body?.input?.session_id || body?.input?.sessionId || body?.input?._broker?.chatSessionId || body?.input?._broker?.workflow?.chatSessionId || '').trim();
+  const preferWorkflow = !requestedWorkflowParent && requestedStrategy !== 'single';
   const jobs = Array.isArray(state?.jobs) ? state.jobs : [];
   return jobs
     .filter((job) => {
@@ -11452,14 +11453,21 @@ function recentPersistedJobForCreateBody(state = {}, current = {}, body = {}, op
       if (requestedParent && String(job.parentAgentId || '') !== requestedParent) return false;
       if (requestedWorkflowParent && String(job.workflowParentId || '') !== requestedWorkflowParent) return false;
       if (preferWorkflow && requestedStrategy === 'multi' && job.jobKind !== 'workflow') return false;
-      if (!jobPromptMatchesCreateBody(job, body)) return false;
+      const promptMatches = jobPromptMatchesCreateBody(job, body);
+      const sessionMatches = jobSessionMatchesCreateBody(job, body);
+      if (!promptMatches && !(requestedSessionId && sessionMatches)) return false;
       if (!jobRequesterMatchesCurrent(job, current)) return false;
-      if (!jobSessionMatchesCreateBody(job, body)) return false;
       const createdMs = Date.parse(job.createdAt || job.created_at || '');
       if (!Number.isFinite(createdMs) || nowMs - createdMs > maxAgeMs) return false;
       return true;
     })
-    .sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')))[0] || null;
+    .sort((left, right) => {
+      if (preferWorkflow) {
+        const workflowDiff = (right.jobKind === 'workflow' ? 1 : 0) - (left.jobKind === 'workflow' ? 1 : 0);
+        if (workflowDiff) return workflowDiff;
+      }
+      return String(right.createdAt || '').localeCompare(String(left.createdAt || ''));
+    })[0] || null;
 }
 
 async function recoverCreateJobException(storage, current, body, error) {
@@ -11468,6 +11476,12 @@ async function recoverCreateJobException(storage, current, body, error) {
     const state = await storage.getState();
     recoveredJob = recentPersistedJobForCreateBody(state, current, body);
   } catch {}
+  if (!recoveredJob?.id && typeof storage.getFreshState === 'function') {
+    try {
+      const freshState = await storage.getFreshState();
+      recoveredJob = recentPersistedJobForCreateBody(freshState, current, body);
+    } catch {}
+  }
   const message = String(error?.message || error || 'Unknown order create error').slice(0, 500);
   const meta = {
     kind: 'order_create_exception',

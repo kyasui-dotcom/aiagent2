@@ -625,6 +625,7 @@ const state = {
   openChatProgressLastKey: '',
   openChatProgressPollCount: 0,
   openChatPendingDispatchMessageId: '',
+  openChatDispatchInFlightKey: '',
   pendingOrderConfirmation: null,
   orderInputFiles: [],
   orderInputFileWarnings: [],
@@ -932,6 +933,124 @@ function orderProgressCounts(jobOrCreated = {}) {
   const running = Number(counts.running || childRuns.filter((run) => ['running', 'claimed', 'dispatched'].includes(String(run?.status || '').toLowerCase())).length || 0);
   const queued = Number(counts.queued || childRuns.filter((run) => String(run?.status || '').toLowerCase() === 'queued').length || 0);
   return { total, completed, failed, blocked, running, queued };
+}
+
+function orderCreateRecoverySessionId(source = {}) {
+  const input = source?.input && typeof source.input === 'object' ? source.input : {};
+  const broker = input._broker && typeof input._broker === 'object' ? input._broker : {};
+  const workflow = broker.workflow && typeof broker.workflow === 'object' ? broker.workflow : {};
+  return String(
+    source?.session_id
+    || source?.sessionId
+    || input.session_id
+    || input.sessionId
+    || broker.chatSessionId
+    || workflow.chatSessionId
+    || ''
+  ).trim();
+}
+
+function normalizeOrderCreateRecoveryText(value = '') {
+  return String(value || '').trim().replace(/\s+/g, ' ');
+}
+
+function orderCreateRecoveryPromptMatches(job = {}, payload = {}) {
+  const requested = normalizeOrderCreateRecoveryText(payload?.prompt || '');
+  if (!requested) return false;
+  const candidates = [
+    job.prompt,
+    job.originalPrompt,
+    job.workflow?.objective
+  ].map(normalizeOrderCreateRecoveryText).filter(Boolean);
+  return candidates.some((candidate) => (
+    candidate === requested
+    || (requested.length > 80 && candidate.includes(requested.slice(0, 80)))
+    || (candidate.length > 80 && requested.includes(candidate.slice(0, 80)))
+  ));
+}
+
+function orderCreateRecoverySessionMatches(job = {}, payload = {}) {
+  const requestedSession = orderCreateRecoverySessionId(payload);
+  if (!requestedSession) return false;
+  const jobSession = orderCreateRecoverySessionId(job);
+  return Boolean(jobSession && jobSession === requestedSession);
+}
+
+function orderCreateRecoveryCandidate(job = {}, payload = {}) {
+  if (!job?.id) return false;
+  const parentAgent = String(payload?.parent_agent_id || '').trim();
+  if (parentAgent && String(job.parentAgentId || '') !== parentAgent) return false;
+  const createdMs = Date.parse(job.createdAt || job.created_at || '');
+  if (!Number.isFinite(createdMs) || Date.now() - createdMs > 10 * 60 * 1000) return false;
+  const promptMatches = orderCreateRecoveryPromptMatches(job, payload);
+  const sessionMatches = orderCreateRecoverySessionMatches(job, payload);
+  if (!promptMatches && !sessionMatches) return false;
+  return true;
+}
+
+function createdPayloadFromRecoveredJob(job = {}) {
+  const isWorkflow = job?.jobKind === 'workflow' || Boolean(job?.workflow);
+  const workflow = job?.workflow && typeof job.workflow === 'object' ? job.workflow : null;
+  const childRuns = Array.isArray(workflow?.childRuns) ? workflow.childRuns : [];
+  return {
+    ok: true,
+    recovered: true,
+    code: 'client_order_create_recovered',
+    status: job.status || 'queued',
+    mode: isWorkflow ? 'workflow' : (job.status || 'queued'),
+    ...(isWorkflow ? { workflow_job_id: job.id } : { job_id: job.id }),
+    child_runs: childRuns,
+    workflow: workflow || undefined,
+    planned_task_types: Array.isArray(workflow?.plannedTasks) ? workflow.plannedTasks : undefined,
+    matched_agent_id: job.assignedAgentId || undefined,
+    matched_agent_ids: childRuns.map((run) => run?.agentId).filter(Boolean),
+    dispatch_status: job.dispatch?.completionStatus || job.status || undefined,
+    order_strategy_resolved: isWorkflow ? 'multi' : 'single',
+    routing_reason: 'Recovered from order history after the create response failed.'
+  };
+}
+
+async function recoverAcceptedOrderAfterCreateError(payload = {}, options = {}) {
+  const ja = Boolean(options.ja);
+  const shouldTry = isRetriableFetchError(options.error)
+    || Number(options.error?.status || 0) >= 500
+    || String(options.error?.data?.code || '') === 'order_create_failed';
+  if (!shouldTry) return null;
+  updateWorkChatStatusCard(
+    ja ? '受付状況を確認しています。' : 'Checking order acceptance.',
+    ja
+      ? 'レスポンスは失敗しましたが、オーダーが保存済みの可能性があります。再送せずに履歴を確認しています。'
+      : 'The create response failed, but the order may already be saved. CAIt is checking history before allowing a retry.',
+    'info'
+  );
+  if (els.runCreateStatus) {
+    els.runCreateStatus.textContent = ja
+      ? '受付状況を確認しています。\n\n再送せず、保存済みオーダーを確認しています。'
+      : 'Checking order acceptance.\n\nNot resubmitting; checking for a saved order first.';
+    els.runCreateStatus.className = 'detail-box action-card info compact-card';
+  }
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (attempt) await waitForNetworkRetry(800 * attempt);
+    try {
+      const result = await api(`/api/jobs?limit=20&visitor_id=${encodeURIComponent(visitorId())}`, {
+        preserveAuthOn401: true
+      });
+      const jobs = Array.isArray(result?.jobs) ? result.jobs : [];
+      const recovered = jobs
+        .filter((job) => orderCreateRecoveryCandidate(job, payload))
+        .sort((left, right) => {
+          const preferWorkflow = (job) => (job?.jobKind === 'workflow' || job?.workflow ? 1 : 0);
+          const workflowDiff = preferWorkflow(right) - preferWorkflow(left);
+          if (workflowDiff) return workflowDiff;
+          return String(right?.createdAt || '').localeCompare(String(left?.createdAt || ''));
+        })[0] || null;
+      if (recovered?.id) {
+        mergeProgressJobIntoSnapshot(recovered);
+        return createdPayloadFromRecoveredJob(recovered);
+      }
+    } catch {}
+  }
+  return null;
 }
 
 function orderProgressMeta(subject = {}, options = {}) {
@@ -2318,13 +2437,15 @@ function isRetriableFetchError(error = null) {
 }
 
 async function fetchWithNetworkRetry(url, options = {}) {
+  const { retryAttempts, ...fetchOptions } = options || {};
+  const attempts = Math.max(1, Number(retryAttempts || 1) || 1);
   let lastError = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      return await fetch(url, options);
+      return await fetch(url, fetchOptions);
     } catch (error) {
       lastError = error;
-      if (!isRetriableFetchError(error) || attempt >= 1) break;
+      if (!isRetriableFetchError(error) || attempt >= attempts - 1) break;
       await waitForNetworkRetry(450);
     }
   }
@@ -2344,7 +2465,8 @@ async function api(url, options = {}) {
     response = await fetchWithNetworkRetry(url, {
       ...requestOptions,
       method,
-      headers
+      headers,
+      retryAttempts: ['GET', 'HEAD', 'OPTIONS'].includes(method) ? 2 : 1
     });
   } catch (error) {
     const networkError = new Error('Network request failed after retry. Reload the page once, then retry the action. If this continues, the API path or browser session needs inspection.');
@@ -12566,9 +12688,11 @@ function renderWorkChatThread() {
 
   els.workChatThread.innerHTML = messages.join('');
   els.workChatThread.querySelectorAll('[data-chat-action]').forEach((button) => {
-    button.onclick = () => handleChatActionButton(button.dataset.chatAction || '', {
-      agentId: button.dataset.chatAgentId || '',
-      connector: button.dataset.chatConnector || ''
+    button.onclick = () => runAction(button, async () => {
+      await handleChatActionButton(button.dataset.chatAction || '', {
+        agentId: button.dataset.chatAgentId || '',
+        connector: button.dataset.chatConnector || ''
+      });
     });
   });
   els.workChatThread.scrollTop = els.workChatThread.scrollHeight;
@@ -12712,7 +12836,7 @@ async function handleChatActionButton(action = '', detail = {}) {
         };
       }
       flash('Confirmation accepted. Sending the order now.', 'ok');
-      void createAndOptionallyRunJob();
+      await createAndOptionallyRunJob();
     },
     revise_order: async () => { enterOpenChatRevisionChoice(); },
     cancel_order: async () => {
@@ -23372,6 +23496,18 @@ async function createAndOptionallyRunJob() {
     visitor_id: visitorId(),
     async_dispatch: true
   };
+  const dispatchInFlightKey = compactChatText([
+    payload.session_id || payload.sessionId || '',
+    payload.parent_agent_id || '',
+    payload.task_type || '',
+    payload.order_strategy || '',
+    payload.prompt || ''
+  ].join('|'), 1200);
+  if (state.openChatDispatchInFlightKey && state.openChatDispatchInFlightKey === dispatchInFlightKey) {
+    flash(looksJapanese(payload.prompt) ? '同じ発注を送信中です。再送せず進捗表示を待っています。' : 'This order is already being sent. Waiting for the progress message instead of resubmitting.', 'info');
+    return;
+  }
+  state.openChatDispatchInFlightKey = dispatchInFlightKey;
   const sendingJa = looksJapanese(payload.prompt);
   const sendingTitle = sendingJa ? '発注を送信しています。' : 'Sending order...';
   const sendingBody = sendingJa
@@ -23395,20 +23531,39 @@ async function createAndOptionallyRunJob() {
     created = await api('/api/jobs', { method: 'POST', body: JSON.stringify(payload) });
   } catch (error) {
     stopAcceptanceProgress();
-    clearOpenChatPendingDispatchMessage();
-    const failedStatus = String(error?.message || 'Order request failed before dispatch.').slice(0, 240);
-    void trackChatTranscript(payload.prompt, {
-      kind: 'error',
-      body: failedStatus,
-      status: failedStatus
-    }, { ...analyticsDraft, status: 'api_error', transcriptId: submittedTranscriptId });
-    if (handleOrderPreflightPrompt(error, draft, { analytics: analyticsDraft, source: 'work_chat_api' })) return;
-    if (/payment|required|deposit|funding/i.test(String(error?.message || ''))) {
-      void trackConversionEvent('payment_required_shown', { ...analyticsDraft, status: 'blocked' });
-      if (handleOrderFundingPrompt(error, draft, { analytics: analyticsDraft, source: 'work_chat' })) return;
-      openSettingsSection('payments');
+    const recovered = await recoverAcceptedOrderAfterCreateError(payload, { error, ja: sendingJa });
+    if (recovered) {
+      created = recovered;
+      flash(
+        sendingJa
+          ? 'レスポンス失敗後に保存済みオーダーを確認しました。進捗表示へ切り替えます。'
+          : 'Recovered a saved order after the create response failed. Switching to progress tracking.',
+        'ok'
+      );
+    } else {
+      clearOpenChatPendingDispatchMessage();
+      if (state.openChatDispatchInFlightKey === dispatchInFlightKey) state.openChatDispatchInFlightKey = '';
+      const failedStatus = String(error?.message || 'Order request failed before dispatch.').slice(0, 240);
+      void trackChatTranscript(payload.prompt, {
+        kind: 'error',
+        body: failedStatus,
+        status: failedStatus
+      }, { ...analyticsDraft, status: 'api_error', transcriptId: submittedTranscriptId });
+      if (handleOrderPreflightPrompt(error, draft, { analytics: analyticsDraft, source: 'work_chat_api' })) return;
+      if (/payment|required|deposit|funding/i.test(String(error?.message || ''))) {
+        void trackConversionEvent('payment_required_shown', { ...analyticsDraft, status: 'blocked' });
+        if (handleOrderFundingPrompt(error, draft, { analytics: analyticsDraft, source: 'work_chat' })) return;
+        openSettingsSection('payments');
+      }
+      throw error;
     }
-    throw error;
+  } finally {
+    if (state.openChatDispatchInFlightKey === dispatchInFlightKey) state.openChatDispatchInFlightKey = '';
+  }
+  if (!created) {
+    stopAcceptanceProgress();
+    clearOpenChatPendingDispatchMessage();
+    throw new Error('Order request ended without an Order ID. Reload WORK and check order history before retrying.');
   }
   stopAcceptanceProgress();
   clearOpenChatPendingDispatchMessage();

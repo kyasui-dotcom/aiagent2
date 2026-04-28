@@ -2145,6 +2145,25 @@ try {
   assert.equal(recoveredWorkflowOrder.body.recovered, true);
   assert.ok(recoveredWorkflowOrder.body.workflow_job_id, 'workflow recovery should return the persisted workflow id');
 
+  const recoveredAutoWorkflowOrder = await request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      parent_agent_id: 'qa-recovery',
+      task_type: 'cmo_leader',
+      order_strategy: 'auto',
+      prompt: 'CMO leader: verify auto-routed customer acquisition recovery after a persisted parent create fault.',
+      session_id: 'qa-recovery-auto-session',
+      skip_intake: true,
+      budget_cap: 500
+    })
+  }, { env: { ...env, QA_ORDER_CREATE_FAULT: 'after_workflow_parent_insert' } });
+  assert.equal(recoveredAutoWorkflowOrder.status, 202);
+  assert.equal(recoveredAutoWorkflowOrder.body.code, 'order_create_recovered');
+  assert.equal(recoveredAutoWorkflowOrder.body.mode, 'workflow');
+  assert.equal(recoveredAutoWorkflowOrder.body.recovered, true);
+  assert.ok(recoveredAutoWorkflowOrder.body.workflow_job_id, 'auto workflow recovery should return the persisted workflow parent id');
+
   const deletedImported = await request(`/api/agents/${imported.body.agent.id}`, { method: 'DELETE' });
   assert.equal(deletedImported.status, 200);
   assert.equal(deletedImported.body.ok, true);
