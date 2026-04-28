@@ -33,6 +33,8 @@ assert.ok(builtInAgentSource.includes('do not stop at a plan or "approve researc
 assert.ok(builtInAgentSource.includes('workflow_fast_draft'), 'Workflow built-in runs should use a bounded single-draft path to avoid Cloudflare background timeout loops');
 assert.ok(builtInAgentSource.includes('BUILTIN_OPENAI_WORKFLOW_TIMEOUT_MS'), 'Workflow built-in run timeout must be configurable');
 assert.ok(builtInAgentSource.includes("normalizedKind.endsWith('_leader')"), 'Leader workflow planning should not spend the first dispatch on web search');
+assert.ok(builtInAgentSource.includes('Promise.race'), 'OpenAI calls should have an explicit timeout race, not only AbortController');
+assert.ok(builtInAgentSource.includes('workflow_fast_fallback'), 'Workflow built-in runs should complete with a fallback if OpenAI exceeds the latency budget');
 
 function builtInSeedManifest(seed = {}) {
   const manifest = seed?.metadata?.manifest && typeof seed.metadata.manifest === 'object'
