@@ -10756,6 +10756,33 @@ async function scheduleProgressDispatchesForJobId(storage, env, waitUntil, jobId
       parentJobId: marked.job.workflowParentId || target.parentJobId || null
     });
     if (marked.job.workflowParentId) await reconcileWorkflowParent(storage, marked.job.workflowParentId);
+    const sampleKind = sampleKindFromAgent(target.agent);
+    const workflowRun = Boolean(marked.job?.workflowParentId || marked.job?.input?._broker?.workflow);
+    if (sampleKind && workflowRun && !useOpenAiForBuiltInWorkflow(env)) {
+      const payload = buildDispatchPayload(marked.job, target.agent);
+      const body = sampleAgentPayload(sampleKind, payload);
+      const normalized = normalizeDispatchResponse(body);
+      normalized.usage = usageWithObservedJobTokens(marked.job, normalized.usage, normalized.report);
+      const completed = await completeJobFromAgentResult(storage, marked.job.id, target.agent.id, {
+        report: normalized.report,
+        files: normalized.files,
+        usage: normalized.usage,
+        returnTargets: normalized.returnTargets
+      }, { source: 'built-in-workflow-deterministic' });
+      if (completed?.ok) {
+        await touchEvent(storage, 'COMPLETED', `${marked.job.taskType}/${marked.job.id.slice(0, 6)} completed by deterministic built-in workflow`);
+        await recordBillingOutcome(storage, completed.job, completed.billing, 'built-in-workflow-deterministic');
+        if (marked.job.workflowParentId) {
+          await refreshWorkflowLeaderHandoffForJobId(storage, marked.job.workflowParentId);
+          await scheduleProgressDispatchesForJobId(storage, env, null, marked.job.workflowParentId, 'deterministic built-in workflow handoff', {
+            maxTargets: 8,
+            awaitDispatch: true
+          });
+          await reconcileWorkflowParent(storage, marked.job.workflowParentId);
+        }
+      }
+      continue;
+    }
     dispatchPromises.push(dispatchExistingJobToAssignedAgent(storage, env, marked.job.id, marked.agent.id)
       .catch((error) => touchEvent(storage, 'FAILED', `${marked.job.taskType}/${marked.job.id.slice(0, 6)} scheduled dispatch exception ${String(error?.message || error).slice(0, 120)}`)));
   }
