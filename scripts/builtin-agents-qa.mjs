@@ -28,6 +28,8 @@ assert.ok(builtInAgentSource.includes('webSourcesOf(payload)'), 'OpenAI web sear
 assert.ok(builtInAgentSource.includes('web_sources'), 'OpenAI web sources should be surfaced in report/runtime payloads');
 assert.ok(builtInAgentSource.includes('Supporting work products'), 'Leader final deliveries should include supporting work product tables');
 assert.ok(builtInAgentSource.includes('target URL/path, H1 or title, section outline, CTA copy'), 'Growth operator output must include executable artifact packets');
+assert.ok(builtInAgentSource.includes('Execution-request handling'), 'Action-through-delivery orders must activate execution-specific leader behavior');
+assert.ok(builtInAgentSource.includes('do not stop at a plan or "approve research first"'), 'CMO leader must not end action requests as plan-only approval reports');
 
 function builtInSeedManifest(seed = {}) {
   const manifest = seed?.metadata?.manifest && typeof seed.metadata.manifest === 'object'
@@ -310,6 +312,13 @@ assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('routing_decision'
 assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('stop_go_gate'));
 assert.ok(cmoSeed?.metadata?.manifest?.capabilities?.includes('final_responsibility'));
 assert.equal(cmoSeed?.metadata?.manifest?.metadata?.planned_action_contract, 'lane_owner_artifact_connector_metric');
+const ctoSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_cto_leader_01');
+assert.ok(ctoSeed?.description.includes('safe technical lane'));
+assert.ok(ctoSeed?.metadata?.manifest?.capabilities?.includes('technical_dispatch_packet'));
+assert.ok(ctoSeed?.metadata?.manifest?.capabilities?.includes('rollout_packet'));
+assert.ok(ctoSeed?.metadata?.manifest?.capabilities?.includes('rollback_trigger'));
+assert.equal(ctoSeed?.metadata?.manifest?.metadata?.planned_action_contract, 'system_owner_artifact_validation');
+assert.equal(ctoSeed?.metadata?.manifest?.metadata?.architecture_contract, 'constraints_tradeoffs_rollout_rollback');
 const landingSeed = DEFAULT_AGENT_SEEDS.find((agent) => agent.id === 'agent_landing_01');
 assert.ok(landingSeed?.description.includes('HTML/CSS'));
 assert.ok(landingSeed?.metadata?.manifest?.capabilities?.includes('landing_html'));
@@ -532,11 +541,33 @@ assert.ok(cmoPayload.files[0].content.includes('Specialist dispatch packet'));
 assert.ok(cmoPayload.files[0].content.includes('Leader approval queue'));
 assert.ok(cmoPayload.files[0].content.includes('Planned action table'));
 assert.ok(cmoPayload.files[0].content.includes('next-best lane'));
+assert.equal(cmoPayload.files[0].execution_candidate, undefined, 'Plan-only CMO requests should not be promoted as execution packets');
+
+const cmoActionPayload = sampleAgentPayload('cmo_leader', {
+  prompt: 'CMOスタートで外部コネクターまで実行し、X投稿とディレクトリ掲載のアクションまで完走したい'
+});
+assert.equal(cmoActionPayload.files[0].content_type, 'report_bundle', 'Action-through-delivery CMO output should be an explicit execution candidate');
+assert.equal(cmoActionPayload.files[0].execution_candidate, true);
+assert.equal(cmoActionPayload.files[0].draft_defaults.nextStep, 'execution_order');
+assert.equal(cmoActionPayload.files[0].draft_defaults.channel, 'x');
+assert.equal(cmoActionPayload.report.execution_candidate.type, 'report_bundle');
+assert.ok(cmoActionPayload.report.execution_candidate.reason);
 
 const ctoPayload = sampleAgentPayload('cto_leader', {
   prompt: 'Act as CTO and review architecture, security, and rollout.'
 });
 assert.equal(ctoPayload.report.summary, 'CTO Team Leader delivery');
+assert.ok(ctoPayload.report.bullets.some((item) => item.includes('execution lane') || item.includes('実行レーン')));
+assert.ok(ctoPayload.files[0].content.includes('System snapshot and constraints'));
+assert.ok(ctoPayload.files[0].content.includes('Tradeoff table'));
+assert.ok(ctoPayload.files[0].content.includes('Chosen technical path'));
+assert.ok(ctoPayload.files[0].content.includes('Specialist dispatch packets'));
+assert.ok(ctoPayload.files[0].content.includes('Validation gate'));
+assert.ok(ctoPayload.files[0].content.includes('Rollout packet'));
+assert.ok(ctoPayload.files[0].content.includes('Monitoring and rollback'));
+assert.ok(ctoPayload.files[0].content.includes('Open blockers'));
+assert.ok(ctoPayload.runtime.delivery_policy.specialist_method.some((step) => step.includes('dispatch packets') || step.includes('dispatch packet')));
+assert.ok(ctoPayload.runtime.delivery_policy.scope_boundaries.some((step) => step.includes('broad rewrite')));
 
 const cpoPayload = sampleAgentPayload('cpo_leader', {
   prompt: 'Act as CPO and prioritize the roadmap.'
@@ -1036,7 +1067,7 @@ const ctoHealth = builtInAgentHealthPayload('cto_leader', { OPENAI_API_KEY: 'tes
 assert.equal(ctoHealth.model, 'gpt-5.4-mini');
 assert.equal(ctoHealth.model_tier, 'code');
 assert.equal(ctoHealth.tool_strategy.web_search, 'default');
-assert.ok(ctoHealth.specialist_method.some((step) => step.includes('rollout')));
+assert.ok(ctoHealth.specialist_method.some((step) => step.includes('dispatch packets') || step.includes('rollout')));
 assert.ok(ctoHealth.scope_boundaries.some((step) => step.includes('architecture changes')));
 assert.ok(ctoHealth.freshness_policy.includes('version-sensitive'));
 assert.ok(ctoHealth.sensitive_data_policy.includes('security findings'));

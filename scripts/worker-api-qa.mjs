@@ -452,6 +452,42 @@ assert.equal(syntheticAgentTeamOutput.report?.authority_request?.missing_connect
 assert.equal(syntheticAgentTeamOutput.summary, 'Leader final summary', 'leader-authored summary should remain the default integrated summary when available');
 assert.equal(syntheticAgentTeamOutput.report?.childRuns?.length, 2, 'integrated output should keep supporting work product summaries attached to the merged report');
 
+const syntheticLeaderOnlyOutput = buildAgentTeamDeliveryOutput({
+  workflow: { objective: 'Launch synthetic QA through action' },
+  prompt: 'Launch synthetic QA through action'
+}, [
+  {
+    id: 'leader-only-final',
+    taskType: 'cmo_leader',
+    workflowTask: 'cmo_leader',
+    workflowAgentName: 'CMO Team Leader',
+    status: 'completed',
+    createdAt: nowIso(),
+    completedAt: nowIso(),
+    input: { _broker: { workflow: { sequencePhase: 'final_summary' } } },
+    output: {
+      summary: 'Leader-only final summary',
+      report: {
+        summary: 'Leader-only final summary',
+        bullets: ['execution lane chosen'],
+        nextAction: 'Convert this packet into the next executable order.'
+      },
+      files: [
+        {
+          name: 'cmo-team-leader-delivery.md',
+          type: 'text/markdown',
+          content: '# CMO leader final\n\n## Planned action table\n| order | lane | owner | exact artifact |\n| --- | --- | --- | --- |\n| 1 | X launch | CMO leader | post-ready packet |\n\n## Next action\nConvert this packet into the next executable order.'
+        }
+      ]
+    }
+  }
+]);
+assert.equal(syntheticLeaderOnlyOutput.files?.[0]?.content_type, 'report_bundle', 'leader-only final output should be promoted from attachment to execution candidate');
+assert.equal(syntheticLeaderOnlyOutput.files?.[0]?.execution_candidate, true);
+assert.equal(syntheticLeaderOnlyOutput.files?.[0]?.draft_defaults?.nextStep, 'execution_order');
+assert.equal(syntheticLeaderOnlyOutput.files?.[0]?.draft_defaults?.channel, 'x');
+assert.equal(syntheticLeaderOnlyOutput.report?.execution_candidate?.type, 'report_bundle');
+
 const connectorHandoffWorkflow = await request('/api/jobs', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },

@@ -232,7 +232,7 @@ assert.ok(js.includes('void backfillTrackedJobsIntoSnapshot(state.snapshot || {}
 assert.ok(!js.includes("state.stripeStatus = await api('/api/stripe/status'"));
 assert.ok(js.includes("void api('/api/stripe/status', { preserveAuthOn401: true })"));
 assert.ok(!js.includes('work_chat_server_preflight'));
-assert.ok(worker.includes('if (!asyncDispatch) {\n    resolved = await maybeRefineWorkflowPlanWithLeaderLlm'));
+assert.ok(/if \(!asyncDispatch\) {\s+resolved = await maybeRefineWorkflowPlanWithLeaderLlm/.test(worker));
 assert.ok(js.includes('function setOrderStrategyChoice'));
 assert.ok(js.includes('function renderOrderStrategyControls'));
 assert.ok(js.includes("els.executionAutoBtn.onclick = () => setOrderStrategyChoice('auto')"));
