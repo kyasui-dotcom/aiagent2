@@ -16309,6 +16309,41 @@ function setAdminDetail(title, value) {
   safeText(els.adminDetail, `${title}\n\n${JSON.stringify(value || {}, null, 2)}`);
 }
 
+function adminChatSessionDetailText(chat = {}) {
+  const turns = Array.isArray(chat.turns) && chat.turns.length ? chat.turns : [chat];
+  const lines = [
+    'CHAT SESSION DETAIL',
+    '',
+    `Session: ${chat.sessionId || chat.id || '-'}`,
+    `Segment: ${chat.adminSegmentLabel || chat.adminSegment || chat.authProvider || '-'}`,
+    `Handling: ${chat.handlingLabel || chat.handlingStatus || '-'}`,
+    `Started: ${formatTime(chat.startedAt || chat.createdAt)}`,
+    `Updated: ${formatTime(chat.updatedAt || chat.createdAt)}`,
+    `Turns: ${chat.turnCount || turns.length}`,
+    `Active order: ${chat.linkedOrderId || (Array.isArray(chat.activeJobIds) && chat.activeJobIds.length ? chat.activeJobIds.join(', ') : '-')}`,
+    ''
+  ];
+  turns.forEach((turn, index) => {
+    lines.push(
+      `#${index + 1} ${formatTime(turn.createdAt || chat.createdAt)} · ${String(turn.answerKind || turn.status || 'chat').toUpperCase()} · task=${turn.taskType || chat.latestTaskType || '-'}`,
+      `Review: ${turn.reviewStatus || chat.latestReviewStatus || 'new'}${turn.redacted ? ' · redacted' : ''}`,
+      'USER:',
+      turn.prompt || '-',
+      'CAIt:',
+      turn.answer || '-'
+    );
+    if (turn.expectedHandling) lines.push('Expected handling:', turn.expectedHandling);
+    if (turn.improvementNote) lines.push('Improvement note:', turn.improvementNote);
+    lines.push('');
+  });
+  return lines.join('\n').trim();
+}
+
+function setAdminChatSessionDetail(chat = {}) {
+  if (!els.adminDetail) return;
+  safeText(els.adminDetail, adminChatSessionDetailText(chat));
+}
+
 function renderAdminRows(container, gridClass, headers = [], rows = [], emptyText = 'No records yet.') {
   if (!container) return;
   if (!rows.length) {
@@ -16324,6 +16359,12 @@ function renderAdminRows(container, gridClass, headers = [], rows = [], emptyTex
       const kind = node.dataset.adminKind || '';
       const index = Number(node.dataset.adminIndex || 0);
       const source = state.snapshot?.adminDashboard?.[kind] || [];
+      [...container.querySelectorAll('.selected-row')].forEach((row) => row.classList.remove('selected-row'));
+      node.classList.add('selected-row');
+      if (kind === 'chats') {
+        setAdminChatSessionDetail(source[index] || {});
+        return;
+      }
       setAdminDetail(`${kind.toUpperCase()} DETAIL`, source[index] || {});
     };
   });

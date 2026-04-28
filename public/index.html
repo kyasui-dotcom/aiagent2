@@ -24,7 +24,7 @@
   <link rel="alternate" type="application/atom+xml" title="CAIt News Atom" href="/feed.xml" />
   <link rel="stylesheet" href="/styles.css?v=20260424am" />
   <link rel="preload" href="/fast-auth.js?v=20260427b" as="script" />
-  <link rel="modulepreload" href="/client.js?v=20260428d" />
+  <link rel="modulepreload" href="/client.js?v=20260428e" />
   <script type="application/ld+json">[
     {
       "@context": "https://schema.org",
@@ -1128,7 +1128,7 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
 
       <section class="box panel-stack">
         <div class="section-title">LATEST ACTIVITY</div>
-        <pre id="adminDetail" class="detail-box compact-card">Select a row from any admin table.</pre>
+        <pre id="adminDetail" class="detail-box compact-card">Select a row from any admin table. Click a chat row to inspect that session transcript.</pre>
       </section>
 
       <section class="main-grid split-50">
@@ -1147,6 +1147,7 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
       <section class="main-grid split-50">
         <section class="box panel-stack">
           <div class="section-title">CHAT HISTORY</div>
+          <div class="muted">Click a chat session row to view the conversation history for that session.</div>
           <div id="adminChatSegmentationCard" class="detail-box action-card info compact-card">Chat split and handling status will appear here.</div>
           <div class="helper-row">
             <button id="adminChatFilterNeedsReviewBtn" type="button" class="mini-btn">NEEDS REVIEW</button>
@@ -1339,7 +1340,7 @@ Tell CAIt what work you want done. This screen is for preparing and sending work
     </div>
   </div>
   <script src="/fast-auth.js?v=20260427b"></script>
-  <script type="module" src="/client.js?v=20260428d"></script>
+  <script type="module" src="/client.js?v=20260428e"></script>
   <script defer src="/analytics-loader.js?v=20260425a"></script>
 </body>
 </html>
