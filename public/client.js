@@ -1285,7 +1285,12 @@ function orderAcceptanceProgressMeta(phase = 0, options = {}) {
     blocked: 0,
     percent: [12, 36, 64, 84][safePhase] || 12,
     states,
-    route: options.ja ? '受付処理' : 'Order acceptance'
+    route: options.ja ? '受付処理・エージェント未開始' : 'Acceptance only, agents not started',
+    kind: 'acceptance',
+    sideLabel: options.ja ? 'Order ID確定待ち' : 'Waiting for Order ID',
+    note: options.ja
+      ? 'これは受付処理です。エージェント実行の進捗ではありません。'
+      : 'This is order acceptance, not agent execution.'
   };
 }
 
@@ -1312,8 +1317,11 @@ function orderAcceptanceProgressBody(prompt = '', startedAt = Date.now(), option
     ja ? `経過: ${elapsedSec}秒` : `Elapsed: ${elapsedSec}s`,
     ja ? `現在: ${phaseText}` : `Now: ${phaseText}`,
     ja
-      ? '受付が完了したら、このメッセージをOrder ID付きの進捗表示に置き換えます。'
-      : 'When accepted, this message will become the Order ID progress card.'
+      ? '区分: 受付処理です。エージェント実行はOrder IDが出てから始まります。'
+      : 'Phase: acceptance only. Agent execution starts after the Order ID appears.',
+    ja
+      ? 'オーダー一覧はOrder ID確定後に更新され、このメッセージはエージェント進捗に置き換わります。'
+      : 'Order history updates after the Order ID is confirmed, then this becomes the agent progress card.'
   ].join('\n');
 }
 
@@ -12658,16 +12666,53 @@ function renderOrderProgressVisual(meta = {}, options = {}) {
   const ja = Boolean(options.ja);
   const states = Array.isArray(meta.states) ? meta.states : [];
   if (!states.length) return '';
+  const isAcceptance = String(meta.kind || '').toLowerCase() === 'acceptance';
   const summaryLabel = ja
-    ? `${meta.completed || 0}/${meta.total || states.length || 1} 完了`
-    : `${meta.completed || 0}/${meta.total || states.length || 1} completed`;
-  const sideLabel = meta.failed
+    ? `${meta.completed || 0}/${meta.total || states.length || 1} ${isAcceptance ? '受付ステップ完了' : '完了'}`
+    : `${meta.completed || 0}/${meta.total || states.length || 1} ${isAcceptance ? 'acceptance steps done' : 'completed'}`;
+  const sideLabel = meta.sideLabel
+    ? String(meta.sideLabel)
+    : meta.failed
     ? `${meta.failed} failed`
     : (meta.blocked
       ? `${meta.blocked} blocked`
       : (meta.running
       ? `${meta.running} running`
       : (meta.queued ? `${meta.queued} queued` : (ja ? 'dispatching' : 'dispatching'))));
+  if (isAcceptance) {
+    return `
+    <div class="order-progress-visual acceptance-progress" aria-label="${escapeHtml(ja ? '受付進捗' : 'Order acceptance progress')}">
+      <div class="order-progress-head">
+        <span class="order-progress-title">ORDER ACCEPTANCE</span>
+        <span class="order-progress-route">${escapeHtml(meta.route || (ja ? '受付処理' : 'Order acceptance'))}</span>
+      </div>
+      <div class="order-acceptance-scene" aria-hidden="true">
+        <div class="acceptance-cait">
+          <span class="acceptance-cait-face">CAIt</span>
+          <span class="acceptance-cait-arm"></span>
+        </div>
+        <div class="acceptance-envelope">
+          <span class="acceptance-envelope-flap"></span>
+        </div>
+        <div class="acceptance-bot">
+          <span class="acceptance-bot-head"></span>
+          <span class="acceptance-bot-eye left"></span>
+          <span class="acceptance-bot-eye right"></span>
+          <span class="acceptance-bot-body"></span>
+          <span class="acceptance-bot-arm"></span>
+        </div>
+      </div>
+      <div class="order-progress-meter" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${escapeHtml(String(meta.percent || 0))}">
+        <div class="order-progress-fill" style="width:${escapeHtml(String(meta.percent || 0))}%"></div>
+      </div>
+      <div class="order-progress-legend">
+        <span>${escapeHtml(summaryLabel)}</span>
+        <span>${escapeHtml(sideLabel)}</span>
+      </div>
+      ${meta.note ? `<div class="order-progress-note">${escapeHtml(String(meta.note))}</div>` : ''}
+    </div>
+  `;
+  }
   return `
     <div class="order-progress-visual" aria-label="${escapeHtml(ja ? 'エージェント進捗' : 'Agent progress')}">
       <div class="order-progress-head">

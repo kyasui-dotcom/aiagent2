@@ -615,6 +615,19 @@ p { color: var(--muted); max-width: 64ch; }
     radial-gradient(circle at top left, rgba(83,226,255,.12), transparent 34%),
     linear-gradient(180deg, rgba(7,17,31,.94), rgba(4,10,18,.98));
 }
+.order-progress-visual.acceptance-progress {
+  border-color: rgba(255,211,106,.3);
+  background:
+    radial-gradient(circle at top left, rgba(255,211,106,.16), transparent 34%),
+    linear-gradient(180deg, rgba(18,15,7,.94), rgba(4,10,18,.98));
+}
+.order-progress-visual.acceptance-progress .order-progress-title {
+  color: var(--amber);
+}
+.order-progress-visual.acceptance-progress .order-progress-fill {
+  background: linear-gradient(90deg, rgba(255,211,106,.95), rgba(83,226,255,.86));
+  box-shadow: 0 0 18px rgba(255,211,106,.24);
+}
 .order-progress-head,
 .order-progress-legend {
   display: flex;
@@ -634,6 +647,128 @@ p { color: var(--muted); max-width: 64ch; }
 .order-progress-legend {
   color: var(--muted);
   font-size: 11px;
+}
+.order-progress-note {
+  color: var(--muted-bright);
+  font-size: 12px;
+  padding-top: 2px;
+  border-top: 1px dotted rgba(255,211,106,.18);
+}
+.order-acceptance-scene {
+  display: grid;
+  grid-template-columns: auto 54px auto;
+  align-items: center;
+  justify-content: start;
+  gap: 18px;
+  min-height: 78px;
+  padding: 4px 0 2px;
+}
+.acceptance-cait,
+.acceptance-bot {
+  position: relative;
+  width: 58px;
+  height: 58px;
+}
+.acceptance-cait-face {
+  position: absolute;
+  left: 0;
+  top: 12px;
+  width: 50px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,211,106,.52);
+  border-radius: 12px;
+  color: var(--amber);
+  background: rgba(255,211,106,.08);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: .6px;
+}
+.acceptance-cait-arm {
+  position: absolute;
+  right: -2px;
+  top: 31px;
+  width: 22px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255,211,106,.78);
+  transform: rotate(-8deg);
+  transform-origin: left center;
+  animation: acceptanceHandOff 1.4s ease-in-out infinite alternate;
+}
+.acceptance-envelope {
+  position: relative;
+  width: 46px;
+  height: 30px;
+  border: 1px solid rgba(255,255,255,.58);
+  border-radius: 5px;
+  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,211,106,.22));
+  box-shadow: 0 0 18px rgba(255,211,106,.18);
+  animation: acceptanceEnvelope 1.4s ease-in-out infinite alternate;
+}
+.acceptance-envelope::before,
+.acceptance-envelope::after,
+.acceptance-envelope-flap {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.acceptance-envelope::before {
+  clip-path: polygon(0 0, 50% 55%, 100% 0);
+  border-top: 1px solid rgba(7,17,31,.42);
+}
+.acceptance-envelope::after {
+  clip-path: polygon(0 100%, 50% 46%, 100% 100%);
+  border-bottom: 1px solid rgba(7,17,31,.36);
+}
+.acceptance-bot-head,
+.acceptance-bot-body,
+.acceptance-bot-eye,
+.acceptance-bot-arm {
+  position: absolute;
+  display: block;
+}
+.acceptance-bot-head {
+  left: 14px;
+  top: 3px;
+  width: 30px;
+  height: 24px;
+  border: 1px solid rgba(83,226,255,.48);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(24,46,82,.95), rgba(10,18,35,.96));
+}
+.acceptance-bot-eye {
+  top: 13px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(83,226,255,.95);
+  box-shadow: 0 0 7px rgba(83,226,255,.5);
+}
+.acceptance-bot-eye.left { left: 24px; }
+.acceptance-bot-eye.right { left: 32px; }
+.acceptance-bot-body {
+  left: 18px;
+  top: 31px;
+  width: 22px;
+  height: 24px;
+  border: 1px solid rgba(83,226,255,.32);
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(16,36,65,.96), rgba(7,12,24,.98));
+}
+.acceptance-bot-arm {
+  left: 2px;
+  top: 36px;
+  width: 25px;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(83,226,255,.62);
+  transform: rotate(-14deg);
+  transform-origin: right center;
+  animation: acceptanceReceive 1.4s ease-in-out infinite alternate;
 }
 .order-progress-robots {
   display: flex;
@@ -1426,6 +1561,21 @@ p { color: var(--muted); max-width: 64ch; }
 @keyframes botArmRight {
   from { transform: rotate(-18deg); }
   to { transform: rotate(18deg); }
+}
+
+@keyframes acceptanceEnvelope {
+  from { transform: translateX(-5px) translateY(1px); }
+  to { transform: translateX(5px) translateY(-1px); }
+}
+
+@keyframes acceptanceHandOff {
+  from { transform: rotate(-4deg) translateX(0); }
+  to { transform: rotate(-12deg) translateX(5px); }
+}
+
+@keyframes acceptanceReceive {
+  from { transform: rotate(-8deg) translateX(0); }
+  to { transform: rotate(-18deg) translateX(-4px); }
 }
 
 .composer-hint { color: var(--muted); font-size: 13px; line-height: 1.4; }
