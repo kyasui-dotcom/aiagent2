@@ -147,6 +147,54 @@ assert.equal(countingDb.selectCounts.get('agents') || 0, 1);
 assert.equal(countingDb.selectCounts.get('jobs') || 0, 1);
 assert.equal(countingDb.selectCounts.get('chat_transcripts') || 0, 1);
 
+const storageInitVersion = storageSource.match(/const STORAGE_INIT_VERSION = '([^']+)'/)?.[1] || '';
+assert.ok(storageInitVersion, 'storage init version should be declared');
+
+function createVersionMatchedLegacyDb() {
+  const alterStatements = [];
+  const emptyResults = { results: [] };
+  return {
+    alterStatements,
+    prepare(sql) {
+      return {
+        bind() { return this; },
+        async all() {
+          if (sql.startsWith('PRAGMA table_info(')) {
+            const table = sql.match(/PRAGMA table_info\((.+)\)/)?.[1] || '';
+            if (table === 'jobs') return { results: [{ name: 'id' }] };
+            if (table === 'chat_transcripts') return { results: [{ name: 'id' }] };
+            return emptyResults;
+          }
+          if (/SELECT \* FROM (agents|jobs|events|accounts|feedback_reports|chat_transcripts|recurring_orders|email_deliveries|exact_match_actions|app_settings) ORDER BY/.test(sql)) {
+            return emptyResults;
+          }
+          return emptyResults;
+        },
+        async first() {
+          if (sql.startsWith('SELECT value FROM app_settings WHERE key=')) return { value: storageInitVersion };
+          if (sql.startsWith('SELECT COUNT(*) as count FROM events')) return { count: 1 };
+          return null;
+        },
+        async run() {
+          if (sql.startsWith('ALTER TABLE')) alterStatements.push(sql);
+          return { success: true };
+        }
+      };
+    }
+  };
+}
+
+const versionMatchedLegacyDb = createVersionMatchedLegacyDb();
+await createD1LikeStorage(versionMatchedLegacyDb, { stateCacheTtlMs: 0 }).getState();
+assert.ok(
+  versionMatchedLegacyDb.alterStatements.some((sql) => sql.includes('ALTER TABLE jobs ADD COLUMN executor_state_json')),
+  'D1 schema migration must run even when storage init version already matches'
+);
+assert.ok(
+  versionMatchedLegacyDb.alterStatements.some((sql) => sql.includes('ALTER TABLE chat_transcripts ADD COLUMN session_id')),
+  'chat transcript session_id migration must run even when storage init version already matches'
+);
+
 function createSeedRepairDb() {
   const agentsRows = [{
     id: 'agent_cmo_leader_01',
