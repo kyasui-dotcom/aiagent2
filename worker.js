@@ -12855,6 +12855,14 @@ function workflowChildIsQueuedForFutureTurn(job = {}) {
   return !job?.dispatch?.dispatchRequestedAt && !job?.dispatch?.scheduledAt && !job?.startedAt && !job?.dispatchedAt && !job?.claimedAt;
 }
 
+function workflowParentHasLiveChildren(state = {}, job = {}) {
+  if (job?.jobKind !== 'workflow') return false;
+  return (Array.isArray(state.jobs) ? state.jobs : []).some((child) => (
+    child?.workflowParentId === job.id
+    && !['completed', 'failed', 'timed_out', 'blocked'].includes(String(child.status || '').trim().toLowerCase())
+  ));
+}
+
 async function sweepTimedOutJobs(storage, options = {}) {
   const nowMs = Number.isFinite(Number(options.nowMs)) ? Number(options.nowMs) : Date.now();
   const staleMs = options.staleMs != null && Number.isFinite(Number(options.staleMs)) ? Math.max(0, Number(options.staleMs)) : null;
@@ -12863,6 +12871,7 @@ async function sweepTimedOutJobs(storage, options = {}) {
     const swept = [];
     for (const job of state.jobs) {
       if (!['queued', 'claimed', 'running', 'dispatched'].includes(job.status)) continue;
+      if (workflowParentHasLiveChildren(state, job)) continue;
       const agent = job.assignedAgentId ? state.agents.find((item) => item.id === job.assignedAgentId) || null : null;
       const deadlineMs = effectiveTimeoutDeadlineMs(job, agent);
       const basisMs = Date.parse(job.lastCallbackAt || job.dispatch?.dispatchRequestedAt || job.dispatch?.scheduledAt || job.dispatchedAt || job.startedAt || job.claimedAt || job.createdAt || '') || nowMs;

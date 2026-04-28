@@ -398,4 +398,49 @@ assert.equal(workflowTimeoutJobs.get('qa-workflow-timeout-parent').status, 'runn
 assert.equal(workflowTimeoutJobs.get('qa-workflow-timeout-queued-child').status, 'queued');
 assert.equal(workflowTimeoutJobs.get('qa-workflow-timeout-running-child').status, 'running');
 
+await resetState();
+const veryOldWorkflowAt = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+await storage.mutate(async (draft) => {
+  draft.jobs.unshift(
+    {
+      id: 'qa-live-child-parent-timeout-guard',
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'live child parent timeout guard',
+      status: 'running',
+      createdAt: veryOldWorkflowAt,
+      startedAt: veryOldWorkflowAt,
+      logs: ['live child parent timeout guard'],
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research'],
+        childRuns: []
+      }
+    },
+    {
+      id: 'qa-live-child-parent-timeout-guard-child',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'queued child keeps parent alive',
+      status: 'queued',
+      assignedAgentId: 'agent_research_01',
+      createdAt: veryOldWorkflowAt,
+      workflowParentId: 'qa-live-child-parent-timeout-guard',
+      logs: ['queued child keeps parent alive']
+    }
+  );
+});
+const liveChildParentSweep = await request('/api/dev/timeout-sweep', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({})
+});
+assert.equal(liveChildParentSweep.status, 200);
+assert.equal(liveChildParentSweep.body.count, 0, 'workflow parent should not time out while a child is still queued or running');
+const liveChildParentState = await storage.getState();
+assert.equal(liveChildParentState.jobs.find((job) => job.id === 'qa-live-child-parent-timeout-guard').status, 'running');
+
 console.log('worker runs qa passed');
