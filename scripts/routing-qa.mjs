@@ -35,6 +35,7 @@ assert.ok(freeFlow.includes('growth'));
 
 const cmoActionFlow = inferTaskSequence('cmo_leader', 'CMOスタートで外部コネクターまで実行し、X投稿とディレクトリ掲載のアクションまで完走したい', { maxTasks: 14 });
 assert.equal(isCmoExternalExecutionIntent('cmo_leader', '外部コネクターまで実行したい'), true);
+assert.equal(isCmoExternalExecutionIntent('cmo_leader', 'I have x account, indiehackers account and reddit account. plan and do'), true);
 assert.equal(cmoActionFlow[0], 'cmo_leader');
 assert.ok(cmoActionFlow.includes('research'));
 assert.ok(cmoActionFlow.includes('media_planner'));
@@ -44,6 +45,13 @@ assert.ok(cmoActionFlow.includes('growth'));
 assert.ok(cmoActionFlow.includes('directory_submission'));
 assert.ok(cmoActionFlow.includes('acquisition_automation'));
 assert.ok(cmoActionFlow.includes('x_post'));
+const cmoPlanAndDoFlow = inferTaskSequence('cmo_leader', 'aiagent-marketplace.net customer acquisition. engineers, signups. I have x account, indiehackers account and reddit account. plan and do', { maxTasks: 14 });
+assert.ok(cmoPlanAndDoFlow.includes('seo_gap'));
+assert.ok(cmoPlanAndDoFlow.includes('landing'));
+assert.ok(cmoPlanAndDoFlow.includes('growth'));
+assert.ok(cmoPlanAndDoFlow.includes('x_post'));
+assert.ok(cmoPlanAndDoFlow.includes('reddit'));
+assert.ok(cmoPlanAndDoFlow.includes('indie_hackers'));
 
 const launchFlow = inferTaskSequence('', '1告知でサイト、競合分析、Instagram、X、Reddit、Indie Hackers、データ分析までAgent Teamでまとめて作る', { maxTasks: 11 });
 assert.equal(launchFlow[0], 'cmo_leader');

@@ -26,6 +26,7 @@ assert.ok(builtInAgentSource.includes("If no external authority or source select
 assert.ok(builtInAgentSource.includes("tools: [{ type: 'web_search' }]"), 'OpenAI built-in web search should be enabled for source-sensitive work');
 assert.ok(builtInAgentSource.includes('webSourcesOf(payload)'), 'OpenAI web search sources should be extracted from Responses payloads');
 assert.ok(builtInAgentSource.includes('web_sources'), 'OpenAI web sources should be surfaced in report/runtime payloads');
+assert.ok(builtInShouldUseWebSearchForKind('cmo_leader', { input: { _broker: { workflow: { forceWebSearch: true } } } }), 'Forced leader workflow search must enable web_search even for leader runs');
 assert.ok(builtInAgentSource.includes('Supporting work products'), 'Leader final deliveries should include supporting work product tables');
 assert.ok(builtInAgentSource.includes('target URL/path, H1 or title, section outline, CTA copy'), 'Growth operator output must include executable artifact packets');
 assert.ok(builtInAgentSource.includes('Execution-request handling'), 'Action-through-delivery orders must activate execution-specific leader behavior');
@@ -560,6 +561,62 @@ assert.equal(cmoActionPayload.files[0].draft_defaults.nextStep, 'execution_order
 assert.equal(cmoActionPayload.files[0].draft_defaults.channel, 'x');
 assert.equal(cmoActionPayload.report.execution_candidate.type, 'report_bundle');
 assert.ok(cmoActionPayload.report.execution_candidate.reason);
+
+const cmoWorkflowSpecialistInput = {
+  prompt: 'Task: cmo_leader Goal: 集客したい。aiagent-marketplace.net、engineers、signups、I have x account, indiehackers account and reddit account. plan and do',
+  output_language: 'ja',
+  input: {
+    _broker: {
+      workflow: {
+        primaryTask: 'cmo_leader',
+        parentJobId: 'qa-cmo-workflow-parent',
+        sequencePhase: 'research',
+        forceWebSearch: true,
+        webSearchRequiredReason: 'leader_research_layer'
+      }
+    }
+  }
+};
+const cmoWorkflowResearchPayload = sampleAgentPayload('research', cmoWorkflowSpecialistInput);
+assert.equal(cmoWorkflowResearchPayload.report.summary, '顧客獲得リサーチ納品');
+assert.ok(cmoWorkflowResearchPayload.files[0].content.includes('顧客獲得リサーチ納品'));
+assert.ok(cmoWorkflowResearchPayload.files[0].content.includes('実行パケット'));
+assert.ok(!/\bTBD\b|Decision framing|Output contract|Professional preflight|専門家の事前確認|Task:/i.test(cmoWorkflowResearchPayload.files[0].content));
+
+const cmoWorkflowTeardownPayload = sampleAgentPayload('teardown', cmoWorkflowSpecialistInput);
+assert.equal(cmoWorkflowTeardownPayload.report.summary, '競合ティアダウン納品');
+assert.ok(cmoWorkflowTeardownPayload.files[0].content.includes('競合ティアダウン納品'));
+assert.ok(cmoWorkflowTeardownPayload.files[0].content.includes('実行パケット'));
+assert.ok(!/\bTBD\b|\[[^\]\n]{2,80}\]|Decision framing|Output contract|Professional preflight|専門家の事前確認/i.test(cmoWorkflowTeardownPayload.files[0].content));
+
+const cmoWorkflowDataPayload = sampleAgentPayload('data_analysis', cmoWorkflowSpecialistInput);
+assert.equal(cmoWorkflowDataPayload.report.summary, '計測・データ分析納品');
+assert.ok(cmoWorkflowDataPayload.files[0].content.includes('必須ファネル'));
+assert.ok(cmoWorkflowDataPayload.files[0].content.includes('実行パケット'));
+assert.ok(!/\bTBD\b|Decision framing|Output contract|Professional preflight|専門家の事前確認/i.test(cmoWorkflowDataPayload.files[0].content));
+
+const cmoWorkflowXPayload = sampleAgentPayload('x_post', {
+  ...cmoWorkflowSpecialistInput,
+  input: {
+    _broker: {
+      workflow: {
+        primaryTask: 'cmo_leader',
+        parentJobId: 'qa-cmo-workflow-parent',
+        sequencePhase: 'action',
+        leaderHandoff: {
+          leaderTaskType: 'cmo_leader',
+          priorRuns: [
+            { taskType: 'research', status: 'completed', summary: '比較LPを先に作る' }
+          ]
+        }
+      }
+    }
+  }
+});
+assert.equal(cmoWorkflowXPayload.report.summary, 'X投稿実行納品');
+assert.ok(cmoWorkflowXPayload.files[0].content.includes('投稿案'));
+assert.ok(cmoWorkflowXPayload.files[0].content.includes('utm_source=x'));
+assert.ok(!/\bTBD\b|Output contract|Professional preflight|専門家の事前確認/i.test(cmoWorkflowXPayload.files[0].content));
 
 const cmoFinalSummaryPayload = sampleAgentPayload('cmo_leader', {
   prompt: 'CMO leader: continue customer acquisition for https://aiagent-marketplace.net through execution.',
