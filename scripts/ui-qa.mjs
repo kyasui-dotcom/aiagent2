@@ -63,6 +63,8 @@ assert.ok(js.includes("startAgentTeamWorkBtn: $('startAgentTeamWorkBtn')"));
 assert.ok(!js.includes('localStorage'));
 assert.ok(!js.includes('sessionStorage'));
 assert.ok(!js.includes('indexedDB'));
+assert.ok(js.includes('function fetchWithNetworkRetry'), 'shared API wrapper should retry transient browser fetch failures');
+assert.ok(js.includes('Network request failed after retry'), 'fetch failures should show an actionable error instead of raw Failed to fetch');
 assert.ok(!loginJs.includes('localStorage'));
 assert.ok(!loginJs.includes('sessionStorage'));
 assert.ok(!loginJs.includes('indexedDB'));

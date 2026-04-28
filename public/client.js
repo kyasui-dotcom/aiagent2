@@ -2308,6 +2308,29 @@ function summarizeOrderDraftForAnalytics(draft = {}, source = 'work_chat') {
   };
 }
 
+function waitForNetworkRetry(ms = 0) {
+  return new Promise((resolve) => window.setTimeout(resolve, Math.max(0, Number(ms || 0))));
+}
+
+function isRetriableFetchError(error = null) {
+  const message = String(error?.message || error || '').toLowerCase();
+  return /failed to fetch|networkerror|load failed|network request failed/.test(message);
+}
+
+async function fetchWithNetworkRetry(url, options = {}) {
+  let lastError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      if (!isRetriableFetchError(error) || attempt >= 1) break;
+      await waitForNetworkRetry(450);
+    }
+  }
+  throw lastError;
+}
+
 async function api(url, options = {}) {
   const { preserveAuthOn401 = false, ...requestOptions } = options || {};
   const method = String(requestOptions.method || 'GET').toUpperCase();
@@ -2316,11 +2339,18 @@ async function api(url, options = {}) {
   if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && state.snapshot?.auth?.csrfToken && !headers.has('x-aiagent2-csrf')) {
     headers.set('x-aiagent2-csrf', state.snapshot.auth.csrfToken);
   }
-  const response = await fetch(url, {
-    ...requestOptions,
-    method,
-    headers
-  });
+  let response = null;
+  try {
+    response = await fetchWithNetworkRetry(url, {
+      ...requestOptions,
+      method,
+      headers
+    });
+  } catch (error) {
+    const networkError = new Error('Network request failed after retry. Reload the page once, then retry the action. If this continues, the API path or browser session needs inspection.');
+    networkError.cause = error;
+    throw networkError;
+  }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401) {

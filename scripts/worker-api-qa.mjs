@@ -553,6 +553,10 @@ assert.equal(syntheticAgentTeamOutput.files?.[0]?.content_type, 'social_post_pac
 assert.equal(syntheticAgentTeamOutput.report?.authority_request?.missing_connectors?.[0], 'x', 'agent team output should preserve specialist authority requests for execution gating');
 assert.equal(syntheticAgentTeamOutput.summary, 'Leader final summary', 'leader-authored summary should remain the default integrated summary when available');
 assert.equal(syntheticAgentTeamOutput.report?.childRuns?.length, 2, 'integrated output should keep supporting work product summaries attached to the merged report');
+const syntheticSupportingBundle = syntheticAgentTeamOutput.files?.find((file) => file.name === 'supporting-specialist-deliverables.md');
+assert.ok(syntheticSupportingBundle, 'agent team output should bundle specialist deliverable content into the parent delivery files');
+assert.ok(syntheticSupportingBundle.content.includes('X post pack'), 'supporting bundle should include specialist file content, not only filenames');
+assert.ok(syntheticSupportingBundle.content.includes('Launching now'), 'supporting bundle should include the specialist deliverable body');
 
 const syntheticLeaderOnlyOutput = buildAgentTeamDeliveryOutput({
   workflow: { objective: 'Launch synthetic QA through action' },
