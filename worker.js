@@ -67,6 +67,12 @@ function runtimeStorage(env) {
   });
 }
 
+function shouldInjectQaOrderCreateFault(env, faultName = '') {
+  const appVersion = String(env?.APP_VERSION || '').trim().toLowerCase();
+  if (!appVersion.includes('test')) return false;
+  return String(env?.QA_ORDER_CREATE_FAULT || '').trim() === faultName;
+}
+
 const SECURITY_HEADERS = {
   'content-security-policy': [
     "default-src 'self'",
@@ -11164,6 +11170,9 @@ async function performSingleJobCreate(storage, env, current, body, options = {})
     });
   };
   await reserveAndInsert();
+  if (shouldInjectQaOrderCreateFault(env, 'after_single_job_insert')) {
+    throw new Error('qa injected order create fault after single job insert');
+  }
   let stripeFunding = null;
   if (current?.login && funding && !funding.ok) {
     await touchUsage();
@@ -11257,6 +11266,106 @@ async function performSingleJobCreate(storage, env, current, body, options = {})
     workflow_parent_id: job.workflowParentId,
     statusCode: 201
   };
+}
+
+function jobPromptMatchesCreateBody(job = {}, body = {}) {
+  const requestedPrompt = String(body?.prompt || '').trim();
+  if (!requestedPrompt) return false;
+  const candidates = [
+    job.prompt,
+    job.originalPrompt,
+    job.workflow?.objective
+  ].map((value) => String(value || '').trim()).filter(Boolean);
+  return candidates.some((candidate) => candidate === requestedPrompt);
+}
+
+function jobRequesterMatchesCurrent(job = {}, current = {}) {
+  const requester = job?.input?._broker?.requester && typeof job.input._broker.requester === 'object'
+    ? job.input._broker.requester
+    : {};
+  const currentLogin = String(current?.login || '').trim().toLowerCase();
+  const currentAccountId = String(current?.account?.id || current?.user?.accountId || accountIdForLogin(currentLogin)).trim().toLowerCase();
+  const requesterLogin = String(requester.login || '').trim().toLowerCase();
+  const requesterAccountId = String(requester.accountId || '').trim().toLowerCase();
+  if (currentLogin && requesterLogin) return currentLogin === requesterLogin;
+  if (currentAccountId && requesterAccountId) return currentAccountId === requesterAccountId;
+  return !currentLogin && !requesterLogin;
+}
+
+function jobSessionMatchesCreateBody(job = {}, body = {}) {
+  const requestedSessionId = String(body?.session_id || body?.sessionId || body?.input?.session_id || body?.input?.sessionId || body?.input?._broker?.chatSessionId || body?.input?._broker?.workflow?.chatSessionId || '').trim();
+  if (!requestedSessionId) return true;
+  const broker = job?.input?._broker && typeof job.input._broker === 'object' ? job.input._broker : {};
+  const workflow = broker.workflow && typeof broker.workflow === 'object' ? broker.workflow : {};
+  const jobSessionId = String(job?.input?.session_id || job?.input?.sessionId || broker.chatSessionId || workflow.chatSessionId || '').trim();
+  return jobSessionId === requestedSessionId;
+}
+
+function recentPersistedJobForCreateBody(state = {}, current = {}, body = {}, options = {}) {
+  const maxAgeMs = Number(options.maxAgeMs || 5 * 60 * 1000);
+  const nowMs = Date.now();
+  const requestedParent = String(body?.parent_agent_id || '').trim();
+  const requestedWorkflowParent = String(body?.workflow_parent_id || body?.workflowParentId || '').trim();
+  const requestedStrategy = normalizeOrderStrategy(body?.order_strategy || body?.orderStrategy || body?.execution_mode || body?.executionMode);
+  const preferWorkflow = requestedStrategy === 'multi' || !requestedWorkflowParent;
+  const jobs = Array.isArray(state?.jobs) ? state.jobs : [];
+  return jobs
+    .filter((job) => {
+      if (!job?.id) return false;
+      if (requestedParent && String(job.parentAgentId || '') !== requestedParent) return false;
+      if (requestedWorkflowParent && String(job.workflowParentId || '') !== requestedWorkflowParent) return false;
+      if (preferWorkflow && requestedStrategy === 'multi' && job.jobKind !== 'workflow') return false;
+      if (!jobPromptMatchesCreateBody(job, body)) return false;
+      if (!jobRequesterMatchesCurrent(job, current)) return false;
+      if (!jobSessionMatchesCreateBody(job, body)) return false;
+      const createdMs = Date.parse(job.createdAt || job.created_at || '');
+      if (!Number.isFinite(createdMs) || nowMs - createdMs > maxAgeMs) return false;
+      return true;
+    })
+    .sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')))[0] || null;
+}
+
+async function recoverCreateJobException(storage, current, body, error) {
+  let recoveredJob = null;
+  try {
+    const state = await storage.getState();
+    recoveredJob = recentPersistedJobForCreateBody(state, current, body);
+  } catch {}
+  const message = String(error?.message || error || 'Unknown order create error').slice(0, 500);
+  const meta = {
+    kind: 'order_create_exception',
+    recovered: Boolean(recoveredJob?.id),
+    recoveredJobId: recoveredJob?.id || null,
+    jobKind: recoveredJob?.jobKind || null,
+    taskType: body?.task_type || body?.taskType || null,
+    orderStrategy: body?.order_strategy || body?.orderStrategy || null,
+    requesterLogin: current?.login || null,
+    message
+  };
+  try {
+    await touchEvent(storage, 'FAILED', recoveredJob?.id
+      ? `order create exception recovered ${recoveredJob.id.slice(0, 6)}`
+      : 'order create exception before recovery', meta);
+  } catch {}
+  if (recoveredJob?.id) {
+    const isWorkflow = recoveredJob.jobKind === 'workflow';
+    return json({
+      ok: true,
+      recovered: true,
+      warning: 'Order was accepted, but the create response failed after persistence. CAIt recovered the persisted order instead of asking you to resubmit.',
+      code: 'order_create_recovered',
+      status: recoveredJob.status || 'queued',
+      mode: isWorkflow ? 'workflow' : (recoveredJob.status || 'queued'),
+      ...(isWorkflow ? { workflow_job_id: recoveredJob.id } : { job_id: recoveredJob.id }),
+      dispatch_status: recoveredJob.dispatch?.completionStatus || recoveredJob.status || null,
+      order_strategy_resolved: isWorkflow ? 'multi' : 'single'
+    }, 202);
+  }
+  return json({
+    error: 'Order create failed before dispatch.',
+    code: 'order_create_failed',
+    retry_safe: true
+  }, 500);
 }
 
 async function handleCreateWorkflowJob(storage, request, env, current, body, options = {}) {
@@ -11374,6 +11483,9 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
   };
   const parentJob = buildWorkflowParentJob(body, parentInput, plan, { promptOptimization });
   await storage.mutate(async (draft) => { draft.jobs.unshift(parentJob); });
+  if (shouldInjectQaOrderCreateFault(env, 'after_workflow_parent_insert')) {
+    throw new Error('qa injected order create fault after workflow parent insert');
+  }
   await touchEvent(storage, 'JOB', `parent ${body.parent_agent_id} requested Agent Team objective ${parentJob.id.slice(0, 6)}`);
   const childRuns = [];
   const workflowInputForTask = (task, options = {}) => {
@@ -11851,49 +11963,54 @@ async function runRecurringOrderSweep(storage, env, options = {}) {
 }
 
 async function handleCreateJob(storage, request, env, ctx = null) {
-  let current = await currentOrderRequesterContext(storage, request, env);
+  let current = null;
   let body;
   try {
     body = await parseBody(request);
   } catch (error) {
     return json({ error: error.message }, 400);
   }
-  const touchUsage = async () => {
-    if (current.apiKey?.id) await recordOrderApiKeyUsage(storage, current, request);
-  };
-  if (!body.parent_agent_id || !body.prompt) {
-    return json({ error: 'parent_agent_id and prompt required' }, 400);
+  try {
+    current = await currentOrderRequesterContext(storage, request, env);
+    const touchUsage = async () => {
+      if (current.apiKey?.id) await recordOrderApiKeyUsage(storage, current, request);
+    };
+    if (!body.parent_agent_id || !body.prompt) {
+      return json({ error: 'parent_agent_id and prompt required' }, 400);
+    }
+    const promptInjection = promptInjectionGuardForPrompt(body.prompt);
+    if (promptInjection.blocked) {
+      await touchUsage();
+      return json(promptPolicyBlockPayload(promptInjection), 400);
+    }
+    const requestedStrategy = normalizeOrderStrategy(body.order_strategy || body.orderStrategy || body.execution_mode || body.executionMode);
+    const asyncDispatch = body.async_dispatch === true || body.asyncDispatch === true || body.respond_async === true || body.respondAsync === true;
+    const state = requestedStrategy !== 'single' ? await storage.getState() : null;
+    let resolved = resolveOrderStrategy(state?.agents || [], body, requestedStrategy);
+    if (!asyncDispatch) {
+      resolved = await maybeRefineWorkflowPlanWithLeaderLlm(state?.agents || [], body, resolved, env);
+    }
+    const guestPrepared = await prepareGuestTrialOrderContext(storage, current, body, resolved);
+    if (guestPrepared.error) return json(guestPrepared, guestPrepared.statusCode || 400);
+    current = guestPrepared.current;
+    body = guestPrepared.body;
+    const access = requireOrderWriteAccess(current, env);
+    if (access.error) return json({ error: access.error }, access.statusCode || 400);
+    const waitUntil = ctx && typeof ctx.waitUntil === 'function'
+      ? (promise) => ctx.waitUntil(promise)
+      : null;
+    const result = resolved.strategy === 'multi'
+      ? await handleCreateWorkflowJob(storage, request, env, current, body, { touchUsage, workflowPlan: resolved.plan, asyncDispatch, waitUntil })
+      : await performSingleJobCreate(storage, env, current, body, { touchUsage, request, asyncDispatch, waitUntil });
+    if (result?.error) return json(result, result.statusCode || 400);
+    result.order_strategy_requested = requestedStrategy;
+    result.order_strategy_resolved = resolved.strategy;
+    result.routing_reason = resolved.reason;
+    if (resolved.plan?.plannedTasks) result.routing_planned_task_types = resolved.plan.plannedTasks;
+    return json(result, result.statusCode || 201);
+  } catch (error) {
+    return recoverCreateJobException(storage, current || {}, body, error);
   }
-  const promptInjection = promptInjectionGuardForPrompt(body.prompt);
-  if (promptInjection.blocked) {
-    await touchUsage();
-    return json(promptPolicyBlockPayload(promptInjection), 400);
-  }
-  const requestedStrategy = normalizeOrderStrategy(body.order_strategy || body.orderStrategy || body.execution_mode || body.executionMode);
-  const asyncDispatch = body.async_dispatch === true || body.asyncDispatch === true || body.respond_async === true || body.respondAsync === true;
-  const state = requestedStrategy !== 'single' ? await storage.getState() : null;
-  let resolved = resolveOrderStrategy(state?.agents || [], body, requestedStrategy);
-  if (!asyncDispatch) {
-    resolved = await maybeRefineWorkflowPlanWithLeaderLlm(state?.agents || [], body, resolved, env);
-  }
-  const guestPrepared = await prepareGuestTrialOrderContext(storage, current, body, resolved);
-  if (guestPrepared.error) return json(guestPrepared, guestPrepared.statusCode || 400);
-  current = guestPrepared.current;
-  body = guestPrepared.body;
-  const access = requireOrderWriteAccess(current, env);
-  if (access.error) return json({ error: access.error }, access.statusCode || 400);
-  const waitUntil = ctx && typeof ctx.waitUntil === 'function'
-    ? (promise) => ctx.waitUntil(promise)
-    : null;
-  const result = resolved.strategy === 'multi'
-    ? await handleCreateWorkflowJob(storage, request, env, current, body, { touchUsage, workflowPlan: resolved.plan, asyncDispatch, waitUntil })
-    : await performSingleJobCreate(storage, env, current, body, { touchUsage, request, asyncDispatch, waitUntil });
-  if (result?.error) return json(result, result.statusCode || 400);
-  result.order_strategy_requested = requestedStrategy;
-  result.order_strategy_resolved = resolved.strategy;
-  result.routing_reason = resolved.reason;
-  if (resolved.plan?.plannedTasks) result.routing_planned_task_types = resolved.plan.plannedTasks;
-  return json(result, result.statusCode || 201);
 }
 
 async function handleRegisterAgent(storage, request, env) {

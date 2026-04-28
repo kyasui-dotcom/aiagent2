@@ -1965,6 +1965,39 @@ try {
   assert.equal(providerSettingsAfter.status, 200);
   assert.ok(Number(providerSettingsAfter.body.account?.payout?.pendingBalance || 0) > providerPendingBefore);
 
+  const recoveredSingleOrder = await request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      parent_agent_id: 'qa-recovery',
+      task_type: 'research',
+      prompt: 'Research customer acquisition recovery behavior for a QA order-create fault.',
+      skip_intake: true
+    })
+  }, { env: { ...env, QA_ORDER_CREATE_FAULT: 'after_single_job_insert' } });
+  assert.equal(recoveredSingleOrder.status, 202);
+  assert.equal(recoveredSingleOrder.body.code, 'order_create_recovered');
+  assert.equal(recoveredSingleOrder.body.recovered, true);
+  assert.ok(recoveredSingleOrder.body.job_id, 'single order recovery should return the persisted job id');
+
+  const recoveredWorkflowOrder = await request('/api/jobs', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      parent_agent_id: 'qa-recovery',
+      task_type: 'cmo_leader',
+      order_strategy: 'multi',
+      prompt: 'CMO leader: analyze customer acquisition for aiagent-marketplace.net, target developer signups, no ad budget, deliver a growth report and execution checklist.',
+      skip_intake: true,
+      budget_cap: 500
+    })
+  }, { env: { ...env, QA_ORDER_CREATE_FAULT: 'after_workflow_parent_insert' } });
+  assert.equal(recoveredWorkflowOrder.status, 202);
+  assert.equal(recoveredWorkflowOrder.body.code, 'order_create_recovered');
+  assert.equal(recoveredWorkflowOrder.body.mode, 'workflow');
+  assert.equal(recoveredWorkflowOrder.body.recovered, true);
+  assert.ok(recoveredWorkflowOrder.body.workflow_job_id, 'workflow recovery should return the persisted workflow id');
+
   const deletedImported = await request(`/api/agents/${imported.body.agent.id}`, { method: 'DELETE' });
   assert.equal(deletedImported.status, 200);
   assert.equal(deletedImported.body.ok, true);
