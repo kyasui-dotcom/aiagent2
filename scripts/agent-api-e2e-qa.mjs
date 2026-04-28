@@ -47,7 +47,7 @@ async function main() {
       ALLOW_DEV_API: '1',
       ALLOW_GUEST_RUN_READ_API: '0'
     },
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: 'ignore'
   });
   try {
     await waitForServer();

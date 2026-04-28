@@ -45,7 +45,7 @@ async function main() {
       ALLOW_IN_MEMORY_STORAGE: '1',
       PORT: String(PORT)
     },
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: 'ignore'
   });
 
   let output = '';

@@ -185,7 +185,7 @@ async function main() {
       ALLOW_LOCAL_MANIFEST_URLS: '1',
       SESSION_SECRET: 'agent-registration-routing-e2e'
     },
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: 'ignore'
   });
 
   try {

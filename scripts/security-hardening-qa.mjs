@@ -48,7 +48,7 @@ async function main() {
       OPEN_CHAT_ALLOW_PLATFORM_OPENAI_FALLBACK: 'true',
       OPEN_CHAT_INTENT_ALLOWED_EMAILS: 'yasuikunihiro@gmail.com'
     },
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: 'ignore'
   });
 
   try {

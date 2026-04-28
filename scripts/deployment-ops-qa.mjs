@@ -32,7 +32,7 @@ async function main() {
       ALLOW_IN_MEMORY_STORAGE: '1',
       DEPLOY_TARGET: 'cloudflare-worker'
     },
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: 'ignore'
   });
 
   try {
