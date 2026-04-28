@@ -52,7 +52,7 @@ async function main() {
   try {
     await waitForServer();
 
-    const importResult = await request('/api/agents/import-manifest', {
+    const importPreview = await request('/api/agents/import-manifest', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -71,9 +71,36 @@ async function main() {
         }
       })
     });
+    assert.equal(importPreview.status, 428);
+    assert.equal(importPreview.body.code, 'routing_confirmation_required');
+    assert.equal(importPreview.body.routing_confirmation.inferred.layer, 'research');
+    assert.ok(importPreview.body.routing_confirmation.inferred.downstream.task_types.includes('writing'));
+
+    const importResult = await request('/api/agents/import-manifest', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${issued.apiKey.token}`
+      },
+      body: JSON.stringify({
+        confirm_routing: true,
+        manifest: {
+          schema_version: 'agent-manifest/v1',
+          name: 'agent_api_qa',
+          task_types: ['research'],
+          pricing: { provider_markup_rate: 0.1, platform_margin_rate: 0.1 },
+          success_rate: 0.95,
+          avg_latency_sec: 10,
+          healthcheck_url: `${BASE}/mock/research/health`,
+          job_endpoint: `${BASE}/mock/research/jobs`
+        }
+      })
+    });
     assert.equal(importResult.status, 201);
     assert.equal(importResult.body.ok, true);
     assert.equal(importResult.body.agent.owner, 'alice');
+    assert.equal(importResult.body.agent.metadata.routing_confirmation.confirmed, true);
+    assert.equal(importResult.body.agent.metadata.agent_layer, 'research');
 
     const agentId = importResult.body.agent.id;
     const verifyResult = await request(`/api/agents/${agentId}/verify`, {

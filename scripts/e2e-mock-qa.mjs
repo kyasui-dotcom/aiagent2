@@ -38,7 +38,7 @@ async function main() {
     const syncImport = await request('/api/agents/import-manifest', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest: {
+      body: JSON.stringify({ confirm_routing: true, manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'sync_agent',
         task_types: ['research'],
@@ -55,7 +55,7 @@ async function main() {
     const asyncImport = await request('/api/agents/import-manifest', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest: {
+      body: JSON.stringify({ confirm_routing: true, manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'async_agent',
         task_types: ['summary'],
@@ -72,7 +72,7 @@ async function main() {
     const writerImport = await request('/api/agents/import-manifest', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest: {
+      body: JSON.stringify({ confirm_routing: true, manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'writer_agent',
         task_types: ['seo', 'writing'],
@@ -89,7 +89,7 @@ async function main() {
     const seoImport = await request('/api/agents/import-manifest', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest: {
+      body: JSON.stringify({ confirm_routing: true, manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'seo_agent',
         task_types: ['seo'],

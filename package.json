@@ -24,6 +24,7 @@
     "qa:auth": "node scripts/auth-link-qa.mjs && node scripts/email-auth-qa.mjs",
     "qa:login-leader-order": "node scripts/login-leader-order-qa.mjs",
     "qa:agent-api": "node scripts/agent-api-e2e-qa.mjs",
+    "qa:agent-registration-routing": "node scripts/agent-registration-routing-e2e-qa.mjs",
     "qa:callback": "node scripts/callback-qa.mjs && node scripts/callback-state-guard.mjs",
     "qa:retry-timeout": "node scripts/retry-timeout-qa.mjs",
     "qa:state-machine": "node scripts/state-machine-qa.mjs",
@@ -49,6 +50,6 @@
     "qa:worker-runs": "node scripts/worker-runs-qa.mjs",
     "qa:leader-workflows": "node scripts/leader-workflows-qa.mjs",
     "qa:deployment-ops": "node scripts/deployment-ops-qa.mjs && node scripts/release-posture-qa.mjs && node scripts/worker-api-qa.mjs && node scripts/worker-runs-qa.mjs && node scripts/leader-workflows-qa.mjs",
-    "qa:all": "npm run qa:docs && npm run qa:seo && npm run qa:settings && npm run qa:storage && npm run qa:feedback && npm run qa:api-keys && npm run qa:auth && npm run qa:login-leader-order && npm run qa:agent-api && npm run qa:manifest-validation && npm run qa:manifest-draft && npm run qa:github-adapter && npm run qa:onboarding && npm run qa:builtin-agents && npm run qa:agent-routing-contracts && npm run qa:open-core && npm run qa:manifest-verify && npm run qa:routing && npm run qa:recurring-orders && npm run qa:callback && npm run qa:retry-timeout && npm run qa:state-machine && npm run qa:runs && npm run qa:security-hardening && npm run qa:billing && npm run qa:stripe && npm run qa:ui && npm run qa:e2e-mock && npm run qa:leader-workflows && npm run qa:deployment-ops"
+    "qa:all": "npm run qa:docs && npm run qa:seo && npm run qa:settings && npm run qa:storage && npm run qa:feedback && npm run qa:api-keys && npm run qa:auth && npm run qa:login-leader-order && npm run qa:agent-api && npm run qa:agent-registration-routing && npm run qa:manifest-validation && npm run qa:manifest-draft && npm run qa:github-adapter && npm run qa:onboarding && npm run qa:builtin-agents && npm run qa:agent-routing-contracts && npm run qa:open-core && npm run qa:manifest-verify && npm run qa:routing && npm run qa:recurring-orders && npm run qa:callback && npm run qa:retry-timeout && npm run qa:state-machine && npm run qa:runs && npm run qa:security-hardening && npm run qa:billing && npm run qa:stripe && npm run qa:ui && npm run qa:e2e-mock && npm run qa:leader-workflows && npm run qa:deployment-ops"
   }
 }
