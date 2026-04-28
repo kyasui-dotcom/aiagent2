@@ -9986,13 +9986,21 @@ function useOpenAiForBuiltInWorkflow(env = {}) {
   return ['1', 'true', 'yes', 'on'].includes(String(env?.BUILTIN_WORKFLOW_OPENAI_ENABLED || '').trim().toLowerCase());
 }
 
+function builtInWorkflowKindFromAgent(agent) {
+  const sampleKind = sampleKindFromAgent(agent);
+  if (sampleKind) return sampleKind;
+  const manifestUrl = String(agent?.manifestUrl || agent?.manifest_url || agent?.metadata?.manifestUrl || agent?.metadata?.manifest_url || '').trim().toLowerCase();
+  if (manifestUrl.startsWith('built-in://')) return manifestUrl.slice('built-in://'.length).split(/[?#]/)[0].trim();
+  return '';
+}
+
 async function dispatchJobToAssignedAgent(job, agent, env) {
   const endpoint = resolveAgentJobEndpoint(agent);
   if (!endpoint) {
     return { ok: false, failureReason: 'Assigned verified agent does not expose a job endpoint in manifest metadata' };
   }
   const payload = buildDispatchPayload(job, agent);
-  const sampleKind = sampleKindFromAgent(agent);
+  const sampleKind = builtInWorkflowKindFromAgent(agent);
   if (sampleKind) {
     const workflowRun = Boolean(job?.workflowParentId || payload?.input?._broker?.workflow);
     const body = workflowRun && !useOpenAiForBuiltInWorkflow(env)
@@ -10758,7 +10766,7 @@ async function scheduleProgressDispatchesForJobId(storage, env, waitUntil, jobId
       jobId: marked.job.id,
       parentJobId: marked.job.workflowParentId || target.parentJobId || null
     });
-    const sampleKind = sampleKindFromAgent(target.agent);
+    const sampleKind = builtInWorkflowKindFromAgent(target.agent);
     const workflowRun = Boolean(marked.job?.workflowParentId || marked.job?.input?._broker?.workflow);
     if (sampleKind && workflowRun && !useOpenAiForBuiltInWorkflow(env)) {
       try {
@@ -10822,6 +10830,55 @@ async function scheduleProgressDispatchForJobId(storage, env, waitUntil, jobId, 
     agent: result.agents[0],
     scheduled_count: result.scheduled_count
   };
+}
+
+async function completeScheduledBuiltInWorkflowJobs(storage, env, options = {}) {
+  if (useOpenAiForBuiltInWorkflow(env)) return { ok: true, completed_count: 0, skipped: 'openai_workflow_enabled' };
+  const limit = Math.max(1, Math.min(10, Number(options.limit || 5) || 5));
+  const state = typeof storage.getFreshState === 'function' ? await storage.getFreshState() : await storage.getState();
+  const completed = [];
+  const candidates = (state.jobs || [])
+    .filter((job) => ['running', 'dispatched'].includes(String(job.status || '').trim().toLowerCase()))
+    .filter((job) => job.workflowParentId || job.input?._broker?.workflow)
+    .filter((job) => String(job.dispatch?.completionStatus || '').trim().toLowerCase() === 'dispatch_scheduled')
+    .sort((a, b) => String(a.dispatch?.dispatchRequestedAt || a.startedAt || a.createdAt || '').localeCompare(String(b.dispatch?.dispatchRequestedAt || b.startedAt || b.createdAt || '')));
+  for (const job of candidates) {
+    if (completed.length >= limit) break;
+    const agent = (state.agents || []).find((item) => item.id === job.assignedAgentId);
+    const sampleKind = builtInWorkflowKindFromAgent(agent);
+    if (!agent || !sampleKind) continue;
+    try {
+      const payload = buildDispatchPayload(job, agent);
+      const body = sampleAgentPayload(sampleKind, payload);
+      const normalized = normalizeDispatchResponse(body);
+      normalized.usage = usageWithObservedJobTokens(job, normalized.usage, normalized.report);
+      const result = await completeJobFromAgentResult(storage, job.id, agent.id, {
+        report: normalized.report,
+        files: normalized.files,
+        usage: normalized.usage,
+        returnTargets: normalized.returnTargets
+      }, { source: 'built-in-workflow-scheduled-sweep' });
+      if (result?.ok) {
+        completed.push(job.id);
+        await touchEvent(storage, 'COMPLETED', `${job.taskType}/${job.id.slice(0, 6)} completed by scheduled built-in sweep`);
+        await recordBillingOutcome(storage, result.job, result.billing, 'built-in-workflow-scheduled-sweep');
+        if (job.workflowParentId) {
+          await refreshWorkflowLeaderHandoffForJobId(storage, job.workflowParentId);
+          await scheduleProgressDispatchesForJobId(storage, env, null, job.workflowParentId, 'scheduled built-in sweep handoff', {
+            maxTargets: 8,
+            awaitDispatch: true,
+            refresh: false
+          });
+          await reconcileWorkflowParent(storage, job.workflowParentId);
+        }
+      } else {
+        await touchEvent(storage, 'FAILED', `${job.taskType}/${job.id.slice(0, 6)} scheduled built-in sweep rejected: ${String(result?.error || 'unknown').slice(0, 120)}`);
+      }
+    } catch (error) {
+      await touchEvent(storage, 'FAILED', `${job.taskType}/${job.id.slice(0, 6)} scheduled built-in sweep exception ${String(error?.message || error).slice(0, 120)}`);
+    }
+  }
+  return { ok: true, completed_count: completed.length, job_ids: completed };
 }
 
 async function runQueuedBuiltInDispatchSweep(storage, env, options = {}) {
@@ -13686,6 +13743,11 @@ export default {
     const storage = runtimeStorage(env);
     const cron = controller?.cron || '';
     ctx.waitUntil((async () => {
+      await completeScheduledBuiltInWorkflowJobs(storage, env, {
+        source: 'cron',
+        cron,
+        limit: Number(env?.SCHEDULED_BUILTIN_COMPLETION_SWEEP_LIMIT || 5) || 5
+      });
       await sweepTimedOutJobs(storage, {
         eventSource: 'cron'
       });
