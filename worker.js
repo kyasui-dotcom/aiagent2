@@ -9258,17 +9258,42 @@ function normalizeOrderStrategy(value = '') {
   return 'auto';
 }
 
+function ensureLeaderWorkflowActionTasks(plannedTasks = [], primaryTask = '', prompt = '') {
+  const tasks = normalizeTaskTypes(plannedTasks);
+  const primary = String(tasks[0] || primaryTask || '').trim().toLowerCase();
+  if (!['cmo_leader', 'free_web_growth_leader'].includes(primary)) return tasks;
+  const ordered = [];
+  const push = (task) => {
+    const safe = String(task || '').trim().toLowerCase();
+    if (!safe || ordered.includes(safe)) return;
+    ordered.push(safe);
+  };
+  push('cmo_leader');
+  for (const task of tasks) {
+    if (task !== 'free_web_growth_leader') push(task);
+  }
+  ['research', 'teardown', 'data_analysis', 'media_planner'].forEach(push);
+  ['seo_gap', 'landing', 'growth'].forEach(push);
+  const text = String(prompt || '').toLowerCase();
+  if (/(x\.com|(?:^|[^a-z0-9])x(?:\s+post|\s+posts|\s+thread)?(?=$|[^a-z0-9])|twitter|tweet|x投稿|ツイッター|投稿|social|connector|コネクタ|コネクター|外部実行)/i.test(text)) push('x_post');
+  if (/(reddit|subreddit|レディット|community|コミュニティ)/i.test(text)) push('reddit');
+  if (/(indie\s*hackers|indiehackers|インディーハッカー|インディーハッカーズ)/i.test(text)) push('indie_hackers');
+  if (/(directory submission|directory listing|掲載媒体|媒体掲載|無料掲載|ディレクトリ掲載)/i.test(text)) push('directory_submission');
+  return ordered.slice(0, 14);
+}
+
 function planWorkflowSelections(agents, taskType, prompt, options = {}) {
   const largeTeam = isLargeAgentTeamIntent(taskType, prompt);
   const primaryTask = inferTaskSequence(taskType, prompt, { maxTasks: 1, expand: false })[0] || inferTaskType(taskType, prompt);
   const leaderTeam = isWorkflowLeaderTask(primaryTask);
   const defaultMaxTasks = options.maxTasks || (largeTeam || primaryTask === 'cmo_leader' ? 14 : leaderTeam ? 10 : 3);
-  const plannedTasks = Array.isArray(options.plannedTasks) && options.plannedTasks.length
+  let plannedTasks = Array.isArray(options.plannedTasks) && options.plannedTasks.length
     ? normalizeTaskTypes(options.plannedTasks)
     : inferTaskSequence(taskType, prompt, {
         maxTasks: defaultMaxTasks,
         expand: options.expand !== false
       });
+  plannedTasks = ensureLeaderWorkflowActionTasks(plannedTasks, primaryTask, prompt);
   const tagHintsByTask = options.tagHintsByTask && typeof options.tagHintsByTask === 'object' ? options.tagHintsByTask : {};
   const selections = [];
   const usedAgentIds = new Set();

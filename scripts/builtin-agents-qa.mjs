@@ -14,6 +14,7 @@ import {
   builtInScopeBoundariesForKind,
   builtInSpecialistMethodForKind,
   builtInToolStrategyForKind,
+  runBuiltInAgent,
   sampleAgentPayload
 } from '../lib/builtin-agents.js';
 import { assessAgentRegistrationSafety, normalizeManifest } from '../lib/manifest.js';
@@ -594,6 +595,87 @@ assert.equal(cmoWorkflowDataPayload.report.summary, '計測・データ分析納
 assert.ok(cmoWorkflowDataPayload.files[0].content.includes('必須ファネル'));
 assert.ok(cmoWorkflowDataPayload.files[0].content.includes('実行パケット'));
 assert.ok(!/\bTBD\b|Decision framing|Output contract|Professional preflight|専門家の事前確認/i.test(cmoWorkflowDataPayload.files[0].content));
+
+const cmoWorkflowEnglishSpecialistInput = {
+  prompt: 'Task: cmo_leader Goal: customer acquisition for aiagent-marketplace.net. ICP engineers, conversion signups, no ads, do action.',
+  output_language: 'English',
+  input: {
+    _broker: {
+      workflow: {
+        primaryTask: 'cmo_leader',
+        parentJobId: 'qa-cmo-workflow-parent-en',
+        sequencePhase: 'research',
+        forceWebSearch: true,
+        webSearchRequiredReason: 'leader_research_layer'
+      }
+    }
+  }
+};
+const cmoWorkflowEnglishResearchPayload = sampleAgentPayload('research', cmoWorkflowEnglishSpecialistInput);
+assert.equal(cmoWorkflowEnglishResearchPayload.report.summary, 'CMO acquisition research delivery');
+assert.ok(cmoWorkflowEnglishResearchPayload.files[0].content.includes('CMO acquisition research delivery'));
+assert.ok(cmoWorkflowEnglishResearchPayload.files[0].content.includes('Execution packet'));
+assert.ok(cmoWorkflowEnglishResearchPayload.files[0].content.includes('aiagent-marketplace.net'));
+assert.ok(!/\bTBD\b|\[[^\]\n]{2,80}\]|Decision framing|Decision or question framing|Option A|Task:|Goal:/i.test(cmoWorkflowEnglishResearchPayload.files[0].content));
+const cmoWorkflowEnglishTeardownPayload = sampleAgentPayload('teardown', cmoWorkflowEnglishSpecialistInput);
+assert.equal(cmoWorkflowEnglishTeardownPayload.report.summary, 'CMO competitor teardown delivery');
+assert.ok(cmoWorkflowEnglishTeardownPayload.files[0].content.includes('CMO competitor teardown delivery'));
+assert.ok(cmoWorkflowEnglishTeardownPayload.files[0].content.includes('Execution packet'));
+assert.ok(!/\bTBD\b|\[[^\]\n]{2,80}\]|verify current page|the product being compared/i.test(cmoWorkflowEnglishTeardownPayload.files[0].content));
+
+const originalBuiltinQaFetch = globalThis.fetch;
+let genericCmoOpenAiCalls = 0;
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : input.url;
+  if (url === 'https://api.openai.com/v1/responses') {
+    genericCmoOpenAiCalls += 1;
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify({
+        summary: 'Research summary ready',
+        report_summary: 'Research delivery',
+        bullets: ['Generic template output.'],
+        next_action: 'Name the single highest-value follow-up check.',
+        file_markdown: [
+          '# research delivery',
+          '',
+          'Task: cmo_leader',
+          'Goal: customer acquisition',
+          '',
+          '## Answer first',
+          'Start with the shortest answer or recommendation that is justified right now.',
+          '',
+          '## Decision or question framing',
+          '- Decision to support: the one question this research must answer',
+          '',
+          '| Option | Best for | Main upside |',
+          '| --- | --- | --- |',
+          '| Option A | one clear situation | strongest upside |',
+          '',
+          '## Next check',
+          'Name the single highest-value follow-up check.'
+        ].join('\n'),
+        confidence: 0.4,
+        authority_request: null
+      })
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+  return originalBuiltinQaFetch(input, init);
+};
+try {
+  const openAiGenericResearchFallback = await runBuiltInAgent('research', cmoWorkflowEnglishSpecialistInput, {
+    OPENAI_API_KEY: 'sk-test-cmo-quality',
+    BUILTIN_OPENAI_WORKFLOW_TIMEOUT_MS: '5000'
+  });
+  assert.equal(genericCmoOpenAiCalls, 1, 'CMO workflow QA should exercise the OpenAI draft path');
+  assert.equal(openAiGenericResearchFallback.runtime.provider, 'built_in');
+  assert.equal(openAiGenericResearchFallback.runtime.workflow, 'cmo_workflow_quality_gate');
+  assert.equal(openAiGenericResearchFallback.runtime.fallback_reason, 'generic_template_left_in_cmo_workflow_delivery');
+  assert.ok(openAiGenericResearchFallback.files[0].content.includes('CMO acquisition research delivery'));
+  assert.ok(openAiGenericResearchFallback.files[0].content.includes('Execution packet'));
+  assert.ok(!/Option A|Decision or question framing|Name the single highest-value follow-up check|Task:|Goal:/i.test(openAiGenericResearchFallback.files[0].content));
+} finally {
+  globalThis.fetch = originalBuiltinQaFetch;
+}
 
 const cmoWorkflowXPayload = sampleAgentPayload('x_post', {
   ...cmoWorkflowSpecialistInput,
