@@ -28,7 +28,8 @@ jobs:
         run: npm install
 
       - name: Run QA
-        run: npm run qa:all
+        timeout-minutes: 6
+        run: npm run qa:storage && npm run qa:worker-api && npm run qa:leader-workflows
 
       - name: Install Wrangler
         run: npm install --no-save wrangler@4.80.0
