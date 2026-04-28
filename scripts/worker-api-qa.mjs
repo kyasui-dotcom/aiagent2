@@ -549,7 +549,12 @@ const syntheticAgentTeamOutput = buildAgentTeamDeliveryOutput({
     }
   }
 ]);
-assert.equal(syntheticAgentTeamOutput.files?.[0]?.content_type, 'social_post_pack', 'agent team output should promote specialist execution packets to explicit deliverables');
+assert.equal(syntheticAgentTeamOutput.files?.[0]?.content_type, 'report_bundle', 'final leader summary should be the first accountable team deliverable');
+assert.equal(syntheticAgentTeamOutput.files?.[0]?.source_task_type, 'cmo_leader', 'final leader summary should remain first instead of a supporting specialist artifact');
+assert.ok(
+  syntheticAgentTeamOutput.files?.some((file) => file.content_type === 'social_post_pack'),
+  'agent team output should still include specialist execution packets as explicit deliverables'
+);
 assert.equal(syntheticAgentTeamOutput.report?.authority_request?.missing_connectors?.[0], 'x', 'agent team output should preserve specialist authority requests for execution gating');
 assert.equal(syntheticAgentTeamOutput.summary, 'Leader final summary', 'leader-authored summary should remain the default integrated summary when available');
 assert.equal(syntheticAgentTeamOutput.report?.childRuns?.length, 2, 'integrated output should keep supporting work product summaries attached to the merged report');

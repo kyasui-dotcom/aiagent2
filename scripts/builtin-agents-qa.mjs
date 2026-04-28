@@ -561,6 +561,45 @@ assert.equal(cmoActionPayload.files[0].draft_defaults.channel, 'x');
 assert.equal(cmoActionPayload.report.execution_candidate.type, 'report_bundle');
 assert.ok(cmoActionPayload.report.execution_candidate.reason);
 
+const cmoFinalSummaryPayload = sampleAgentPayload('cmo_leader', {
+  prompt: 'CMO leader: continue customer acquisition for https://aiagent-marketplace.net through execution.',
+  input: {
+    _broker: {
+      workflow: {
+        sequencePhase: 'final_summary',
+        leaderHandoff: {
+          priorRuns: [
+            {
+              taskType: 'research',
+              status: 'completed',
+              summary: 'Research found comparison-intent SEO as the first acquisition lane.',
+              bullets: ['Comparison queries are closer to signup intent.'],
+              files: [{ name: 'research-delivery.md', content: '# Research\n\nComparison SEO first.' }]
+            },
+            {
+              taskType: 'x_post',
+              status: 'completed',
+              summary: 'Prepared an approval-ready X post packet.',
+              bullets: ['Exact post ready.'],
+              nextAction: 'Connect X, approve, and publish the post.',
+              files: [{ name: 'x-post-pack.md', content: '# X post pack\n\nPost text: Discover and compare AI agents for engineers.' }]
+            }
+          ]
+        }
+      }
+    }
+  }
+});
+assert.equal(cmoFinalSummaryPayload.report.summary, 'CMO execution delivery');
+assert.ok(cmoFinalSummaryPayload.files[0].content.includes('cmo team leader execution delivery'));
+assert.ok(cmoFinalSummaryPayload.files[0].content.includes('Execution status'));
+assert.ok(cmoFinalSummaryPayload.files[0].content.includes('x_post'));
+assert.ok(cmoFinalSummaryPayload.files[0].content.includes('Discover and compare AI agents for engineers'));
+assert.ok(cmoFinalSummaryPayload.files[0].content.includes('supporting-specialist-deliverables.md'));
+assert.ok(!cmoFinalSummaryPayload.files[0].content.includes('Specialist outputs are not attached'));
+assert.equal(cmoFinalSummaryPayload.files[0].content_type, 'report_bundle');
+assert.equal(cmoFinalSummaryPayload.files[0].execution_candidate, true);
+
 const ctoPayload = sampleAgentPayload('cto_leader', {
   prompt: 'Act as CTO and review architecture, security, and rollout.'
 });

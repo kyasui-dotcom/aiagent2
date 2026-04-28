@@ -9401,11 +9401,20 @@ function sanitizeLeaderPlannerResult(raw = {}, fallbackPlan = {}, agents = []) {
   for (const task of preludeTasks) push(task);
   for (const task of requestedTasks) push(task);
   const targetSize = requestedTasks.length
-    ? Math.min(14, Math.max(2, 1 + preludeTasks.length + requestedTasks.length))
+    ? Math.min(14, Math.max(primaryTask === 'cmo_leader' ? 6 : 2, 1 + preludeTasks.length + requestedTasks.length))
     : Math.min(14, fallbackTasks.length);
   for (const task of fallbackTasks) {
     if (merged.length >= targetSize) break;
     push(task);
+  }
+  if (primaryTask === 'cmo_leader') {
+    const hasActionLayer = merged.some((task) => workflowLayerForTask(primaryTask, task) >= 2);
+    if (!hasActionLayer) {
+      for (const task of fallbackTasks) {
+        if (workflowLayerForTask(primaryTask, task) >= 2) push(task);
+        if (merged.some((item) => workflowLayerForTask(primaryTask, item) >= 2)) break;
+      }
+    }
   }
   if (merged.length < 2) return null;
   const tagHintsByTask = {};
@@ -9453,6 +9462,7 @@ async function planLeaderWorkflowWithOpenAi(agents = [], body = {}, fallbackPlan
               'Return JSON only. Do not execute work.',
               'Keep the leader task first.',
               'For leader orders, preserve research/analysis before execution or channel posting.',
+              'For CMO/customer-acquisition orders, never stop at research only. Include at least one execution/action task from the deterministic plan, such as growth, seo_gap, landing, directory_submission, x_post, or acquisition_automation.',
               'Use only task types available in deterministic_plan or candidate_agents.task_types.',
               'Prefer provider agents over built-ins only when their tags and task types fit.',
               'Use concise English tag tokens such as marketing, research, analysis, seo, social, data, engineering, github, finance, legal, product.'
@@ -10407,6 +10417,14 @@ function workflowLeaderSequence(parent = {}) {
   const sequence = parent?.workflow?.leaderSequence;
   if (!sequence || sequence.enabled !== true) return null;
   return sequence;
+}
+
+function workflowLeaderSequenceNeedsProgress(parent = {}) {
+  const sequence = workflowLeaderSequence(parent);
+  if (!sequence?.enabled) return false;
+  if (String(sequence.status || '').trim().toLowerCase() !== 'completed') return true;
+  if (sequence.finalSummaryJobId && String(sequence.finalSummaryStatus || '').trim().toLowerCase() !== 'completed') return true;
+  return false;
 }
 
 function workflowChildrenForLayer(parent = {}, children = [], layer = 1, options = {}) {
@@ -11638,7 +11656,16 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
       }
     };
   };
-  const enableLeaderSequence = workflowShouldEnableLeaderSequence(plan, body.task_type || taskType);
+  const workflowPlanHasLayer = (predicate) => (Array.isArray(plan.plannedTasks) ? plan.plannedTasks : [])
+    .map((task) => String(task || '').trim().toLowerCase())
+    .filter((task) => task && !isWorkflowLeaderTask(task))
+    .some((task) => predicate(workflowDispatchLayer(workflowPseudoParent, { workflowTask: task, taskType: task })));
+  const enableLeaderSequence = workflowShouldEnableLeaderSequence(plan, body.task_type || taskType)
+    || (
+      isWorkflowLeaderTask(workflowPrimary)
+      && workflowPlanHasLayer((layer) => layer === 1)
+      && workflowPlanHasLayer((layer) => layer >= 2)
+    );
   const leaderSelection = enableLeaderSequence
     ? plan.selections.find((selection) => isWorkflowLeaderTask(selection.taskType)) || null
     : null;
@@ -11900,8 +11927,12 @@ async function handleCreateWorkflowJob(storage, request, env, current, body, opt
     };
   }
   const finalParent = await reconcileWorkflowParent(storage, parentJob.id);
-  const scheduled = options.asyncDispatch
-    ? await scheduleProgressDispatchForJobId(storage, env, options.waitUntil, parentJob.id, 'async workflow create')
+  const needsLeaderSequenceProgress = workflowLeaderSequenceNeedsProgress(finalParent || {});
+  const scheduled = (options.asyncDispatch || needsLeaderSequenceProgress)
+    ? await scheduleProgressDispatchesForJobId(storage, env, options.waitUntil, parentJob.id, options.asyncDispatch ? 'async workflow create' : 'leader sequence workflow create', {
+        maxTargets: 8,
+        awaitDispatch: true
+      })
     : null;
   const latestParent = scheduled?.scheduled
     ? await reconcileWorkflowParent(storage, parentJob.id)
@@ -12729,7 +12760,8 @@ async function handleGetJob(storage, request, env, jobId, ctx = null) {
   const waitUntil = ctx && typeof ctx.waitUntil === 'function'
     ? (promise) => ctx.waitUntil(promise)
     : null;
-  const shouldRunProgress = !['completed', 'failed', 'timed_out'].includes(String(job.status || '').toLowerCase());
+  const shouldRunProgress = !['completed', 'failed', 'timed_out'].includes(String(job.status || '').toLowerCase())
+    || (job.jobKind === 'workflow' && workflowLeaderSequenceNeedsProgress(job));
   if (shouldRunProgress) {
     const progressWork = (async () => {
       if (job.jobKind === 'workflow') {
