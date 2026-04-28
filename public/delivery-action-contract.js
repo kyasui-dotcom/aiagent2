@@ -48,9 +48,9 @@ const DELIVERY_ACTION_CONTRACTS = Object.freeze({
   report_bundle: Object.freeze({
     type: 'report_bundle',
     title: 'REPORT BUNDLE DETECTED',
-    description: 'CAIt detected a structured report or memo. Turn it into an action plan, publication follow-up, or export package.',
+    description: 'CAIt detected a structured report or memo. Draft the next order from it, or export it as-is. Drafting does not execute work.',
     copyLabel: 'COPY REPORT',
-    prepareLabel: 'PREPARE NEXT ORDER',
+    prepareLabel: 'DRAFT NEXT ORDER',
     connectAction: '',
     connectLabel: '',
     openCli: false
@@ -878,7 +878,7 @@ export function deliveryExecutorStatePresentation(actionKind = '', options = {})
   }
   if (options.state === 'export_only') {
     return {
-      flash: 'Export-only mode does not execute directly. Copy the handoff or prepare the next order.',
+      flash: 'Export-only mode does not execute directly. Copy the handoff or draft the next order.',
       tone: 'info'
     };
   }

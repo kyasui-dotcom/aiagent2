@@ -18437,7 +18437,7 @@ function prepareGenericDeliverableOrderFromDelivery(job = null, deliverable = nu
   flash(
     preferredAgent?.name
       ? `${deliverable.title || 'Deliverable'} prepared for ${preferredAgent.name}. Review it, then SEND ORDER when ready.`
-      : `${deliverable.title || 'Deliverable'} prepared as the next order. Review it, then SEND ORDER when ready.`,
+      : `${deliverable.title || 'Deliverable'} drafted as the next order. No execution has started. Review it, then SEND ORDER when ready.`,
     'ok'
   );
 }
@@ -19926,7 +19926,10 @@ function renderGenericDeliverableActionRow(context = {}) {
     connectReady: context.connectReady,
     target: String(context.draft?.target || '')
   });
-  return `<div class="helper-row"><button class="mini-btn" data-copy-generic-deliverable="${escapeHtml(context.run?.id)}">${escapeHtml(context.meta?.copyLabel || 'COPY')}</button><button class="mini-btn" data-prepare-generic-deliverable="${escapeHtml(context.run?.id)}">${escapeHtml(context.meta?.prepareLabel || 'PREPARE')}</button>${primaryActionButtons}${auxiliaryButtons}</div>`;
+  return [
+    `<div class="helper-row"><button class="mini-btn" data-copy-generic-deliverable="${escapeHtml(context.run?.id)}">${escapeHtml(context.meta?.copyLabel || 'COPY')}</button><button class="mini-btn" data-prepare-generic-deliverable="${escapeHtml(context.run?.id)}">${escapeHtml(context.meta?.prepareLabel || 'DRAFT NEXT ORDER')}</button>${primaryActionButtons}${auxiliaryButtons}</div>`,
+    '<div class="row-muted">Draft buttons only load the next order into Work Chat. Execution starts only after SEND ORDER.</div>'
+  ].join('');
 }
 
   function renderGenericDeliverableSection(section = {}, context = {}) {
