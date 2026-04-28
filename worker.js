@@ -10743,7 +10743,6 @@ async function scheduleProgressDispatchesForJobId(storage, env, waitUntil, jobId
   const targets = pickProgressDispatchTargets(state, jobId, { maxTargets: options.maxTargets || 1 });
   if (!targets.length) return { scheduled: false, scheduled_count: 0, reason: 'no_dispatch_target', jobs: [] };
   const scheduled = [];
-  const scheduledAgents = [];
   const dispatchPromises = [];
   for (const target of targets) {
     const marked = await markDispatchScheduled(storage, target.job.id, target.agent.id, reason, {
@@ -10751,7 +10750,6 @@ async function scheduleProgressDispatchesForJobId(storage, env, waitUntil, jobId
     });
     if (!marked.scheduled) continue;
     scheduled.push({ ...marked, parentJobId: target.parentJobId || marked.job.workflowParentId || null });
-    scheduledAgents.push(target.agent);
     await touchEvent(storage, 'RUNNING', `${marked.agent.name} scheduled ${marked.job.taskType}/${marked.job.id.slice(0, 6)}`, {
       kind: 'dispatch_scheduled',
       jobId: marked.job.id,
@@ -10763,14 +10761,7 @@ async function scheduleProgressDispatchesForJobId(storage, env, waitUntil, jobId
   }
   if (!scheduled.length) return { scheduled: false, scheduled_count: 0, reason: 'not_eligible', jobs: [] };
   const dispatchBatch = Promise.allSettled(dispatchPromises);
-  const shouldAwaitDispatch = options.awaitDispatch || scheduledAgents.every((agent) => sampleKindFromAgent(agent));
-  if (shouldAwaitDispatch) {
-    await dispatchBatch;
-  } else if (typeof waitUntil === 'function') {
-    waitUntil(dispatchBatch);
-  } else {
-    void dispatchBatch;
-  }
+  await dispatchBatch;
   return {
     scheduled: true,
     scheduled_count: scheduled.length,
