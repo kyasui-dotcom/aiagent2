@@ -80,6 +80,40 @@ function startManifestServer() {
   });
 }
 
+function closeServer(server) {
+  return new Promise((resolve) => {
+    if (!server || !server.listening) {
+      resolve();
+      return;
+    }
+    server.close(() => resolve());
+  });
+}
+
+function stopChild(child) {
+  return new Promise((resolve) => {
+    if (!child || child.exitCode !== null || child.signalCode) {
+      resolve();
+      return;
+    }
+    const killTimer = setTimeout(() => {
+      try {
+        child.kill('SIGKILL');
+      } catch {}
+    }, 1500);
+    child.once('exit', () => {
+      clearTimeout(killTimer);
+      resolve();
+    });
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      clearTimeout(killTimer);
+      resolve();
+    }
+  });
+}
+
 function authHeaders(token, extra = {}) {
   return {
     'content-type': 'application/json',
@@ -250,9 +284,8 @@ async function main() {
 
     console.log('agent registration routing e2e qa passed');
   } finally {
-    child.kill('SIGTERM');
-    manifestServer.close();
-    await sleep(300);
+    await stopChild(child);
+    await closeServer(manifestServer);
   }
 }
 
