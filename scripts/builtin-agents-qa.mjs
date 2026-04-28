@@ -535,17 +535,20 @@ const buildLeaderPayload = sampleAgentPayload('build_team_leader', {
 assert.equal(buildLeaderPayload.report.summary, 'Build Team Leader delivery');
 
 const cmoPayload = sampleAgentPayload('cmo_leader', {
-  prompt: 'Act as CMO and plan acquisition channels for CAIt.'
+  prompt: 'Act as CMO and plan acquisition channels for https://aiagent-marketplace.net. ICP engineers, conversion signups, no budget.'
 });
 assert.equal(cmoPayload.report.summary, 'CMO Team Leader delivery');
-assert.ok(cmoPayload.report.bullets.some((item) => item.includes('research findings') || item.includes('Collect research findings first')));
-assert.ok(cmoPayload.files[0].content.includes('Research first'));
-assert.ok(cmoPayload.files[0].content.includes('Chosen media'));
-assert.ok(cmoPayload.files[0].content.includes('Lane decision memo'));
+assert.ok(cmoPayload.report.bullets.some((item) => item.includes('SEO/comparison')));
+assert.ok(cmoPayload.files[0].content.includes('Answer first'));
+assert.ok(cmoPayload.files[0].content.includes('aiagent-marketplace.net'));
+assert.ok(cmoPayload.files[0].content.includes('SEO / comparison landing page'));
+assert.ok(cmoPayload.files[0].content.includes('First execution packet'));
 assert.ok(cmoPayload.files[0].content.includes('Specialist dispatch packet'));
 assert.ok(cmoPayload.files[0].content.includes('Leader approval queue'));
-assert.ok(cmoPayload.files[0].content.includes('Planned action table'));
-assert.ok(cmoPayload.files[0].content.includes('next-best lane'));
+assert.ok(cmoPayload.files[0].content.includes('Ready-to-use copy'));
+assert.ok(cmoPayload.files[0].content.includes('7-day checklist'));
+assert.ok(!cmoPayload.files[0].content.includes('## Output contract'));
+assert.ok(!cmoPayload.files[0].content.includes('first lane: the one media lane'));
 assert.equal(cmoPayload.files[0].execution_candidate, undefined, 'Plan-only CMO requests should not be promoted as execution packets');
 
 const cmoActionPayload = sampleAgentPayload('cmo_leader', {
@@ -911,6 +914,12 @@ for (const kind of BUILT_IN_KINDS) {
   assert.deepEqual(payload.runtime.delivery_policy.specialist_method, specialistMethod, `${kind} fallback runtime should expose specialist method`);
   assert.deepEqual(payload.runtime.delivery_policy.scope_boundaries, scopeBoundaries, `${kind} fallback runtime should expose scope boundaries`);
   assert.deepEqual(payload.runtime.tool_strategy, toolStrategy, `${kind} fallback runtime should expose tool strategy`);
+  if (kind === 'cmo_leader') {
+    assert.ok(payload.files[0].content.includes('## Answer first'), 'cmo_leader fallback should be a concrete delivery');
+    assert.ok(!payload.files[0].content.includes('## Output contract'), 'cmo_leader fallback should not expose output-contract boilerplate');
+    assert.ok(!payload.files[0].content.includes('first lane: the one media lane'), 'cmo_leader fallback should not contain placeholders');
+    continue;
+  }
   assert.ok(payload.files[0].content.includes('## First move'), `${kind} fallback delivery should include first move`);
   assert.ok(payload.files[0].content.includes('## Output contract'), `${kind} fallback delivery should include output contract`);
   assert.ok(payload.files[0].content.includes('## Evidence policy'), `${kind} fallback delivery should include evidence policy`);
