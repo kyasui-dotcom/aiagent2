@@ -538,6 +538,7 @@ const OPEN_CHAT_ORDER_PROGRESS_POLL_MS = 4000;
 const OPEN_CHAT_ORDER_PROGRESS_MAX_POLLS = 300;
 const OPEN_CHAT_ACCEPTANCE_PROGRESS_TICK_MS = 1200;
 const LIVE_SNAPSHOT_REFRESH_MS = 5000;
+const ORDER_HISTORY_OPTIMISTIC_TTL_MS = 10 * 60 * 1000;
 
 function normalizeOpenChatMode(value = '') {
   return String(value || '').trim().toLowerCase() === 'clarify' ? 'clarify' : 'order';
@@ -626,6 +627,7 @@ const state = {
   openChatProgressPollCount: 0,
   openChatPendingDispatchMessageId: '',
   openChatDispatchInFlightKey: '',
+  optimisticOrderJobs: {},
   pendingOrderConfirmation: null,
   orderInputFiles: [],
   orderInputFileWarnings: [],
@@ -1008,6 +1010,145 @@ function createdPayloadFromRecoveredJob(job = {}) {
     order_strategy_resolved: isWorkflow ? 'multi' : 'single',
     routing_reason: 'Recovered from order history after the create response failed.'
   };
+}
+
+function currentRequesterContextForClient(auth = state.snapshot?.auth || {}) {
+  const identity = requesterIdentityKeys(auth)[0] || 'guest';
+  const accountId = String(auth?.account?.id || (identity ? `acct:${identity}` : 'acct:guest')).trim().toLowerCase();
+  return {
+    login: identity,
+    accountId,
+    authProvider: String(auth?.authProvider || auth?.provider || auth?.user?.provider || (auth?.loggedIn ? 'web' : 'guest')).trim().toLowerCase() || 'guest'
+  };
+}
+
+function normalizeCreatedChildRunForHistory(child = {}) {
+  return {
+    id: String(child?.id || child?.job_id || child?.jobId || '').trim(),
+    jobId: String(child?.jobId || child?.job_id || child?.id || '').trim(),
+    taskType: String(child?.taskType || child?.task_type || '').trim(),
+    dispatchTaskType: String(child?.dispatchTaskType || child?.dispatch_task_type || child?.task_type || child?.taskType || '').trim(),
+    agentId: String(child?.agentId || child?.agent_id || '').trim(),
+    agentName: String(child?.agentName || child?.agent_name || '').trim(),
+    sequencePhase: String(child?.sequencePhase || child?.sequence_phase || '').trim(),
+    status: normalizeOrderProgressStatus(child?.status || 'queued'),
+    summary: String(child?.summary || child?.reportSummary || '').trim(),
+    failureReason: String(child?.failureReason || child?.failure_reason || '').trim(),
+    files: Array.isArray(child?.files) ? child.files : []
+  };
+}
+
+function optimisticJobFromCreatedOrder(created = {}, payload = {}) {
+  const orderId = createdOrderPrimaryId(created);
+  if (!orderId) return null;
+  const isWorkflow = String(created?.mode || '').toLowerCase() === 'workflow' || Boolean(created?.workflow_job_id || created?.workflowJobId);
+  const rawChildRuns = Array.isArray(created?.child_runs)
+    ? created.child_runs
+    : (Array.isArray(created?.childRuns) ? created.childRuns : (Array.isArray(created?.workflow?.childRuns) ? created.workflow.childRuns : []));
+  const childRuns = rawChildRuns.map(normalizeCreatedChildRunForHistory);
+  const status = normalizeOrderProgressStatus(created?.status || created?.dispatch_status || 'created');
+  const requester = currentRequesterContextForClient();
+  const inputBase = payload?.input && typeof payload.input === 'object' ? payload.input : {};
+  const broker = inputBase._broker && typeof inputBase._broker === 'object' ? inputBase._broker : {};
+  const now = new Date().toISOString();
+  const plannedTasks = Array.isArray(created?.planned_task_types)
+    ? created.planned_task_types
+    : (Array.isArray(created?.plannedTaskTypes) ? created.plannedTaskTypes : (Array.isArray(created?.workflow?.plannedTasks) ? created.workflow.plannedTasks : []));
+  const workflowCounts = isWorkflow
+    ? (created?.workflow?.statusCounts || orderProgressCounts({ mode: 'workflow', child_runs: childRuns }))
+    : null;
+  return {
+    id: orderId,
+    jobKind: isWorkflow ? 'workflow' : 'job',
+    parentAgentId: payload?.parent_agent_id || payload?.parentAgentId || '',
+    taskType: String(payload?.task_type || payload?.taskType || created?.inferred_task_type || created?.task_type || 'research').trim() || 'research',
+    prompt: String(payload?.prompt || '').trim(),
+    input: {
+      ...inputBase,
+      _broker: {
+        ...broker,
+        requester,
+        ...(payload?.session_id || payload?.sessionId ? { chatSessionId: payload.session_id || payload.sessionId } : {})
+      }
+    },
+    budgetCap: payload?.budget_cap || payload?.budgetCap || null,
+    deadlineSec: payload?.deadline_sec || payload?.deadlineSec || null,
+    priority: payload?.priority || 'normal',
+    status,
+    assignedAgentId: created?.matched_agent_id || created?.matchedAgentId || '',
+    score: null,
+    createdAt: created?.createdAt || created?.created_at || now,
+    startedAt: ['running', 'claimed', 'dispatched'].includes(status) ? now : null,
+    workflowParentId: payload?.workflow_parent_id || payload?.workflowParentId || null,
+    workflow: isWorkflow
+      ? {
+          ...(created?.workflow && typeof created.workflow === 'object' ? created.workflow : {}),
+          teamName: created?.workflow?.teamName || created?.team_name || created?.teamName || 'Agent Team',
+          plannedTasks,
+          childRuns,
+          statusCounts: workflowCounts
+        }
+      : undefined,
+    dispatch: {
+      completionStatus: created?.dispatch_status || created?.dispatchStatus || status
+    },
+    logs: ['Order accepted; showing optimistic history row until snapshot catches up.'],
+    __optimisticOrder: true,
+    __optimisticAt: Date.now()
+  };
+}
+
+function rememberOptimisticOrderJob(job = null) {
+  if (!job?.id) return;
+  state.optimisticOrderJobs = {
+    ...(state.optimisticOrderJobs || {}),
+    [job.id]: job
+  };
+}
+
+function optimisticOrderStillFresh(job = {}) {
+  const at = Number(job?.__optimisticAt || 0);
+  return Boolean(job?.id && at && Date.now() - at < ORDER_HISTORY_OPTIMISTIC_TTL_MS);
+}
+
+function mergeOptimisticOrderJobsIntoSnapshot(snapshot = {}) {
+  if (!snapshot || typeof snapshot !== 'object') return snapshot;
+  const optimisticJobs = state.optimisticOrderJobs || {};
+  const snapshotJobs = Array.isArray(snapshot.jobs) ? snapshot.jobs : [];
+  const actualIds = new Set(snapshotJobs.map((job) => String(job?.id || '').trim()).filter(Boolean));
+  const nextOptimistic = {};
+  const additions = [];
+  Object.values(optimisticJobs).forEach((job) => {
+    const id = String(job?.id || '').trim();
+    if (!id) return;
+    if (actualIds.has(id)) return;
+    if (!optimisticOrderStillFresh(job)) return;
+    nextOptimistic[id] = job;
+    additions.push(job);
+  });
+  state.optimisticOrderJobs = nextOptimistic;
+  if (!additions.length) return snapshot;
+  return {
+    ...snapshot,
+    jobs: [...additions, ...snapshotJobs].sort((left, right) => {
+      const diff = String(right?.createdAt || '').localeCompare(String(left?.createdAt || ''));
+      if (diff) return diff;
+      return String(right?.id || '').localeCompare(String(left?.id || ''));
+    })
+  };
+}
+
+function revealCreatedOrderInHistory(created = {}, payload = {}) {
+  const job = optimisticJobFromCreatedOrder(created, payload);
+  if (!job?.id) return;
+  rememberOptimisticOrderJob(job);
+  state.selectedJobId = job.id;
+  state.runPage = 0;
+  state.runSearch = '';
+  state.workFlowShowList = true;
+  state.workFlowLastCreatedJobId = job.id;
+  if (els.runSearch) els.runSearch.value = '';
+  mergeProgressJobIntoSnapshot(job);
 }
 
 async function recoverAcceptedOrderAfterCreateError(payload = {}, options = {}) {
@@ -1839,6 +1980,11 @@ function syncOpenChatWorkflowChildDeliveryMessages(job = {}, options = {}) {
 
 function mergeProgressJobIntoSnapshot(job = {}) {
   if (!job?.id || !state.snapshot) return;
+  if (!job.__optimisticOrder && state.optimisticOrderJobs?.[job.id]) {
+    const nextOptimistic = { ...(state.optimisticOrderJobs || {}) };
+    delete nextOptimistic[job.id];
+    state.optimisticOrderJobs = nextOptimistic;
+  }
   const jobs = Array.isArray(state.snapshot.jobs) ? [...state.snapshot.jobs] : [];
   const index = jobs.findIndex((item) => item.id === job.id);
   if (index >= 0) jobs[index] = job;
@@ -16509,10 +16655,14 @@ function requesterAccountIdOf(job = {}) {
 
 function requesterScopeForClient(auth = state.snapshot?.auth || {}) {
   const identityKeys = requesterIdentityKeys(auth);
+  const mineAccountIds = [...new Set([
+    auth?.account?.id,
+    ...identityKeys.map((login) => `acct:${login}`)
+  ].map((value) => String(value || '').trim().toLowerCase()).filter(Boolean))];
   return {
     auth,
     identityKeys,
-    mineAccountIds: identityKeys.map((login) => `acct:${login}`),
+    mineAccountIds,
     filter: String(state.runRequesterFilter || (auth?.isPlatformAdmin ? 'all' : 'mine')).trim().toLowerCase() || (auth?.isPlatformAdmin ? 'all' : 'mine')
   };
 }
@@ -20003,6 +20153,7 @@ async function sendFollowupToAgentFromDelivery() {
   const createdOrderStatus = normalizeOrderProgressStatus(created?.status || 'created');
   const createdOrderJa = looksJapanese(payload.prompt);
   const agentLabel = draft.agent_id || created?.matched_agent_id || 'same agent';
+  revealCreatedOrderInHistory(created, payload);
   const createdOrderBody = [
     createdOrderJa ? '前回納品へのフォローアップを同じAgentに送りました。' : 'Follow-up sent directly to the same agent.',
     '',
@@ -22905,7 +23056,7 @@ function maybeAutoCheckSelectedAgent(agent) {
 
 async function refresh() {
   const period = encodeURIComponent(state.settingsPeriod || currentMonthPeriod());
-  const snapshot = await api(`/api/snapshot?period=${period}`);
+  const snapshot = mergeOptimisticOrderJobsIntoSnapshot(await api(`/api/snapshot?period=${period}`));
   state.snapshot = snapshot;
   state.stripeStatus = null;
   render(snapshot);
@@ -23585,6 +23736,7 @@ async function createAndOptionallyRunJob() {
   const createdOrderBody = orderProgressMessageFromCreated(created, payload.prompt);
   const createdOrderTone = orderProgressTone(createdOrderStatus);
   const createdOrderJa = looksJapanese(payload.prompt);
+  revealCreatedOrderInHistory(created, payload);
   void trackConversionEvent('order_created', {
     ...analyticsDraft,
     mode: created.mode || 'run',
