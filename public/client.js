@@ -1116,6 +1116,31 @@ function workflowPhaseLabel(phase = '', options = {}) {
   return ja ? 'workflow' : 'workflow';
 }
 
+function workflowPhaseShortLabel(phase = '', options = {}) {
+  const ja = Boolean(options.ja);
+  const normalized = String(phase || '').trim().toLowerCase();
+  if (normalized === 'initial') return ja ? 'initial planning' : 'initial planning';
+  if (normalized === 'checkpoint') return ja ? 'checkpoint' : 'checkpoint';
+  if (normalized === 'final_summary') return ja ? 'final merge' : 'final merge';
+  if (normalized === 'research') return ja ? 'research' : 'research';
+  if (normalized === 'action') return ja ? 'execution' : 'execution';
+  return '';
+}
+
+function workflowChildDisplayName(child = {}, options = {}) {
+  const task = String(child?.taskType || child?.task_type || '').trim();
+  if (!task) return String(child?.agentName || child?.agentId || 'task').trim() || 'task';
+  const phase = workflowPhaseShortLabel(child?.sequencePhase || child?.sequence_phase || '', options);
+  const normalizedTask = task.toLowerCase();
+  if (normalizedTask === 'cmo_leader') {
+    return phase ? `CMO Leader - ${phase}` : 'CMO Leader';
+  }
+  if (normalizedTask.endsWith('_leader')) {
+    return phase ? `${task} - ${phase}` : task;
+  }
+  return task;
+}
+
 function compactProgressLogLine(value = '', max = 160) {
   return compactChatText(
     String(value || '')
@@ -1205,13 +1230,13 @@ function workflowProgressDetails(job = {}, options = {}) {
       const detail = child.summary
         || child.latestLog
         || workflowTaskWorkingNote(child.taskType, child.sequencePhase, child.status, { ja });
-      lines.push(`- ${child.taskType || 'task'} (${status})${child.agentName ? ` - ${child.agentName}` : ''}: ${detail}`);
+      lines.push(`- ${workflowChildDisplayName(child, { ja })} (${status})${child.agentName ? ` - ${child.agentName}` : ''}: ${detail}`);
     });
   } else if (blocked.length) {
     lines.push(ja ? 'Current phase: waiting for next workflow handoff' : 'Current phase: waiting for next workflow handoff');
     blocked.slice(0, 3).forEach((child) => {
       const detail = child.latestLog || workflowTaskWorkingNote(child.taskType, child.sequencePhase, child.status, { ja });
-      lines.push(`- ${child.taskType || 'task'} (${String(child.status || '').toUpperCase()}): ${detail}`);
+      lines.push(`- ${workflowChildDisplayName(child, { ja })} (${String(child.status || '').toUpperCase()}): ${detail}`);
     });
   }
   if (recentLogs.length) {
@@ -1230,7 +1255,7 @@ function orderProgressChildDeliveryLines(job = {}, options = {}) {
   if (!childRuns.length) return [];
   const lines = ['', ja ? '各エージェントの納品:' : 'Specialist deliveries:'];
   childRuns.forEach((child, index) => {
-    const title = `${index + 1}. ${child.taskType || 'task'} - ${child.agentName || child.agentId || 'agent'}`;
+    const title = `${index + 1}. ${workflowChildDisplayName(child, { ja })} - ${child.agentName || child.agentId || 'agent'}`;
     const status = String(child.status || 'unknown').toUpperCase();
     const summary = compactChatText(child.summary || child.failureReason || '', 220);
     const bullets = Array.isArray(child.bullets) ? child.bullets.filter(Boolean).slice(0, 3) : [];
@@ -1255,7 +1280,7 @@ function workflowChildDeliveryMessageId(orderId = '', child = {}, index = 0) {
 
 function workflowChildDeliveryLabel(child = {}) {
   return compactChatText(
-    String(child?.agentName || child?.agentId || child?.taskType || 'Agent delivery').trim() || 'Agent delivery',
+    String(workflowChildDisplayName(child) || child?.agentName || child?.agentId || 'Agent delivery').trim() || 'Agent delivery',
     80
   );
 }
@@ -1263,8 +1288,9 @@ function workflowChildDeliveryLabel(child = {}) {
 function workflowChildDeliveryBody(child = {}, options = {}) {
   const ja = Boolean(options.ja);
   const status = normalizeOrderProgressStatus(child?.status || 'completed');
+  const displayName = workflowChildDisplayName(child, { ja });
   const title = child?.taskType
-    ? (ja ? `担当領域の納品: ${child.taskType}` : `Specialist delivery: ${child.taskType}`)
+    ? (ja ? `担当領域の納品: ${displayName}` : `Specialist delivery: ${displayName}`)
     : (ja ? '担当領域の納品' : 'Specialist delivery');
   const summary = compactChatText(child?.summary || child?.failureReason || '', 420);
   const bullets = Array.isArray(child?.bullets) ? child.bullets.filter(Boolean).slice(0, 5) : [];
@@ -19606,7 +19632,7 @@ function renderWorkflowTeamSummary(workflowChildren = []) {
           ${visibleChildren.map((child, index) => `
             <div class="delivery-team-item">
               <div>
-                <strong>${escapeHtml(`${index + 1}. ${child.taskType || 'task'}`)}</strong>
+                <strong>${escapeHtml(`${index + 1}. ${workflowChildDisplayName(child)}`)}</strong>
                 ${child.sequencePhase ? `<div class="row-muted">${escapeHtml(`PHASE ${String(child.sequencePhase || '').toUpperCase()}`)}</div>` : ''}
                 <div class="row-muted">${escapeHtml(String(child.status || 'unknown').toUpperCase())}</div>
                 <div>${escapeHtml(summaryTextForChild(child))}</div>

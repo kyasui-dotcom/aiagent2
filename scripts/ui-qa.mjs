@@ -214,6 +214,9 @@ assert.ok(js.includes('Reload WORK. If it still fails, sign in again and recheck
 assert.ok(js.includes('Current phase:'));
 assert.ok(js.includes('Thinking:'));
 assert.ok(js.includes('Next:'));
+assert.ok(js.includes('function workflowChildDisplayName'));
+assert.ok(js.includes("return phase ? `CMO Leader - ${phase}` : 'CMO Leader';"));
+assert.ok(js.includes("if (normalized === 'final_summary') return ja ? 'final merge' : 'final merge';"));
 assert.ok(js.includes('merge supporting work products into one accountable final report.'));
 assert.ok(js.includes('prepare the next supporting work step.'));
 assert.ok(js.includes('The integrated report merged the supporting work products into one delivery.'));
