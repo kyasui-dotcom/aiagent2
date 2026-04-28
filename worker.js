@@ -10930,7 +10930,7 @@ async function runWorkflowTimeoutRetrySweep(storage, env, options = {}) {
 }
 
 async function completeJobFromAgentResult(storage, jobId, agentId, payload = {}, meta = {}) {
-  const result = await storage.mutate(async (state) => {
+  const mutateComplete = async (state) => {
     const job = state.jobs.find((item) => item.id === jobId);
     if (!job) return { error: 'Job not found', statusCode: 404 };
     if (isTerminalJobStatus(job.status)) {
@@ -10989,7 +10989,10 @@ async function completeJobFromAgentResult(storage, jobId, agentId, payload = {},
     if (meta.externalJobId) job.logs.push(`external_job_id=${meta.externalJobId}`);
     settleAgentEarnings(job, agent, billing);
     return { ok: true, job: cloneJob(job), billing, workflowParentId: job.workflowParentId || null };
-  });
+  };
+  const result = typeof storage.mutateJobAndAgent === 'function'
+    ? await storage.mutateJobAndAgent(jobId, agentId, mutateComplete)
+    : await storage.mutate(mutateComplete);
   if (result?.ok && result.workflowParentId) await reconcileWorkflowParent(storage, result.workflowParentId);
   return result;
 }
