@@ -32,6 +32,7 @@ assert.ok(builtInAgentSource.includes('Execution-request handling'), 'Action-thr
 assert.ok(builtInAgentSource.includes('do not stop at a plan or "approve research first"'), 'CMO leader must not end action requests as plan-only approval reports');
 assert.ok(builtInAgentSource.includes('workflow_fast_draft'), 'Workflow built-in runs should use a bounded single-draft path to avoid Cloudflare background timeout loops');
 assert.ok(builtInAgentSource.includes('BUILTIN_OPENAI_WORKFLOW_TIMEOUT_MS'), 'Workflow built-in run timeout must be configurable');
+assert.ok(builtInAgentSource.includes("normalizedKind.endsWith('_leader')"), 'Leader workflow planning should not spend the first dispatch on web search');
 
 function builtInSeedManifest(seed = {}) {
   const manifest = seed?.metadata?.manifest && typeof seed.metadata.manifest === 'object'
