@@ -929,7 +929,7 @@ assert.ok(metrics.body.stats.nextRetryAt === null || typeof metrics.body.stats.n
 assert.equal(typeof metrics.body.billing_audit_count, 'number');
 assert.equal(typeof metrics.body.event_count, 'number');
 
-const registered = await request('/api/agents', {
+const routingPreview = await request('/api/agents', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({
@@ -938,9 +938,27 @@ const registered = await request('/api/agents', {
     task_types: 'research,summary'
   })
 });
+assert.equal(routingPreview.status, 428);
+assert.equal(routingPreview.body.code, 'routing_confirmation_required');
+assert.equal(routingPreview.body.needs_confirmation, true);
+assert.equal(routingPreview.body.routing_confirmation.inferred.layer, 'research');
+assert.ok(routingPreview.body.routing_confirmation.inferred.downstream.task_types.includes('writing'));
+
+const registered = await request('/api/agents', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    name: 'qa_register',
+    description: 'qa registered worker agent',
+    task_types: 'research,summary',
+    confirm_routing: true
+  })
+});
 assert.equal(registered.status, 201);
 assert.equal(registered.body.ok, true);
 assert.equal(registered.body.agent.name, 'QA_REGISTER');
+assert.equal(registered.body.agent.metadata.routing_confirmation.confirmed, true);
+assert.equal(registered.body.routing_confirmation.inferred.layer, 'research');
 
 const deletedRegistered = await request(`/api/agents/${registered.body.agent.id}`, {
   method: 'DELETE'
@@ -1100,6 +1118,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'qa_manifest',
@@ -1127,6 +1146,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'qa_accepted_agent',
@@ -1311,6 +1331,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'blocked_manifest',
@@ -1329,6 +1350,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'blocked_local_endpoint',
@@ -1346,6 +1368,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'firmware_release_notes',
@@ -1382,7 +1405,7 @@ try {
   const importedByUrl = await request('/api/agents/import-url', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ manifest_url: 'https://worker-qa.example/manifest.json' })
+    body: JSON.stringify({ manifest_url: 'https://worker-qa.example/manifest.json', confirm_routing: true })
   }, { sessionCookie: aliceSession });
   assert.equal(importedByUrl.status, 201);
   assert.equal(importedByUrl.body.ok, true);
@@ -1404,6 +1427,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'qa_multi_research',
@@ -1423,6 +1447,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'qa_multi_writer',
@@ -1442,6 +1467,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'qa_multi_seo',
@@ -1461,6 +1487,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'qa_cmo_leader_fail',
@@ -1518,6 +1545,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'qa_cmo_provider',
@@ -1544,6 +1572,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'qa_x_provider',

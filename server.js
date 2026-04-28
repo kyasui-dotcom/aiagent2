@@ -7,6 +7,7 @@ import { createD1LikeStorage } from './lib/storage.js';
 import { BUILT_IN_KINDS, builtInAgentHealthPayload, runBuiltInAgent } from './lib/builtin-agents.js';
 import { GITHUB_ADAPTER_MARKER, adapterNextStepText, buildGithubAdapterPlan, createGithubBranch, createGithubPullRequest, fetchGithubBranchSha, fetchGithubRepoTree, fetchGithubTextFile, findKnownBrokerPath, upsertGithubTextFile } from './lib/github-adapter.js';
 import { BILLING_DISPLAY_CURRENCY, WELCOME_CREDITS_GRANT_AMOUNT, accountIdForLogin, accountIdentityForProvider, accountSettingsForIdentity, accountSettingsForLogin, agentLinksFromRecord, agentTagsFromRecord, aliasLoginsForAccount, applyStripeRefundToAccount, applySubscriptionRefillToAccount, authenticateOrderApiKey, billingAuditsForJobIds, billingModeFromJob, billingPeriodId, billingProfileForAccount, buildAdminDashboard, buildAgentId, buildConversionAnalytics, buildFollowupConversationContext, buildIntakeClarification, buildMonthlyAccountSummary, chatSessionIdForJob, chatTrainingExamplesForClient, chatTranscriptsForClient, computeScore, connectorActionLabel, connectorOAuthActionInstruction, createChatTranscript, createConversionEventPayload, createFeedbackReport, createOrderApiKeyInState, createRecurringOrderInState, defaultLoginForAuthUser, deleteRecurringOrderInState, displayCurrencyToLedgerAmount, dueRecurringOrders, estimateBilling, estimateRunWindow, feedbackReportsForClient, formatFeedbackReportEmail, hideChatMemoryTranscriptForLoginInState, inferAgentTagsFromSignals, inferTaskSequence, inferTaskType, isAgentOwnedByLogin, isBillableJob, isJobVisibleToLogin, isPrivateNetworkHostname, jobsVisibleToLogin, ledgerAmountToDisplayCurrency, linkIdentityToAccountInState, makeEvent, markRecurringOrderRunInState, maybeGrantWelcomeCreditsForSignupInState, maybeGrantWelcomeCreditsForVerifiedAgentInState, mergeAccountsInState, mergeProtectedPromptSourceIntoInput, normalizeTaskTypes, nowIso, optimizeOrderPromptForBroker, promptInjectionGuardForPrompt, providerMonthlyBillingLedgerForLogin, providerPayoutLedgerForLogin, publicEventView, recordProviderMonthlyChargeInAccount, recurringOrderToJobPayload, recurringOrdersVisibleToLogin, recordStripeTopupInAccount, recoverMissingAccountsInState, releaseBillingReservationInState, requesterContextFromUser, reserveBillingEstimateInState, revokeOrderApiKeyInState, sanitizeAccountSettingsForClient, sanitizeBillingSettingsPatch, sanitizeExecutorPreferencesPatch, sanitizeFeedbackReportForClient, sanitizePayoutSettingsPatch, settleBillingForJobInState, touchOrderApiKeyUsageInState, updateChatTranscriptReviewInState, updateFeedbackReportInState, updateRecurringOrderInState, upsertAccountSettingsForIdentityInState, upsertAccountSettingsInState } from './lib/shared.js';
+import { agentRoutingConfirmationAccepted, applyConfirmedAgentRoutingToAgent, buildAgentRoutingConfirmation } from './lib/shared.js';
 import { agentPatternFitScore, applyGuestTrialSignupDebitInState, buildAgentTeamDeliveryOutput, deliveryQualityScoreForJob, ensureGuestTrialAccountInState, guestTrialLoginForVisitorId, guestTrialUsageForVisitorInState, isAgentTeamLaunchIntent, isFreeWebGrowthIntent, isLargeAgentTeamIntent, normalizeGuestTrialRequest, orderPreflightForAgent, ownChatMemoryForClient } from './lib/shared.js';
 import { amountFromMinorUnits, createConnectedAccount, createConnectedAccountTransfer, createConnectOnboardingLink, createOffSessionMonthlyInvoicePaymentIntent, createOffSessionProviderMonthlyPaymentIntent, createSetupCheckoutSession, createSubscriptionCheckoutSession, ensureStripeCustomer, resolveSubscriptionPlanFromPriceId, retrieveConnectedAccount, retrievePaymentIntent, retrieveSetupIntent, retrieveSubscription, stripeConfigFromEnv, stripeConfigured, stripePublicConfig, updateCustomerDefaultPaymentMethod, verifyStripeWebhookSignature } from './lib/stripe.js';
 import { MANIFEST_CANDIDATE_PATHS, assessAgentRegistrationSafety, buildDraftManifestFromAgentSkill, buildDraftManifestFromRepoAnalysis, deriveManifestSignalPaths, normalizeManifest, parseAndValidateManifest, sanitizeManifestForPublic, validateManifest } from './lib/manifest.js';
@@ -3744,6 +3745,22 @@ function createAgentFromManifest(manifest, ownerInfo = { owner: 'samurai', metad
       }
     }
   });
+}
+
+function agentRoutingConfirmationResponse(agent = {}, state = {}, ownerInfo = {}, source = 'agent-register') {
+  const catalog = [agent, ...(Array.isArray(state.agents) ? state.agents : [])];
+  const routingConfirmation = buildAgentRoutingConfirmation(agent, { catalog });
+  return {
+    ok: false,
+    code: routingConfirmation.code,
+    needs_confirmation: true,
+    required: `${routingConfirmation.confirm_field}=true`,
+    agent_preview: publicAgent(agent, catalog),
+    routing_confirmation: routingConfirmation,
+    owner: ownerInfo.owner || agent.owner || null,
+    source,
+    error: 'Confirm the inferred agent routing before registration.'
+  };
 }
 
 function applyVerificationToAgentRecord(agent, verification) {
@@ -8811,12 +8828,20 @@ const server = http.createServer(async (req, res) => {
     if (!safety.ok) return agentSafetyErrorResponse(res, safety);
     const ownerInfo = ownerFromCurrent(req, current);
     const agent = createAgentFromInput({ ...body, owner: body.owner || ownerInfo.owner, metadata: { ...(body.metadata || {}), ...ownerInfo.metadata } });
+    if (!agentRoutingConfirmationAccepted(body)) {
+      return json(res, 428, { ...agentRoutingConfirmationResponse(agent, state, ownerInfo, 'manual-register'), safety });
+    }
+    const confirmedRouting = applyConfirmedAgentRoutingToAgent(agent, {
+      catalog: [agent, ...state.agents],
+      confirmedBy: ownerInfo.owner,
+      source: 'manual-register'
+    });
     const review = await runAgentReviewForRequest(agent, req, { source: 'manual-register', safety });
     applyAgentReviewToAgentRecord(agent, review);
     await storage.mutate(async (state) => { state.agents.unshift(agent); });
     await touchEvent('REGISTERED', `${agent.name} registered with tasks ${agent.taskTypes.join(', ')}`);
     if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
-    return json(res, 201, { ok: true, agent, safety, review });
+    return json(res, 201, { ok: true, agent, safety, review, routing_confirmation: confirmedRouting.routing_confirmation });
   }
   if (req.method === 'POST' && url.pathname === '/api/agents/draft-skill-manifest') {
     const session = getSession(req);
@@ -8868,13 +8893,21 @@ const server = http.createServer(async (req, res) => {
     if (!safety.ok) return agentSafetyErrorResponse(res, safety);
     const ownerInfo = ownerFromCurrent(req, current);
     const agent = createAgentFromManifest(manifest, ownerInfo, { manifestSource: 'manifest-json', verificationStatus: 'manifest_loaded', importMode: 'manifest-json' });
+    if (!agentRoutingConfirmationAccepted(body)) {
+      return json(res, 428, { ...agentRoutingConfirmationResponse(agent, state, ownerInfo, 'manifest-json'), safety });
+    }
+    const confirmedRouting = applyConfirmedAgentRoutingToAgent(agent, {
+      catalog: [agent, ...state.agents],
+      confirmedBy: ownerInfo.owner,
+      source: 'manifest-json'
+    });
     const review = await runAgentReviewForRequest(agent, req, { source: 'manifest-json', safety });
     applyAgentReviewToAgentRecord(agent, review);
     await storage.mutate(async (state) => { state.agents.unshift(agent); });
     await touchEvent('REGISTERED', `${agent.name} imported from manifest JSON (pending verification)`);
     const autoVerification = await maybeAutoVerifyImportedAgent(agent, ownerInfo.owner);
     if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
-    return json(res, 201, { ok: true, agent: autoVerification.agent, auto_verification: autoVerification.verification, welcome_credits: autoVerification.welcome_credits || null, safety, review });
+    return json(res, 201, { ok: true, agent: autoVerification.agent, auto_verification: autoVerification.verification, welcome_credits: autoVerification.welcome_credits || null, safety, review, routing_confirmation: confirmedRouting.routing_confirmation });
   }
   if (req.method === 'POST' && url.pathname === '/api/agents/import-url') {
     const state = await storage.getState();
@@ -8899,13 +8932,21 @@ const server = http.createServer(async (req, res) => {
       verificationStatus: 'manifest_loaded',
       importMode: 'manifest-url'
     });
+    if (!agentRoutingConfirmationAccepted(body)) {
+      return json(res, 428, { ...agentRoutingConfirmationResponse(agent, state, ownerInfo, 'manifest-url'), import_mode: 'manifest-url', safety });
+    }
+    const confirmedRouting = applyConfirmedAgentRoutingToAgent(agent, {
+      catalog: [agent, ...state.agents],
+      confirmedBy: ownerInfo.owner,
+      source: 'manifest-url'
+    });
     const review = await runAgentReviewForRequest(agent, req, { source: 'manifest-url', safety });
     applyAgentReviewToAgentRecord(agent, review);
     await storage.mutate(async (state) => { state.agents.unshift(agent); });
     await touchEvent('REGISTERED', `${agent.name} manifest loaded from URL`);
     const autoVerification = await maybeAutoVerifyImportedAgent(agent, ownerInfo.owner);
     if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
-    return json(res, 201, { ok: true, agent: autoVerification.agent, auto_verification: autoVerification.verification, welcome_credits: autoVerification.welcome_credits || null, import_mode: 'manifest-url', owner: ownerInfo.owner, safety, review });
+    return json(res, 201, { ok: true, agent: autoVerification.agent, auto_verification: autoVerification.verification, welcome_credits: autoVerification.welcome_credits || null, import_mode: 'manifest-url', owner: ownerInfo.owner, safety, review, routing_confirmation: confirmedRouting.routing_confirmation });
   }
   if (req.method === 'DELETE' && url.pathname.match(/^\/api\/agents\/([^/]+)$/)) {
     const id = url.pathname.split('/')[3];

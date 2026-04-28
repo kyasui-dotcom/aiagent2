@@ -24284,18 +24284,57 @@ if (els.savePayoutSettingsBtn) els.savePayoutSettingsBtn.onclick = () => {
   await refresh();
   });
 };
+
+function agentRoutingConfirmationPrompt(payload = {}) {
+  const routing = payload.routing_confirmation || {};
+  const inferred = routing.inferred || {};
+  const upstream = inferred.upstream || {};
+  const downstream = inferred.downstream || {};
+  const lines = [
+    'Confirm inferred agent routing before registration.',
+    '',
+    `Layer: ${inferred.layer || '-'}`,
+    `Role: ${inferred.role || '-'}`,
+    `Approval: ${inferred.approval_mode || '-'}`,
+    `Task types: ${(inferred.task_types || []).join(', ') || '-'}`,
+    `Upstream: ${(upstream.task_types || []).join(', ') || '-'}`,
+    `Downstream: ${(downstream.task_types || []).join(', ') || '-'}`,
+    '',
+    'Register with these settings?'
+  ];
+  const warnings = Array.isArray(routing.warnings) ? routing.warnings.filter(Boolean) : [];
+  if (warnings.length) lines.splice(lines.length - 2, 0, `Warnings: ${warnings.join(' / ')}`);
+  return lines.join('\n');
+}
+
+async function submitAgentRegistrationWithRoutingConfirmation(url, payload) {
+  try {
+    return await api(url, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  } catch (error) {
+    const data = error?.data || {};
+    if (error?.status !== 428 || data.code !== 'routing_confirmation_required') throw error;
+    setDetail(data);
+    const confirmed = window.confirm(agentRoutingConfirmationPrompt(data));
+    if (!confirmed) throw new Error('Agent routing confirmation canceled.');
+    return api(url, {
+      method: 'POST',
+      body: JSON.stringify({ ...payload, confirm_routing: true })
+    });
+  }
+}
+
 if (els.registerAgentBtn) els.registerAgentBtn.onclick = () => runAction(els.registerAgentBtn, async () => {
   if (!ensureGithubLinkedAccess({ section: 'agents', message: 'Connect GitHub before registering an agent.' })) return;
-  const res = await api('/api/agents', {
-    method: 'POST',
-    body: JSON.stringify({
-      name: els.agentName?.value,
-      description: els.agentDesc?.value,
-      task_types: els.agentTasks?.value,
-      provider_markup_rate: Number(els.agentPremium?.value || 0.1),
-      token_markup_rate: Number(els.agentPremium?.value || 0.1),
-      platform_margin_rate: 0.1
-    })
+  const res = await submitAgentRegistrationWithRoutingConfirmation('/api/agents', {
+    name: els.agentName?.value,
+    description: els.agentDesc?.value,
+    task_types: els.agentTasks?.value,
+    provider_markup_rate: Number(els.agentPremium?.value || 0.1),
+    token_markup_rate: Number(els.agentPremium?.value || 0.1),
+    platform_margin_rate: 0.1
   });
   setDetail(res);
   state.selectedAgentId = res.agent?.id || null;
@@ -24313,7 +24352,7 @@ if (els.registerAgentBtn) els.registerAgentBtn.onclick = () => runAction(els.reg
 });
 if (els.importManifestBtn) els.importManifestBtn.onclick = () => runAction(els.importManifestBtn, async () => {
   if (!ensureGithubLinkedAccess({ section: 'agents', message: 'Connect GitHub before importing an agent manifest.' })) return;
-  const res = await api('/api/agents/import-manifest', { method: 'POST', body: JSON.stringify({ manifest: JSON.parse(els.manifestJson?.value || '{}') }) });
+  const res = await submitAgentRegistrationWithRoutingConfirmation('/api/agents/import-manifest', { manifest: JSON.parse(els.manifestJson?.value || '{}') });
   setDetail(res);
   state.selectedAgentId = res.agent?.id || null;
   delete state.agentOnboarding[state.selectedAgentId];
@@ -24331,7 +24370,7 @@ if (els.importManifestBtn) els.importManifestBtn.onclick = () => runAction(els.i
 if (els.importUrlBtn) els.importUrlBtn.onclick = () => runAction(els.importUrlBtn, async () => {
   if (!ensureGithubLinkedAccess({ section: 'agents', message: 'Connect GitHub before importing an agent manifest URL.' })) return;
   const value = (els.manifestUrl?.value || '').trim();
-  const res = await api('/api/agents/import-url', { method: 'POST', body: JSON.stringify({ manifest_url: value }) });
+  const res = await submitAgentRegistrationWithRoutingConfirmation('/api/agents/import-url', { manifest_url: value });
   setDetail({ input: value, response: res });
   state.selectedAgentId = res.agent?.id || null;
   delete state.agentOnboarding[state.selectedAgentId];
