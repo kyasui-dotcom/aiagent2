@@ -308,6 +308,108 @@ const asyncSpecialistWithHandoff = asyncRawState.jobs.find((job) => (
   && job.input?._broker?.workflow?.leaderHandoff?.leaderTaskType === 'cmo_leader'
 ));
 assert.ok(asyncSpecialistWithHandoff, 'specialist children should receive the completed CMO leader handoff before dispatch');
+
+const parallelLayerParentId = 'qa-parallel-layer-parent';
+const parallelLayerLeaderId = 'qa-parallel-layer-leader';
+const parallelLayerRunningId = 'qa-parallel-layer-running';
+const parallelLayerQueuedId = 'qa-parallel-layer-queued';
+const parallelLayerNextId = 'qa-parallel-layer-next';
+await qaStorage.mutate(async (draft) => {
+  const at = nowIso();
+  draft.jobs.push(
+    {
+      id: parallelLayerParentId,
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'same-layer parallel dispatch qa',
+      status: 'running',
+      createdAt: at,
+      startedAt: at,
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research', 'teardown', 'growth'],
+        childRuns: []
+      },
+      logs: ['same-layer parallel dispatch qa parent']
+    },
+    {
+      id: parallelLayerLeaderId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'leader completed for same-layer parallel dispatch qa',
+      status: 'completed',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: parallelLayerParentId,
+      createdAt: at,
+      startedAt: at,
+      completedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'initial' } } },
+      output: {
+        summary: 'Leader completed',
+        report: { summary: 'Leader completed', bullets: ['release layer 1'], nextAction: 'Run layer 1.' },
+        files: []
+      },
+      logs: ['leader completed']
+    },
+    {
+      id: parallelLayerRunningId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'already running layer 1 child',
+      status: 'running',
+      assignedAgentId: 'agent_research_01',
+      workflowParentId: parallelLayerParentId,
+      createdAt: at,
+      startedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'research' } } },
+      dispatch: { completionStatus: 'dispatch_scheduled', dispatchRequestedAt: at },
+      logs: ['already running layer 1 child']
+    },
+    {
+      id: parallelLayerQueuedId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'teardown',
+      workflowTask: 'teardown',
+      workflowAgentName: 'Competitor Teardown Agent',
+      prompt: 'queued layer 1 child should start despite running sibling',
+      status: 'queued',
+      assignedAgentId: 'agent_teardown_01',
+      workflowParentId: parallelLayerParentId,
+      createdAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'research' } } },
+      logs: ['queued layer 1 child']
+    },
+    {
+      id: parallelLayerNextId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'growth',
+      workflowTask: 'growth',
+      workflowAgentName: 'Growth Operator Agent',
+      prompt: 'queued layer 2 child should wait for layer 1',
+      status: 'queued',
+      assignedAgentId: 'agent_growth_01',
+      workflowParentId: parallelLayerParentId,
+      createdAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'action' } } },
+      logs: ['queued layer 2 child']
+    }
+  );
+});
+const parallelLayerPoll = await request(`/api/jobs/${parallelLayerParentId}`);
+assert.equal(parallelLayerPoll.status, 200);
+const parallelLayerState = await qaStorage.getState();
+const parallelLayerQueued = parallelLayerState.jobs.find((job) => job.id === parallelLayerQueuedId);
+const parallelLayerNext = parallelLayerState.jobs.find((job) => job.id === parallelLayerNextId);
+assert.notEqual(parallelLayerQueued?.status, 'queued', 'queued same-layer child should dispatch even when a sibling is already running');
+assert.equal(parallelLayerNext?.status, 'queued', 'next-layer child should remain queued until earlier layer finishes');
 await qaStorage.mutate(async (draft) => {
   for (const job of draft.jobs) {
     if (

@@ -10422,8 +10422,6 @@ function pickProgressDispatchTargets(state, jobId, options = {}) {
       state.jobs.filter((item) => item.workflowParentId === parentOrJob.id)
     );
     const leaderSequence = workflowLeaderSequence(parentOrJob);
-    const activeScheduled = children.some((child) => dispatchScheduleIsFresh(child, now));
-    if (activeScheduled) return [];
     const leaderChildren = children.filter((child) => isWorkflowLeaderTask(workflowTaskName(child)));
     const pendingLeader = leaderChildren.find((child) => !workflowChildIsTerminal(child) && String(child.status || '').toLowerCase() !== 'blocked');
     if (pendingLeader) {
@@ -10792,11 +10790,18 @@ async function runQueuedBuiltInDispatchSweep(storage, env, options = {}) {
       }
     }
     if (!picked) break;
-    const result = await scheduleProgressDispatchForJobId(storage, env, options.waitUntil, picked.candidate.id, options.reason || 'cron dispatch sweep');
+    const result = await scheduleProgressDispatchesForJobId(storage, env, options.waitUntil, picked.candidate.id, options.reason || 'cron dispatch sweep', {
+      maxTargets: Math.max(1, limit - scheduled.length)
+    });
     if (!result?.scheduled) break;
-    const scheduledJobId = result.job?.id || picked.targetJobId || picked.candidate.id;
-    scheduledJobIds.add(scheduledJobId);
-    scheduled.push(scheduledJobId);
+    const scheduledIds = Array.isArray(result.jobs) && result.jobs.length
+      ? result.jobs.map((job) => job?.id).filter(Boolean)
+      : [result.job?.id || picked.targetJobId || picked.candidate.id].filter(Boolean);
+    for (const scheduledJobId of scheduledIds) {
+      if (scheduledJobIds.has(scheduledJobId)) continue;
+      scheduledJobIds.add(scheduledJobId);
+      scheduled.push(scheduledJobId);
+    }
   }
   if (scheduled.length) {
     await touchEvent(storage, 'RUNNING', `queued built-in dispatch sweep scheduled ${scheduled.length} job(s)`, {
