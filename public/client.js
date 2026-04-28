@@ -3815,6 +3815,34 @@ function hasOpenChatSessionPayloadContent(payload = {}) {
   );
 }
 
+function normalizeOpenChatSessionFingerprintText(value = '') {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function openChatSessionContentFingerprints(session = {}) {
+  const messages = Array.isArray(session.messages) ? session.messages : [];
+  const firstUserMessage = messages.find((message) => message?.role === 'user' && String(message?.body || '').trim()) || null;
+  const candidates = [
+    session.openChatPreparedBrief,
+    session.jobPrompt,
+    firstUserMessage?.body,
+    session.title
+  ];
+  const keys = new Set();
+  for (const candidate of candidates) {
+    const raw = String(candidate || '').trim();
+    if (!raw) continue;
+    const normalized = normalizeOpenChatSessionFingerprintText(raw);
+    const structured = isStructuredOrderBrief(raw) || /(^|\n)\s*(task|goal|work split|deliver|acceptance)\s*:/i.test(raw);
+    if (!structured && normalized.length < 80) continue;
+    keys.add(`content:${normalized.slice(0, 1000)}`);
+  }
+  return keys;
+}
+
 function openChatSessionIdentityKeys(session = {}) {
   const keys = new Set();
   const id = compactChatText(session.id || '', 120);
@@ -3836,6 +3864,7 @@ function openChatSessionIdentityKeys(session = {}) {
     const progressOrderId = compactChatText(message?.orderProgressId || '', 120);
     if (progressOrderId) keys.add(`order:${progressOrderId}`);
   }
+  for (const fingerprint of openChatSessionContentFingerprints(session)) keys.add(fingerprint);
   return keys;
 }
 
