@@ -456,6 +456,7 @@ const els = {
   adminIssuesMetric: $('adminIssuesMetric'),
   adminActiveMetric: $('adminActiveMetric'),
   adminDetail: $('adminDetail'),
+  adminChatSessionDetail: $('adminChatSessionDetail'),
   adminChatSegmentationCard: $('adminChatSegmentationCard'),
   adminChatFilterNeedsReviewBtn: $('adminChatFilterNeedsReviewBtn'),
   adminChatFilterHandledBtn: $('adminChatFilterHandledBtn'),
@@ -16340,8 +16341,9 @@ function adminChatSessionDetailText(chat = {}) {
 }
 
 function setAdminChatSessionDetail(chat = {}) {
-  if (!els.adminDetail) return;
-  safeText(els.adminDetail, adminChatSessionDetailText(chat));
+  const detailText = adminChatSessionDetailText(chat);
+  safeText(els.adminDetail, detailText);
+  safeText(els.adminChatSessionDetail, detailText);
 }
 
 function renderAdminRows(container, gridClass, headers = [], rows = [], emptyText = 'No records yet.') {
@@ -16352,20 +16354,24 @@ function renderAdminRows(container, gridClass, headers = [], rows = [], emptyTex
   }
   container.innerHTML = [
     `<div class="table-header ${gridClass}">${headers.map((header) => `<div>${escapeHtml(header)}</div>`).join('')}</div>`,
-    ...rows.map((row) => `<div class="table-row ${gridClass}" data-admin-kind="${escapeHtml(row.kind)}" data-admin-index="${row.index}">${row.cells.map((cell) => `<div>${cell}</div>`).join('')}</div>`)
+    ...rows.map((row) => `<div class="table-row ${gridClass}" data-admin-kind="${escapeHtml(row.kind)}" data-admin-index="${row.index}" data-admin-key="${escapeHtml(row.key || '')}">${row.cells.map((cell) => `<div>${cell}</div>`).join('')}</div>`)
   ].join('');
   [...container.querySelectorAll('[data-admin-kind]')].forEach((node) => {
     node.onclick = () => {
       const kind = node.dataset.adminKind || '';
       const index = Number(node.dataset.adminIndex || 0);
+      const key = String(node.dataset.adminKey || '').trim();
       const source = state.snapshot?.adminDashboard?.[kind] || [];
+      const item = key
+        ? (source.find((entry) => [entry?.id, entry?.sessionId].map((value) => String(value || '')).includes(key)) || source[index] || {})
+        : (source[index] || {});
       [...container.querySelectorAll('.selected-row')].forEach((row) => row.classList.remove('selected-row'));
       node.classList.add('selected-row');
       if (kind === 'chats') {
-        setAdminChatSessionDetail(source[index] || {});
+        setAdminChatSessionDetail(item);
         return;
       }
-      setAdminDetail(`${kind.toUpperCase()} DETAIL`, source[index] || {});
+      setAdminDetail(`${kind.toUpperCase()} DETAIL`, item);
     };
   });
 }
@@ -16515,6 +16521,7 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
     safeText(els.adminIssuesMetric, '-');
     safeText(els.adminActiveMetric, '-');
     safeText(els.adminDetail, 'Admin access required.');
+    safeText(els.adminChatSessionDetail, 'Admin access required.');
     renderAdminChatFilterButtons();
     return;
   }
@@ -16588,6 +16595,7 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
   renderAdminRows(els.adminChatTable, 'admin-chat-grid', ['TIME', 'USER INPUT', 'ANSWER', 'HANDLING'], pagedChats.items.map(({ chat, index }) => ({
     kind: 'chats',
     index,
+    key: chat.id || chat.sessionId || '',
     cells: [
       `${sinceLabel(chat.createdAt)}<div class="row-muted">${escapeHtml(chat.adminSegmentLabel || chat.authProvider || 'guest')} · ${escapeHtml(chat.sessionId || chat.id || '-')}</div>`,
       `${escapeHtml((chat.prompt || '-').slice(0, 90))}<div class="row-muted">${escapeHtml(`${chat.turnCount || 1} turns`)} · task ${escapeHtml(chat.latestTaskType || chat.taskType || '-')}</div>`,
