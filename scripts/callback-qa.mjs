@@ -72,7 +72,7 @@ async function main() {
     const importJson = await request('/api/agents/import-manifest', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest })
+      body: JSON.stringify({ confirm_routing: true, manifest })
     });
     assert.equal(importJson.status, 201, 'manifest import should succeed');
     const agentId = importJson.body.agent.id;

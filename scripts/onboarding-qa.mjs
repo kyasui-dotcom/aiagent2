@@ -47,6 +47,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'ready_agent',
@@ -70,6 +71,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'local_only_agent',
@@ -98,6 +100,7 @@ try {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      confirm_routing: true,
       manifest: {
         schema_version: 'agent-manifest/v1',
         name: 'broken_agent',

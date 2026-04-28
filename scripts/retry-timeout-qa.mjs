@@ -62,7 +62,7 @@ async function main() {
     const importBad = await request('/api/agents/import-manifest', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest: badManifest })
+      body: JSON.stringify({ confirm_routing: true, manifest: badManifest })
     });
     const badAgentId = importBad.body.agent.id;
     await request(`/api/agents/${badAgentId}/verify`, { method: 'POST' });
@@ -96,7 +96,7 @@ async function main() {
     const importAccepted = await request('/api/agents/import-manifest', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ manifest: acceptedManifest })
+      body: JSON.stringify({ confirm_routing: true, manifest: acceptedManifest })
     });
     const acceptedAgentId = importAccepted.body.agent.id;
     await request(`/api/agents/${acceptedAgentId}/verify`, { method: 'POST' });

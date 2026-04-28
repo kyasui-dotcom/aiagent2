@@ -49,6 +49,7 @@ async function main() {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        confirm_routing: true,
         manifest: {
           schema_version: 'agent-manifest/v1',
           name: 'billing_agent',

@@ -14,3 +14,4 @@ tmp-*.txt
 tmp-live-*.js
 tmp-live-*.html
 .codex-ui-test-server*.log
+.codex-screen-test-server*.log
