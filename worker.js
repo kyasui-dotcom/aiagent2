@@ -4320,12 +4320,18 @@ function computeNextRetryAt(attempts, baseTime = Date.now()) {
 }
 
 const DISPATCH_SCHEDULE_STALE_MS = 90_000;
+const BUILT_IN_DISPATCH_SCHEDULE_STALE_MS = 8 * 60 * 1000;
 
-function dispatchScheduleIsFresh(job, now = Date.now()) {
+function dispatchScheduleIsFresh(job, now = Date.now(), staleMs = DISPATCH_SCHEDULE_STALE_MS) {
   const status = String(job?.dispatch?.completionStatus || '').trim().toLowerCase();
   if (status !== 'dispatch_scheduled') return false;
   const at = Date.parse(String(job?.dispatch?.dispatchRequestedAt || job?.dispatch?.scheduledAt || ''));
-  return Number.isFinite(at) && now - at < DISPATCH_SCHEDULE_STALE_MS;
+  return Number.isFinite(at) && now - at < staleMs;
+}
+
+function dispatchScheduleIsFreshForAgent(job, agent, now = Date.now()) {
+  const staleMs = sampleKindFromAgent(agent) ? BUILT_IN_DISPATCH_SCHEDULE_STALE_MS : DISPATCH_SCHEDULE_STALE_MS;
+  return dispatchScheduleIsFresh(job, now, staleMs);
 }
 
 function canRetryJob(job) {
@@ -10019,6 +10025,9 @@ async function dispatchExistingJobToAssignedAgent(storage, env, jobId, agentId) 
       const draftJob = draft.jobs.find((item) => item.id === job.id);
       const draftAgent = draft.agents.find((item) => item.id === agent.id);
       if (!draftJob) return { error: 'Job disappeared during dispatch', statusCode: 500 };
+      if (isTerminalJobStatus(draftJob.status)) {
+        return { ok: true, mode: draftJob.status, job: cloneJob(draftJob), skippedTerminal: true };
+      }
       if (!dispatch.ok) {
         const failureMeta = buildDispatchFailureMeta(draftJob, dispatch.statusCode, dispatch.failureReason);
         draftJob.status = 'failed';
@@ -10087,11 +10096,11 @@ async function dispatchExistingJobToAssignedAgent(storage, env, jobId, agentId) 
 
     if (final.error) return { error: final.error, statusCode: final.statusCode || 500 };
     if (final.mode === 'completed') {
-      await touchEvent(storage, 'COMPLETED', `${job.taskType}/${job.id.slice(0, 6)} completed by dispatch`);
-      await recordBillingOutcome(storage, final.job, final.billing, 'external-dispatch');
+      if (!final.skippedTerminal) await touchEvent(storage, 'COMPLETED', `${job.taskType}/${job.id.slice(0, 6)} completed by dispatch`);
+      if (final.billing) await recordBillingOutcome(storage, final.job, final.billing, 'external-dispatch');
     } else if (final.mode === 'dispatched') {
       await touchEvent(storage, 'RUNNING', `${agent.name} accepted ${job.taskType}/${job.id.slice(0, 6)}`);
-    } else {
+    } else if (!final.skippedTerminal) {
       await touchEvent(storage, 'FAILED', `${job.taskType}/${job.id.slice(0, 6)} dispatch failed`);
     }
     if (job.workflowParentId) {
@@ -10121,7 +10130,7 @@ function canAutoScheduleAsyncDispatch(job, agent) {
     const completionStatus = String(job.dispatch?.completionStatus || '').toLowerCase();
     const staleScheduledDispatch = status === 'running'
       && completionStatus === 'dispatch_scheduled'
-      && !dispatchScheduleIsFresh(job);
+      && !dispatchScheduleIsFreshForAgent(job, agent);
     if (!staleScheduledDispatch) return false;
   }
   if (!job.assignedAgentId || job.assignedAgentId !== agent.id) return false;
@@ -10455,7 +10464,7 @@ function pickProgressDispatchTargets(state, jobId, options = {}) {
   }
   const agent = state.agents.find((item) => item.id === parentOrJob.assignedAgentId);
   if (!canAutoScheduleAsyncDispatch(parentOrJob, agent)) return [];
-  if (dispatchScheduleIsFresh(parentOrJob, now)) return [];
+  if (dispatchScheduleIsFreshForAgent(parentOrJob, agent, now)) return [];
   return [{ job: parentOrJob, agent, parentJobId: parentOrJob.workflowParentId || null, workflowLeaderHandoff: null }];
 }
 
@@ -10682,7 +10691,7 @@ async function markDispatchScheduled(storage, jobId, agentId, reason = 'dispatch
     if (!canAutoScheduleAsyncDispatch(job, agent)) {
       return { scheduled: false, reason: 'not_eligible', job: cloneJob(job), agent: agent ? publicAgent(agent) : null };
     }
-    if (dispatchScheduleIsFresh(job)) {
+    if (dispatchScheduleIsFreshForAgent(job, agent)) {
       return { scheduled: false, reason: 'already_scheduled', job: cloneJob(job), agent: publicAgent(agent) };
     }
     job.status = 'running';

@@ -59,6 +59,38 @@ assert.equal(afterUpdate.accounts[0].login, 'beta@example.com');
 assert.equal(afterUpdate.accounts[0].profile.displayName, 'Beta Updated');
 assert.equal(afterUpdate.accounts[1].login, 'alpha@example.com');
 
+const completedJob = {
+  id: 'terminal-completed-job',
+  parentAgentId: 'qa',
+  taskType: 'research',
+  prompt: 'completed job should not regress',
+  input: {},
+  priority: 'normal',
+  status: 'completed',
+  createdAt: '2026-04-25T10:00:00.000Z',
+  completedAt: '2026-04-25T10:01:00.000Z',
+  logs: ['completed']
+};
+await storage.replaceState({
+  ...(await storage.getState()),
+  jobs: [completedJob]
+});
+await storage.replaceState({
+  ...(await storage.getState()),
+  jobs: [{
+    ...completedJob,
+    status: 'timed_out',
+    completedAt: null,
+    timedOutAt: '2026-04-25T10:02:00.000Z',
+    failureReason: 'stale timeout mutation',
+    logs: ['stale timeout mutation']
+  }]
+});
+const afterTerminalMerge = await storage.getState();
+const terminalJob = afterTerminalMerge.jobs.find((job) => job.id === 'terminal-completed-job');
+assert.equal(terminalJob.status, 'completed', 'completed job must not be overwritten by a later stale timeout mutation');
+assert.ok(terminalJob.logs.includes('stale timeout mutation'), 'diagnostic logs can merge without changing terminal success');
+
 const recoverState = {
   accounts: [],
   jobs: [{
