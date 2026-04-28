@@ -1,6 +1,6 @@
 import { createPrivateKey, timingSafeEqual } from 'node:crypto';
 import { createD1LikeStorage } from './lib/storage.js';
-import { BUILT_IN_KINDS, builtInAgentHealthPayload, runBuiltInAgent } from './lib/builtin-agents.js';
+import { BUILT_IN_KINDS, builtInAgentHealthPayload, runBuiltInAgent, sampleAgentPayload } from './lib/builtin-agents.js';
 import { GITHUB_ADAPTER_MARKER, adapterNextStepText, buildGithubAdapterPlan, createGithubBranch, createGithubPullRequest, fetchGithubBranchSha, fetchGithubRepoTree, fetchGithubTextFile, findKnownBrokerPath, upsertGithubTextFile } from './lib/github-adapter.js';
 import { MANIFEST_CANDIDATE_PATHS, assessAgentRegistrationSafety, buildDraftManifestFromAgentSkill, buildDraftManifestFromRepoAnalysis, deriveManifestSignalPaths, normalizeManifest, parseAndValidateManifest, sanitizeManifestForPublic, validateManifest } from './lib/manifest.js';
 import { agentReviewRouteBlockReason, applyAgentReviewToAgentRecord, isAgentReviewApproved, manualAgentReviewFromBody, runAgentAutoReview } from './lib/agent-review.js';
@@ -9982,6 +9982,10 @@ async function postJsonWithTimeout(url, payload, timeoutMs = 10000, extraHeaders
   }
 }
 
+function useOpenAiForBuiltInWorkflow(env = {}) {
+  return ['1', 'true', 'yes', 'on'].includes(String(env?.BUILTIN_WORKFLOW_OPENAI_ENABLED || '').trim().toLowerCase());
+}
+
 async function dispatchJobToAssignedAgent(job, agent, env) {
   const endpoint = resolveAgentJobEndpoint(agent);
   if (!endpoint) {
@@ -9990,7 +9994,10 @@ async function dispatchJobToAssignedAgent(job, agent, env) {
   const payload = buildDispatchPayload(job, agent);
   const sampleKind = sampleKindFromAgent(agent);
   if (sampleKind) {
-    const body = await runBuiltInAgent(sampleKind, payload, env);
+    const workflowRun = Boolean(job?.workflowParentId || payload?.input?._broker?.workflow);
+    const body = workflowRun && !useOpenAiForBuiltInWorkflow(env)
+      ? sampleAgentPayload(sampleKind, payload)
+      : await runBuiltInAgent(sampleKind, payload, env);
     const normalized = normalizeDispatchResponse(body);
     normalized.usage = usageWithObservedJobTokens(job, normalized.usage, normalized.report);
     return { ok: true, endpoint, normalized, statusCode: 200, responseBody: body };
