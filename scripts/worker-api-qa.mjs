@@ -222,8 +222,8 @@ const asyncWorkflow = await request('/api/jobs', {
 }, { waitUntilPromises: asyncWorkflowWaits });
 assert.equal(asyncWorkflow.status, 201);
 assert.equal(asyncWorkflow.body.mode, 'workflow');
-assert.equal(asyncWorkflow.body.status, 'running', 'async Agent Team should start one child immediately');
-assert.equal(asyncWorkflowWaits.length, 1, 'async Agent Team should schedule the leader dispatch first');
+assert.ok(['running', 'completed'].includes(asyncWorkflow.body.status), 'async Agent Team should start or finish the first built-in child immediately');
+assert.ok(asyncWorkflowWaits.length <= 1, 'async Agent Team should not enqueue duplicate leader dispatch waits');
 await Promise.allSettled(asyncWorkflowWaits);
 
 const asyncWorkflowFirstState = await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`);

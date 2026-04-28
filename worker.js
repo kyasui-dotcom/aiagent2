@@ -10754,10 +10754,11 @@ async function scheduleProgressDispatchesForJobId(storage, env, waitUntil, jobId
   }
   if (!scheduled.length) return { scheduled: false, scheduled_count: 0, reason: 'not_eligible', jobs: [] };
   const dispatchBatch = Promise.allSettled(dispatchPromises);
-  if (typeof waitUntil === 'function') {
-    waitUntil(dispatchBatch);
-  } else if (options.awaitDispatch) {
+  const shouldAwaitDispatch = options.awaitDispatch || scheduled.every((item) => sampleKindFromAgent(item.agent));
+  if (shouldAwaitDispatch) {
     await dispatchBatch;
+  } else if (typeof waitUntil === 'function') {
+    waitUntil(dispatchBatch);
   } else {
     void dispatchBatch;
   }
