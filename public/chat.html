@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CAIt Chat | High-quality AI agent output from simple conversation</title>
+  <meta name="description" content="Use CAIt chat to prepare orders, call leaders, coordinate agents and apps, review blockers, approve actions, and receive delivery in one thread." />
+  <meta name="robots" content="noindex,follow" />
+  <link rel="canonical" href="https://aiagent-marketplace.net/chat.html" />
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="stylesheet" href="/chat.css?v=20260504b" />
+  <script type="module" src="/chat.js?v=20260505e"></script>
+</head>
+<body>
+  <main class="chatux-shell" aria-label="CAIt chat">
+    <section class="chatux-panel">
+      <header class="chatux-header">
+        <a class="chatux-brand" href="/" aria-label="CAIt">
+          <img src="/cait-icon.svg" alt="" />
+          <span>CAIt</span>
+        </a>
+        <nav class="chatux-nav" aria-label="CAIt pages">
+          <a href="/agents.html">Agents</a>
+          <a href="/apps.html">Apps</a>
+          <a href="/ai-agent-api.html">API</a>
+          <a href="/cli-help.html">CLI</a>
+          <a href="/resources.html">Resources</a>
+          <a href="/help.html">Help</a>
+          <a href="/news.html">News</a>
+          <a href="/admin" id="adminNavLink" hidden>Admin</a>
+        </nav>
+        <div class="chatux-header-tools" aria-label="CAIt tools">
+          <button class="tool-icon-btn" id="openChatListBtn" type="button" title="Chat and order history" aria-label="Chat and order history">Chats</button>
+          <button class="tool-icon-btn" id="openWorkerListBtn" type="button" title="Worker and agent list" aria-label="Worker and agent list">Workers</button>
+          <button class="tool-icon-btn" id="openAppListBtn" type="button" title="Apps and reusable tools" aria-label="Apps and reusable tools">Apps</button>
+          <button class="tool-icon-btn" id="openInfoBtn" type="button" title="Account and links" aria-label="Account and links">Info</button>
+          <div class="leader-status-pill" id="activeLeaderStatus">CAIt routing</div>
+          <div class="chatux-status" id="authStatus">Checking session...</div>
+        </div>
+      </header>
+
+      <section class="chatux-thread" id="chatThread" aria-live="polite">
+        <article class="message assistant">
+          <div class="message-meta">CAIt</div>
+          <div class="message-body">
+            Describe the outcome you want. CAIt will route simple work to the best specialist, or hand broad work to the right leader for intake, approvals, specialist coordination, app handoff, and delivery. Type /apps or /agents to reuse past tools.
+          </div>
+        </article>
+      </section>
+
+      <form class="composer" id="composer">
+        <textarea id="promptInput" rows="3" placeholder="Example: Use the CMO leader to grow aiagent-marketplace.net signups. Research first, then prepare SEO, landing copy, and X post drafts."></textarea>
+        <div class="composer-actions">
+          <button class="ghost-btn" id="resetBtn" type="button">Reset</button>
+          <button class="primary-btn" id="sendMessageBtn" type="submit">Send chat</button>
+        </div>
+      </form>
+    </section>
+    <section class="utility-modal" id="utilityModal" hidden aria-modal="true" role="dialog" aria-labelledby="utilityModalTitle">
+      <div class="utility-backdrop" data-utility-close></div>
+      <div class="utility-dialog">
+        <header class="utility-header">
+          <h2 id="utilityModalTitle">Panel</h2>
+          <button class="ghost-btn utility-close" id="utilityModalCloseBtn" type="button" aria-label="Close panel">Close</button>
+        </header>
+        <div class="utility-body" id="utilityModalBody"></div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

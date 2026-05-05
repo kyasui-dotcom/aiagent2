@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { createHmac, createPrivateKey, createSign, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createD1LikeStorage } from './lib/storage.js';
@@ -9,8 +9,13 @@ import { GITHUB_ADAPTER_MARKER, adapterNextStepText, buildGithubAdapterPlan, cre
 import { BILLING_DISPLAY_CURRENCY, WELCOME_CREDITS_GRANT_AMOUNT, accountIdForLogin, accountIdentityForProvider, accountSettingsForIdentity, accountSettingsForLogin, agentLinksFromRecord, agentTagsFromRecord, aliasLoginsForAccount, applyStripeRefundToAccount, applySubscriptionRefillToAccount, authenticateOrderApiKey, billingAuditsForJobIds, billingModeFromJob, billingPeriodId, billingProfileForAccount, buildAdminDashboard, buildAgentId, buildConversionAnalytics, buildFollowupConversationContext, buildIntakeClarification, buildMonthlyAccountSummary, chatSessionIdForJob, chatTrainingExamplesForClient, chatTranscriptsForClient, computeScore, connectorActionLabel, connectorOAuthActionInstruction, createChatTranscript, createConversionEventPayload, createFeedbackReport, createOrderApiKeyInState, createRecurringOrderInState, defaultLoginForAuthUser, deleteRecurringOrderInState, displayCurrencyToLedgerAmount, dueRecurringOrders, estimateBilling, estimateRunWindow, feedbackReportsForClient, formatFeedbackReportEmail, hideChatMemoryTranscriptForLoginInState, inferAgentTagsFromSignals, inferTaskSequence, inferTaskType, isAgentOwnedByLogin, isBillableJob, isJobVisibleToLogin, isPrivateNetworkHostname, jobsVisibleToLogin, ledgerAmountToDisplayCurrency, linkIdentityToAccountInState, makeEvent, markRecurringOrderRunInState, maybeGrantWelcomeCreditsForSignupInState, maybeGrantWelcomeCreditsForVerifiedAgentInState, mergeAccountsInState, mergeProtectedPromptSourceIntoInput, normalizeTaskTypes, nowIso, optimizeOrderPromptForBroker, promptInjectionGuardForPrompt, providerMonthlyBillingLedgerForLogin, providerPayoutLedgerForLogin, publicEventView, recordProviderMonthlyChargeInAccount, recurringOrderToJobPayload, recurringOrdersVisibleToLogin, recordStripeTopupInAccount, recoverMissingAccountsInState, releaseBillingReservationInState, requesterContextFromUser, reserveBillingEstimateInState, revokeOrderApiKeyInState, sanitizeAccountSettingsForClient, sanitizeBillingSettingsPatch, sanitizeExecutorPreferencesPatch, sanitizeFeedbackReportForClient, sanitizePayoutSettingsPatch, settleBillingForJobInState, touchOrderApiKeyUsageInState, updateChatTranscriptReviewInState, updateFeedbackReportInState, updateRecurringOrderInState, upsertAccountSettingsForIdentityInState, upsertAccountSettingsInState } from './lib/shared.js';
 import { agentRoutingConfirmationAccepted, applyConfirmedAgentRoutingToAgent, buildAgentRoutingConfirmation } from './lib/shared.js';
 import { agentPatternFitScore, applyGuestTrialSignupDebitInState, buildAgentTeamDeliveryOutput, deliveryQualityScoreForJob, ensureGuestTrialAccountInState, guestTrialLoginForVisitorId, guestTrialUsageForVisitorInState, isAgentTeamLaunchIntent, isFreeWebGrowthIntent, isLargeAgentTeamIntent, normalizeGuestTrialRequest, orderPreflightForAgent, ownChatMemoryForClient } from './lib/shared.js';
+import { listCreatorUsageEstimateForOrder } from './lib/shared.js';
+import { commonOrderQualityRulesText, orderBodyWithCommonQualityRules } from './lib/shared.js';
 import { amountFromMinorUnits, createConnectedAccount, createConnectedAccountTransfer, createConnectOnboardingLink, createOffSessionMonthlyInvoicePaymentIntent, createOffSessionProviderMonthlyPaymentIntent, createSetupCheckoutSession, createSubscriptionCheckoutSession, ensureStripeCustomer, resolveSubscriptionPlanFromPriceId, retrieveConnectedAccount, retrievePaymentIntent, retrieveSetupIntent, retrieveSubscription, stripeConfigFromEnv, stripeConfigured, stripePublicConfig, updateCustomerDefaultPaymentMethod, verifyStripeWebhookSignature } from './lib/stripe.js';
-import { MANIFEST_CANDIDATE_PATHS, assessAgentRegistrationSafety, buildDraftManifestFromAgentSkill, buildDraftManifestFromRepoAnalysis, deriveManifestSignalPaths, normalizeManifest, parseAndValidateManifest, sanitizeManifestForPublic, validateManifest } from './lib/manifest.js';
+import { MANIFEST_CANDIDATE_PATHS, assessAgentRegistrationSafety, buildDraftManifestFromAgentSkill, buildDraftManifestFromRepoAnalysis, buildDraftManifestFromRepoAnalysisWithAi, deriveManifestSignalPaths, normalizeManifest, parseAndValidateManifest, sanitizeManifestForPublic, validateManifest } from './lib/manifest.js';
+import { createAppFromInput, createAppFromManifest, normalizeAppManifest, sanitizeAppForPublic, validateAppManifest } from './lib/apps.js';
+import { appContextIsExpired, createAppContextRecord, publicAppContext } from './lib/app-context.js';
+import { buildMcpDiscovery, handleMcpJsonRpc } from './lib/mcp.js';
 import { agentReviewRouteBlockReason, applyAgentReviewToAgentRecord, isAgentReviewApproved, manualAgentReviewFromBody, runAgentAutoReview } from './lib/agent-review.js';
 import { runAgentOnboardingCheck } from './lib/onboarding.js';
 import { isBuiltInSampleAgent, sampleKindFromAgent, verifyAgentByHealthcheck } from './lib/verify.js';
@@ -32,9 +37,9 @@ import {
   isDeveloperExecutionIntentText,
   resolveStaticWorkAction
 } from './public/work-action-registry.js';
-import { inferWorkIntentRoute, prepareWorkOrderSeed } from './public/work-intent-resolver.js';
+import { inferWorkIntentRoute, isNonOrderConversationIntentText, prepareWorkOrderSeed } from './public/work-intent-resolver.js';
 
-const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8' };
+const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'application/javascript; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png' };
 const runtimeAppVersion = process.env.APP_VERSION || '0.2.0';
 const normalizedAppVersion = String(runtimeAppVersion || '').trim().toLowerCase();
 const isExplicitTestRuntime = normalizedAppVersion.includes('test') || String(process.env.NODE_ENV || '').trim().toLowerCase() === 'test';
@@ -347,9 +352,11 @@ function rateLimitSpecForPath(pathname = '', method = 'GET') {
   if (pathname === '/api/deliveries/prepare-execution' && verb === 'POST') return { name: 'delivery-prepare-execution', limit: 60, windowMs: 60_000 };
   if (pathname === '/api/deliveries/execute' && verb === 'POST') return { name: 'delivery-execute', limit: 30, windowMs: 60_000 };
   if (pathname === '/api/deliveries/schedule' && verb === 'POST') return { name: 'delivery-schedule', limit: 30, windowMs: 60_000 };
+  if (pathname === '/mcp' && verb === 'POST') return { name: 'mcp', limit: 120, windowMs: 60_000 };
   if (pathname === '/api/connectors/x/post' && verb === 'POST') return { name: 'x-post', limit: 20, windowMs: 10 * 60_000 };
   if (pathname === '/api/connectors/instagram/post' && verb === 'POST') return { name: 'instagram-post', limit: 20, windowMs: 10 * 60_000 };
   if (pathname === '/api/connectors/google/assets' && verb === 'GET') return { name: 'google-assets', limit: 30, windowMs: 60_000 };
+  if (pathname === '/api/connectors/google/analytics-report' && verb === 'GET') return { name: 'google-analytics-report', limit: 20, windowMs: 60_000 };
   if (pathname === '/api/connectors/google/send-gmail' && verb === 'POST') return { name: 'google-send-gmail', limit: 20, windowMs: 10 * 60_000 };
   if (pathname === '/api/connectors/resend/send-email' && verb === 'POST') return { name: 'resend-send-email', limit: 20, windowMs: 10 * 60_000 };
   if (/^\/api\/settings\/chat-memory\/[^/]+$/.test(pathname) && verb === 'DELETE') return { name: 'hide-chat-memory', limit: 120, windowMs: 60_000 };
@@ -404,15 +411,16 @@ const OPEN_CHAT_INTENT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   properties: {
-    action: { type: 'string', enum: ['ask_clarifying_question', 'prepare_order', 'use_previous_brief'] },
+    action: { type: 'string', enum: ['ask_clarifying_question', 'answer_in_chat', 'prepare_order', 'use_previous_brief'] },
     intent: { type: 'string', enum: [...OPEN_CHAT_INTENT_NAMES] },
     intent_label: { type: 'string' },
     summary: { type: 'string' },
+    chat_answer: { type: 'string' },
     narrowing_question: { type: 'string' },
     order_brief: { type: 'string' },
     options: {
       type: 'array',
-      minItems: 2,
+      minItems: 0,
       maxItems: 5,
       items: {
         type: 'object',
@@ -427,7 +435,7 @@ const OPEN_CHAT_INTENT_SCHEMA = {
     },
     confidence: { type: 'number' }
   },
-  required: ['action', 'intent', 'intent_label', 'summary', 'narrowing_question', 'order_brief', 'options', 'confidence']
+  required: ['action', 'intent', 'intent_label', 'summary', 'chat_answer', 'narrowing_question', 'order_brief', 'options', 'confidence']
 };
 
 const DELIVERY_CLASSIFIER_SCHEMA = {
@@ -563,7 +571,7 @@ function normalizeOpenChatIntentResult(raw = {}, fallbackIntent = '', source = '
     : 'natural_stuck_start';
   const rawIntent = String(raw.intent || '').trim();
   const intent = OPEN_CHAT_INTENT_NAMES.has(rawIntent) ? rawIntent : fallback;
-  const action = ['ask_clarifying_question', 'prepare_order', 'use_previous_brief'].includes(String(raw.action || '').trim())
+  const action = ['ask_clarifying_question', 'answer_in_chat', 'prepare_order', 'use_previous_brief'].includes(String(raw.action || '').trim())
     ? String(raw.action || '').trim()
     : 'ask_clarifying_question';
   const safeOptions = Array.isArray(raw.options) ? raw.options.slice(0, 5).map((option, index) => ({
@@ -578,6 +586,7 @@ function normalizeOpenChatIntentResult(raw = {}, fallbackIntent = '', source = '
     intent,
     intent_label: sanitizeOpenChatIntentText(raw.intent_label || raw.intentLabel || '', 120, userLanguage),
     summary: sanitizeOpenChatIntentText(raw.summary || '', 260, userLanguage),
+    chat_answer: sanitizeOpenChatIntentText(raw.chat_answer || raw.chatAnswer || '', 1200, userLanguage),
     narrowing_question: sanitizeOpenChatIntentText(raw.narrowing_question || raw.narrowingQuestion || '', 180, userLanguage),
     order_brief: sanitizeOpenChatOrderBrief(raw.order_brief || raw.orderBrief || ''),
     options: safeOptions,
@@ -641,6 +650,8 @@ function openChatIntentSystemPrompt(userLanguage = 'English', uiLabels = WORK_OR
     'Use natural_entity_exploration for a bare topic/entity/brand/person/product with no action yet, for example "rolex".',
     'Normalize common typos, kana/romaji variants, and product/tool-name variants before choosing the intent: CAIt/ケイト/毛糸, AI agent/えーじぇんと, GitHub/ぎっとはぶ, Stripe/すとらいぶ, deposit/deposite.',
     'Use prepared_brief and conversation_context before judging the latest message. If the user refers to previous/that/same/さっき/前の, resolve it from prepared_brief or conversation_context.',
+    'If the latest message is meta-conversation, a pause/hold/cancel/status/help question, or asks a normal question without requesting agent work, set action to answer_in_chat. Fill chat_answer. Do not fill order_brief.',
+    'Examples that must be answer_in_chat: "pause?", "hold?", "status?", "what happened?", "これは発注？", "保留？", "今どこ？", "相談だけ".',
     'Bias toward execution only after the target, outcome, and enough context are known. The unit cost is low, but do not create vague work orders that hide missing business context.',
     'For growth/marketing/acquisition/team-leader requests such as "集客して", "売上を増やしたい", "grow users", or "marketing help", ask a clarifying question unless product/business, target customer, desired outcome, and major constraints are available from conversation_context or prepared_brief.',
     'If the latest message is imperative/action-oriented ("do it", "please handle", "調べて", "作って", "発注したい"), set action to prepare_order unless safety or missing target/business context makes execution unreliable.',
@@ -650,7 +661,7 @@ function openChatIntentSystemPrompt(userLanguage = 'English', uiLabels = WORK_OR
     'A valid order_brief uses this exact shape: Task, Goal, Work split, Inputs, Constraints, Deliver, Output language, Acceptance. Keep it concise and executable.',
     `The user language is ${userLanguage}. All JSON string values must be written in ${userLanguage}.`,
     'Do not use Chinese unless the user language is Chinese.',
-    `Options must be short choices. For prepare_order/use_previous_brief, options should be "${uiLabels.sendOrder}" and "${uiLabels.addConstraints}".`
+    `Options must be short choices. For answer_in_chat, options may be empty. For prepare_order/use_previous_brief, options should be "${uiLabels.sendOrder}" and "${uiLabels.addConstraints}".`
   ].join('\n');
 }
 
@@ -1043,7 +1054,7 @@ async function executeGithubExecutorPullRequest(current, body, req = null) {
       error: 'Repository write confirmation required for CAIT_API_KEY executor PR creation.',
       required: 'Set confirm_repo_write=true after showing the target repository, branch, files, and PR action to the user.',
       repo: `${body.owner}/${body.repo}`,
-      use: '/?tab=work',
+      use: '/chat.html',
       statusCode: 409
     };
   }
@@ -1161,7 +1172,8 @@ async function executeDeliveryActionRequest(req) {
       repo,
       installation_id: body.installation_id || body.installationId || '',
       confirm_repo_write: true,
-      kind: 'code_handoff',
+      kind: String(body.kind || draft.kind || deliverable.kind || 'code_handoff').trim() || 'code_handoff',
+      repo_path: String(body.repo_path || body.repoPath || draft.repoPath || '').trim(),
       source_job_id: jobId,
       source_delivery_title: String(deliverable.title || ''),
       source_file_name: String(deliverable.fileName || ''),
@@ -1888,11 +1900,13 @@ async function googleAccessTokenForConnector(login = '', user = null, authProvid
   };
 }
 
-async function fetchGoogleAuthorizedJson(url, accessToken) {
+async function fetchGoogleAuthorizedJson(url, accessToken, init = {}) {
   const response = await fetch(url, {
+    ...init,
     headers: {
       authorization: `Bearer ${accessToken}`,
-      accept: 'application/json'
+      accept: 'application/json',
+      ...(init.headers || {})
     }
   });
   const data = await response.json().catch(() => ({}));
@@ -2299,11 +2313,18 @@ function hasOAuthBaseSession(session = null) {
 function normalizeLocalRedirectPath(req, value = '', fallback = '/') {
   const raw = String(value || '').trim();
   if (!raw) return fallback;
-  if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
   try {
-    const parsed = new URL(raw, baseUrl(req));
+    const parsed = raw.startsWith('/') && !raw.startsWith('//')
+      ? new URL(raw, baseUrl(req))
+      : new URL(raw, baseUrl(req));
     const expectedOrigin = new URL(baseUrl(req)).origin;
     if (parsed.origin !== expectedOrigin) return fallback;
+    if (parsed.pathname === '/' && String(parsed.searchParams.get('tab') || '').toLowerCase() === 'work') {
+      return '/chat';
+    }
+    if (parsed.pathname === '/chat.html') return `/chat${parsed.search}${parsed.hash}`;
+    if (parsed.pathname === '/login.html') return `/login${parsed.search}${parsed.hash}`;
+    if (parsed.pathname === '/admin.html') return `/admin${parsed.search}${parsed.hash}`;
     return `${parsed.pathname}${parsed.search}${parsed.hash}` || fallback;
   } catch {
     return fallback;
@@ -2353,14 +2374,60 @@ function isLoginPagePath(pathname = '') {
 
 function loginPageRedirectPath(req) {
   const url = new URL(req.url, baseUrl(req));
-  const target = normalizeLocalRedirectPath(req, url.searchParams.get('next') || '', '/?tab=work');
+  const target = normalizeLocalRedirectPath(req, url.searchParams.get('next') || '', '/chat');
   try {
     const parsed = new URL(target, baseUrl(req));
-    if (isLoginPagePath(parsed.pathname)) return '/?tab=work';
-    return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/?tab=work';
+    if (isLoginPagePath(parsed.pathname)) return '/chat';
+    return `${parsed.pathname}${parsed.search}${parsed.hash}` || '/chat';
   } catch {
-    return '/?tab=work';
+    return '/chat';
   }
+}
+
+function isChatPagePath(pathname = '') {
+  return pathname === '/chat' || pathname === '/chat.html';
+}
+
+function chatLoginRedirectPath(req) {
+  const loginUrl = new URL('/login', baseUrl(req));
+  const current = new URL(req.url || '/chat', baseUrl(req));
+  const nextPath = current.pathname === '/chat.html' ? '/chat' : current.pathname;
+  loginUrl.searchParams.set('next', `${nextPath}${current.search}${current.hash}`);
+  loginUrl.searchParams.set('source', 'gate_chat');
+  return `${loginUrl.pathname}${loginUrl.search}`;
+}
+
+function isAdminPagePath(pathname = '') {
+  return pathname === '/admin' || pathname === '/admin.html';
+}
+
+function adminLoginRedirectPath(req) {
+  const loginUrl = new URL('/login', baseUrl(req));
+  loginUrl.searchParams.set('next', '/admin');
+  loginUrl.searchParams.set('source', 'gate_admin');
+  return `${loginUrl.pathname}${loginUrl.search}`;
+}
+
+function handleChatPageRequest(req, res) {
+  const session = getSession(req);
+  if (!hasOAuthBaseSession(session)) {
+    redirect(res, chatLoginRedirectPath(req), { 'Cache-Control': 'no-store' });
+    return true;
+  }
+  const refreshedCookie = maybeRefreshSessionCookie(req, session);
+  if (refreshedCookie) {
+    res.setHeader('Set-Cookie', refreshedCookie);
+  }
+  return serveStatic(res, '/chat.html');
+}
+
+function handleAdminPageRequest(req, res) {
+  const session = getSession(req);
+  const refreshedCookie = maybeRefreshSessionCookie(req, session);
+  if (refreshedCookie) {
+    res.setHeader('Set-Cookie', refreshedCookie);
+  }
+  return serveStatic(res, '/admin.html');
 }
 
 function handleLoginPageRequest(req, res) {
@@ -2377,7 +2444,7 @@ function handleLoginPageRequest(req, res) {
 function authFailureRedirectPath(req, code = 'auth_failed', oauthState = null) {
   const safeCode = String(code || 'auth_failed').trim() || 'auth_failed';
   if (oauthState?.action === 'login' && oauthState?.loginSource) {
-    const loginUrl = new URL('/login.html', baseUrl(req));
+    const loginUrl = new URL('/login', baseUrl(req));
     loginUrl.searchParams.set('auth_error', safeCode);
     loginUrl.searchParams.set('source', oauthState.loginSource);
     if (oauthState.returnTo) loginUrl.searchParams.set('next', authSuccessRedirectPath(req, oauthState));
@@ -2405,7 +2472,7 @@ function createEmailAuthToken(payload = {}) {
   const data = {
     kind: 'email-auth',
     email: String(payload.email || '').trim().toLowerCase(),
-    returnTo: String(payload.returnTo || '/?tab=work').trim() || '/?tab=work',
+    returnTo: String(payload.returnTo || '/chat').trim() || '/chat',
     loginSource: String(payload.loginSource || 'login_page').trim().toLowerCase() || 'login_page',
     visitorId: String(payload.visitorId || '').trim(),
     exp: Date.now() + EMAIL_AUTH_MAX_AGE_SEC * 1000
@@ -2428,7 +2495,7 @@ function parseEmailAuthToken(raw = '') {
   if (!validateEmailAddress(email)) return null;
   return {
     email,
-    returnTo: String(payload.returnTo || '/?tab=work').trim() || '/?tab=work',
+    returnTo: String(payload.returnTo || '/chat').trim() || '/chat',
     loginSource: String(payload.loginSource || 'login_page').trim().toLowerCase() || 'login_page',
     visitorId: String(payload.visitorId || '').trim()
   };
@@ -2651,7 +2718,7 @@ async function githubAppRepoTokenForRequester(current = null, owner, repo, insta
     return {
       error: 'Selected repository is not authorized by this account GitHub App access',
       statusCode: 403,
-      use: '/?tab=agents',
+      use: '/agents.html',
       next_step: 'Open AGENTS, connect GitHub, load/select the repo, then retry with CAIT_API_KEY.'
     };
   }
@@ -2780,7 +2847,7 @@ async function handleGithubCreateExecutorPr(req, res) {
       error: 'Repository write confirmation required for CAIT_API_KEY executor PR creation.',
       required: 'Set confirm_repo_write=true after showing the target repository, branch, files, and PR action to the user.',
       repo: `${body.owner}/${body.repo}`,
-      use: '/?tab=work'
+      use: '/chat.html'
     });
   }
   try {
@@ -2889,7 +2956,7 @@ async function handleGithubCreateAdapterPr(req, res) {
       error: 'Repository write confirmation required for CAIT_API_KEY adapter PR creation.',
       required: 'Set confirm_adapter_pr=true after showing the target repository, branch, files, and PR action to the user.',
       repo: `${body.owner}/${body.repo}`,
-      use: '/?tab=agents'
+      use: '/agents.html'
     });
   }
   try {
@@ -3009,21 +3076,46 @@ async function handleGithubCreateAdapterPr(req, res) {
     return json(res, 500, githubPermissionError(error));
   }
 }
+function staticPathForRequest(path = '/') {
+  const pathname = String(path || '/');
+  if (pathname === '/') return '/index.html';
+  return pathname;
+}
+
 function serveStatic(res, path) {
-  const file = join(process.cwd(), 'public', path === '/' ? 'index.html' : path.slice(1));
-  if (!existsSync(file)) return false;
+  const normalizedPath = staticPathForRequest(path);
+  const file = join(process.cwd(), 'public', normalizedPath.slice(1));
+  if (!existsSync(file) || !statSync(file).isFile()) return false;
   const noCache = new Set([
     '/index.html',
+    '/admin.html',
+    '/admin.css',
+    '/admin.js',
+    '/chat.html',
+    '/home.css',
+    '/chat.css',
+    '/chat.js',
+    '/apps.html',
+    '/analytics-console.html',
+    '/analytics-console.js',
+    '/publisher-approval.html',
+    '/publisher-approval.js',
+    '/lead-ops.html',
+    '/lead-ops.js',
+    '/delivery-manager.html',
+    '/delivery-manager.js',
+    '/app-console.css',
+    '/cait-app-bridge.js',
     '/login.html',
     '/styles.css',
     '/client.js',
+    '/chat-engine.js',
     '/login.js',
     '/analytics-loader.js',
     '/delivery-action-contract.js',
     '/work-action-registry.js',
     '/work-intent-resolver.js'
   ]);
-  const normalizedPath = path === '/' ? '/index.html' : path;
   res.writeHead(200, securityHeaders({
     'Content-Type': mime[extname(file)] || 'text/plain; charset=utf-8',
     ...(noCache.has(normalizedPath) ? { 'Cache-Control': 'no-cache, max-age=0, must-revalidate' } : {})
@@ -3263,6 +3355,42 @@ function isAgentGroupRecord(agent = {}) {
   return agentManifestKind(agent) === 'agent_group';
 }
 
+function selectedAgentIdFromOrderBody(body = {}) {
+  return String(
+    body?.selected_agent_id
+    || body?.selectedAgentId
+    || body?.input?._broker?.selectedWorker?.agentId
+    || ''
+  ).trim();
+}
+
+function selectedAgentNameFromOrderBody(body = {}) {
+  return String(
+    body?.selected_agent_name
+    || body?.selectedAgentName
+    || body?.input?._broker?.selectedWorker?.agentName
+    || ''
+  ).trim();
+}
+
+function selectedAgentTaskTypeFromOrderBody(body = {}) {
+  return normalizeTaskTypes([
+    body?.selected_agent_task_type
+    || body?.selectedAgentTaskType
+    || body?.input?._broker?.selectedWorker?.taskType
+    || body?.task_type
+    || body?.taskType
+  ])[0] || '';
+}
+
+function selectedAgentIsLeader(agents = [], body = {}) {
+  const selectedTask = selectedAgentTaskTypeFromOrderBody(body);
+  if (selectedTask && selectedTask.endsWith('_leader')) return true;
+  const selectedAgentId = selectedAgentIdFromOrderBody(body);
+  const selected = selectedAgentId ? agents.find((agent) => String(agent?.id || '') === selectedAgentId) : null;
+  return normalizeTaskTypes(selected?.taskTypes || selected?.task_types || []).some((task) => task.endsWith('_leader'));
+}
+
 function pickAgent(agents, taskType, budgetCap, requestedAgentId = '', options = {}) {
   const excluded = new Set(Array.isArray(options.excludeAgentIds) ? options.excludeAgentIds : []);
   const requireEndpoint = options.requireEndpoint === true;
@@ -3302,6 +3430,8 @@ function normalizeOrderStrategy(value = '') {
 }
 function planWorkflowSelections(agents, taskType, prompt, budgetCap, options = {}) {
   const largeTeam = isLargeAgentTeamIntent(taskType, prompt);
+  const selectedAgentId = String(options.selectedAgentId || '').trim();
+  const selectedAgentTaskType = normalizeTaskTypes([options.selectedAgentTaskType || taskType])[0] || '';
   const plannedTasks = inferTaskSequence(taskType, prompt, {
     maxTasks: largeTeam ? 9 : 3,
     expand: options.expand !== false
@@ -3309,7 +3439,16 @@ function planWorkflowSelections(agents, taskType, prompt, budgetCap, options = {
   const selections = [];
   const usedAgentIds = new Set();
   for (const plannedTask of plannedTasks) {
-    const picked = pickAgent(agents, plannedTask, budgetCap, '', {
+    const pinSelectedAgent = Boolean(
+      selectedAgentId
+      && !usedAgentIds.has(selectedAgentId)
+      && (
+        plannedTask === selectedAgentTaskType
+        || (!selectedAgentTaskType && plannedTask === taskType)
+        || (plannedTask.endsWith('_leader') && selectedAgentTaskType.endsWith('_leader'))
+      )
+    );
+    const picked = pickAgent(agents, plannedTask, budgetCap, pinSelectedAgent ? selectedAgentId : '', {
       excludeAgentIds: [...usedAgentIds],
       requireEndpoint: true,
       body: { prompt, task_type: plannedTask },
@@ -3334,13 +3473,20 @@ function isAutoWorkflowSpecialtyTask(taskType = '') {
 }
 function resolveOrderStrategy(agents, body = {}, taskType = '', strategy = 'auto') {
   const resolvedTaskType = inferTaskType(taskType, body.prompt);
+  const selectedAgentId = selectedAgentIdFromOrderBody(body);
+  const selectedAgentTaskType = selectedAgentTaskTypeFromOrderBody({ ...body, task_type: taskType || resolvedTaskType });
+  const selectedIsLeader = selectedAgentId && selectedAgentIsLeader(agents, { ...body, task_type: selectedAgentTaskType || resolvedTaskType });
+  const workflowSelectionOptions = {
+    selectedAgentId,
+    selectedAgentTaskType: selectedAgentTaskType || taskType || resolvedTaskType
+  };
   const repoBackedCodeIntent = ['code', 'debug', 'ops', 'automation'].includes(String(resolvedTaskType || '').trim().toLowerCase())
     && /(github|git hub|repo|repository|pull request|\bpr\b|branch|commit|diff|issue|bug|debug|fix|修正|直して|デバッグ|リポジトリ|プルリク|ブランチ|コミット|差分)/i.test(String(body.prompt || ''));
   if (strategy === 'single') {
     return { strategy: 'single', reason: 'Single-agent routing was selected.' };
   }
   if (strategy === 'multi') {
-    const plan = planWorkflowSelections(agents, taskType, body.prompt, body.budget_cap || 0);
+    const plan = planWorkflowSelections(agents, taskType, body.prompt, body.budget_cap || 0, workflowSelectionOptions);
     return {
       strategy: 'multi',
       plan,
@@ -3350,15 +3496,26 @@ function resolveOrderStrategy(agents, body = {}, taskType = '', strategy = 'auto
   if (String(body.agent_id || '').trim()) {
     return { strategy: 'single', reason: 'A target agent was pinned, so the order stays single-agent.' };
   }
+  if (selectedAgentId && selectedIsLeader) {
+    const plan = planWorkflowSelections(agents, taskType, body.prompt, body.budget_cap || 0, workflowSelectionOptions);
+    return {
+      strategy: 'multi',
+      plan,
+      reason: 'A selected leader worker was pinned, so CAIt keeps the leader workflow and assigns that leader first.'
+    };
+  }
+  if (selectedAgentId) {
+    return { strategy: 'single', reason: 'A selected worker was pinned, so the order stays with that agent.' };
+  }
   if (repoBackedCodeIntent) {
-    const plan = planWorkflowSelections(agents, taskType, body.prompt, body.budget_cap || 0, { expand: false });
+    const plan = planWorkflowSelections(agents, taskType, body.prompt, body.budget_cap || 0, { ...workflowSelectionOptions, expand: false });
     return {
       strategy: 'single',
       plan,
       reason: 'CAIt kept repo-backed coding as single-agent unless multi-agent routing is explicitly selected.'
     };
   }
-  const plan = planWorkflowSelections(agents, taskType, body.prompt, body.budget_cap || 0, { expand: false });
+  const plan = planWorkflowSelections(agents, taskType, body.prompt, body.budget_cap || 0, { ...workflowSelectionOptions, expand: false });
   const plannedSpecialties = new Set(plan.plannedTasks.filter(isAutoWorkflowSpecialtyTask));
   const selectedSpecialties = new Set(plan.selections
     .filter((selection) => isAutoWorkflowSpecialtyTask(selection.taskType))
@@ -3514,6 +3671,7 @@ async function reconcileWorkflowParent(parentJobId) {
     const failed = children.filter((item) => item.status === 'failed' || item.status === 'timed_out');
     const queued = children.filter((item) => item.status === 'queued');
     const running = children.filter((item) => item.status === 'claimed' || item.status === 'running' || item.status === 'dispatched');
+    const blocked = children.filter((item) => item.status === 'blocked');
     parent.workflow = {
       ...(parent.workflow || {}),
       childJobIds: children.map((item) => item.id),
@@ -3522,6 +3680,7 @@ async function reconcileWorkflowParent(parentJobId) {
         total: expectedTotal,
         completed: completed.length,
         failed: failed.length,
+        blocked: blocked.length,
         queued: queued.length,
         running: running.length
       }
@@ -3535,7 +3694,7 @@ async function reconcileWorkflowParent(parentJobId) {
       return cloneJob(parent);
     }
     if (children.length < expectedTotal) {
-      parent.status = children.some((item) => active.has(item.status)) ? 'running' : 'queued';
+      parent.status = children.some((item) => active.has(item.status)) || blocked.length ? 'running' : 'queued';
       parent.completedAt = null;
       parent.failedAt = null;
       parent.failureReason = null;
@@ -3550,6 +3709,13 @@ async function reconcileWorkflowParent(parentJobId) {
     }
     if (children.some((item) => active.has(item.status))) {
       parent.status = running.length ? 'running' : 'queued';
+      parent.completedAt = null;
+      parent.failedAt = null;
+      parent.failureReason = null;
+      return cloneJob(parent);
+    }
+    if (blocked.length) {
+      parent.status = 'running';
       parent.completedAt = null;
       parent.failedAt = null;
       parent.failureReason = null;
@@ -3581,6 +3747,7 @@ function statsOf(state) {
   return {
     activeJobs: state.jobs.filter(j => ['queued', 'claimed', 'running', 'dispatched'].includes(j.status)).length,
     onlineAgents: state.agents.filter(a => a.online).length,
+    registeredApps: Array.isArray(state.apps) ? state.apps.filter((app) => String(app?.status || '').toLowerCase() !== 'deprecated').length : 0,
     grossVolume: +grossVolume.toFixed(1),
     todayCost: +api.toFixed(1),
     platformRevenue: +rev.toFixed(1),
@@ -3606,8 +3773,21 @@ function publicAgent(agent, catalog = []) {
   const tags = agentTagsFromRecord(cloned);
   if (tags.length) cloned.tags = tags;
   if (cloned.metadata?.manifest) cloned.metadata.manifest = sanitizeManifestForPublic(cloned.metadata.manifest);
+  if (!cloned.trust && cloned.metadata?.trust && typeof cloned.metadata.trust === 'object') {
+    cloned.trust = structuredClone(cloned.metadata.trust);
+  }
   cloned.links = agentLinksFromRecord(cloned, { catalog });
   return cloned;
+}
+function publicApp(app) {
+  const metadata = app?.metadata && typeof app.metadata === 'object' ? app.metadata : {};
+  if (
+    metadata.hidden_from_catalog
+    || metadata.deleted_at
+    || metadata.deletedAt
+    || String(app?.status || '').toLowerCase() === 'deprecated'
+  ) return null;
+  return sanitizeAppForPublic(app);
 }
 function cloneJob(job) {
   return job ? structuredClone(job) : null;
@@ -3819,6 +3999,405 @@ async function maybeAutoVerifyImportedAgent(agent, rewardLogin = '') {
   }
   return { attempted: true, agent: updated?.agent || agent, verification, welcome_credits: updated?.welcomeCredits || null };
 }
+
+function appManifestOptionsForRequest(req) {
+  return { allowLocalEndpoints: agentSafetyOptionsForRequest(req).allowLocalEndpoints };
+}
+
+async function loadAppManifestFromUrl(manifestUrl, req) {
+  const safeManifestUrl = validateManifestUrlInput(manifestUrl);
+  const response = await fetch(safeManifestUrl, { headers: { accept: 'application/json, text/plain;q=0.8' } });
+  if (!response.ok) throw new Error(`App manifest fetch failed (${response.status})`);
+  const payload = await response.json().catch(() => null);
+  if (!payload || typeof payload !== 'object') throw new Error('App manifest URL must return JSON');
+  return normalizeAppManifest(payload, {
+    manifestUrl: safeManifestUrl,
+    manifestSource: safeManifestUrl,
+    ...appManifestOptionsForRequest(req)
+  });
+}
+
+function appOwnerMatches(app = {}, current = null) {
+  const owner = String(app.owner || '').trim().toLowerCase();
+  if (!owner) return false;
+  return loginsForCurrentAccount(current).includes(owner);
+}
+
+function authorizeAppOwnerAction(state, req, appId, current = null) {
+  const resolvedCurrent = current || currentAgentRequesterContext(state, req);
+  const policy = runtimePolicy(req);
+  const app = (Array.isArray(state.apps) ? state.apps : []).find((item) => String(item?.id || '') === String(appId || ''));
+  if (!app) return { error: 'App not found', statusCode: 404, current: resolvedCurrent, policy };
+  if (String(app.owner || '').toLowerCase() === 'built-in' && !policy.openWriteApiEnabled) {
+    return { error: 'Built-in apps cannot be modified from the public API.', statusCode: 403, current: resolvedCurrent, policy };
+  }
+  if (policy.openWriteApiEnabled || appOwnerMatches(app, resolvedCurrent)) return { app, current: resolvedCurrent, policy };
+  if (!resolvedCurrent.user && resolvedCurrent.apiKeyStatus === 'invalid') return { error: 'Invalid API key', statusCode: 401, current: resolvedCurrent, policy };
+  if (!resolvedCurrent.user && resolvedCurrent.apiKeyStatus !== 'valid') return { error: 'Login or CAIt API key required', statusCode: 401, current: resolvedCurrent, policy };
+  return { error: 'Only the app owner can perform this action', statusCode: 403, current: resolvedCurrent, policy };
+}
+
+function applyVerificationToAppRecord(app, verification) {
+  app.verificationStatus = verification.status;
+  app.verificationCheckedAt = verification.checkedAt;
+  app.verificationError = verification.ok ? null : verification.reason;
+  app.verificationDetails = {
+    category: verification.category || (verification.ok ? 'verified' : 'unknown'),
+    code: verification.code || (verification.ok ? 'verified' : 'verification_failed'),
+    reason: verification.reason || null,
+    healthcheckUrl: verification.healthcheckUrl || null,
+    details: verification.details || null
+  };
+  app.status = verification.ok ? 'active' : 'verification_failed';
+  app.updatedAt = nowIso();
+}
+
+async function verifyAppHealth(app, req) {
+  const checkedAt = nowIso();
+  const healthcheckUrl = String(app?.healthcheckUrl || app?.metadata?.manifest?.healthcheck_url || app?.metadata?.manifest?.healthcheckUrl || '').trim();
+  if (!healthcheckUrl) {
+    return {
+      ok: false,
+      status: 'verification_skipped',
+      checkedAt,
+      code: 'missing_healthcheck',
+      category: 'app_healthcheck',
+      reason: 'No app healthcheck URL declared.',
+      healthcheckUrl: null
+    };
+  }
+  const validation = validateAppManifest({ name: app.name || 'app', description: app.description || 'app', entryUrl: app.entryUrl || app.baseUrl || healthcheckUrl, healthcheckUrl }, appManifestOptionsForRequest(req));
+  if (!validation.ok) {
+    return {
+      ok: false,
+      status: 'verification_failed',
+      checkedAt,
+      code: 'invalid_healthcheck_url',
+      category: 'app_healthcheck',
+      reason: validation.errors.join('; '),
+      healthcheckUrl
+    };
+  }
+  try {
+    const response = await fetch(healthcheckUrl, { headers: { accept: 'application/json, text/plain;q=0.8' } });
+    const text = await response.text().catch(() => '');
+    return {
+      ok: response.ok,
+      status: response.ok ? 'verified' : 'verification_failed',
+      checkedAt,
+      code: response.ok ? 'verified' : `http_${response.status}`,
+      category: 'app_healthcheck',
+      reason: response.ok ? null : `Healthcheck returned HTTP ${response.status}`,
+      healthcheckUrl,
+      details: {
+        httpStatus: response.status,
+        contentType: response.headers.get('content-type') || '',
+        sample: text.slice(0, 300)
+      }
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: 'verification_failed',
+      checkedAt,
+      code: 'fetch_failed',
+      category: 'app_healthcheck',
+      reason: error.message,
+      healthcheckUrl
+    };
+  }
+}
+
+async function handleRegisterApp(req) {
+  const state = await storage.getState();
+  const current = currentAgentRequesterContext(state, req);
+  const access = requireAgentWriteAccess(req, current);
+  if (access.error) return { error: access.error, statusCode: access.statusCode || 400 };
+  const body = await parseBody(req).catch(err => ({ __error: err.message }));
+  if (body.__error) return { error: body.__error, statusCode: 400 };
+  const ownerInfo = ownerFromCurrent(req, current);
+  const app = createAppFromInput(body, ownerInfo, { verificationStatus: body.verification_status || body.verificationStatus || 'manual_registered' });
+  const validation = validateAppManifest(app, appManifestOptionsForRequest(req));
+  if (!validation.ok) return { error: validation.errors.join('; '), statusCode: 400 };
+  await storage.mutate(async (draft) => {
+    if (!Array.isArray(draft.apps)) draft.apps = [];
+    draft.apps = [app, ...draft.apps.filter((item) => String(item?.id || '') !== app.id)];
+  });
+  await touchEvent('APP_REGISTERED', `${app.name} registered as an app`, { app_id: app.id, owner: app.owner });
+  if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+  return { ok: true, app: publicApp(app), validation, owner: ownerInfo.owner, statusCode: 201 };
+}
+
+async function handleImportAppManifest(req) {
+  const state = await storage.getState();
+  const current = currentAgentRequesterContext(state, req);
+  const access = requireAgentWriteAccess(req, current);
+  if (access.error) return { error: access.error, statusCode: access.statusCode || 400 };
+  const body = await parseBody(req).catch(err => ({ __error: err.message }));
+  if (body.__error) return { error: body.__error, statusCode: 400 };
+  const manifest = normalizeAppManifest(body.manifest || body, appManifestOptionsForRequest(req));
+  const validation = validateAppManifest(manifest, appManifestOptionsForRequest(req));
+  if (!validation.ok) return { error: validation.errors.join('; '), statusCode: 400 };
+  const ownerInfo = ownerFromCurrent(req, current);
+  const app = createAppFromManifest(manifest, ownerInfo, {
+    manifestSource: 'app-manifest-json',
+    verificationStatus: 'manifest_loaded',
+    importMode: 'app-manifest-json'
+  });
+  await storage.mutate(async (draft) => {
+    if (!Array.isArray(draft.apps)) draft.apps = [];
+    draft.apps = [app, ...draft.apps.filter((item) => String(item?.id || '') !== app.id)];
+  });
+  await touchEvent('APP_REGISTERED', `${app.name} imported from app manifest JSON`, { app_id: app.id, owner: app.owner });
+  if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+  return { ok: true, app: publicApp(app), validation, owner: ownerInfo.owner, statusCode: 201 };
+}
+
+async function handleImportAppUrl(req) {
+  const state = await storage.getState();
+  const current = currentAgentRequesterContext(state, req);
+  const access = requireAgentWriteAccess(req, current);
+  if (access.error) return { error: access.error, statusCode: access.statusCode || 400 };
+  const body = await parseBody(req).catch(err => ({ __error: err.message }));
+  if (body.__error) return { error: body.__error, statusCode: 400 };
+  const manifestUrl = body.manifest_url || body.manifestUrl || body.url;
+  if (!manifestUrl) return { error: 'manifest_url required', statusCode: 400 };
+  let manifest;
+  try {
+    manifest = await loadAppManifestFromUrl(manifestUrl, req);
+  } catch (error) {
+    return { error: error.message, statusCode: 400 };
+  }
+  const validation = validateAppManifest(manifest, appManifestOptionsForRequest(req));
+  if (!validation.ok) return { error: validation.errors.join('; '), statusCode: 400 };
+  const ownerInfo = ownerFromCurrent(req, current);
+  const app = createAppFromManifest(manifest, ownerInfo, {
+    manifestUrl: manifest.manifestUrl || validateManifestUrlInput(manifestUrl),
+    manifestSource: manifest.manifestSource || validateManifestUrlInput(manifestUrl),
+    verificationStatus: 'manifest_loaded',
+    importMode: 'app-manifest-url'
+  });
+  await storage.mutate(async (draft) => {
+    if (!Array.isArray(draft.apps)) draft.apps = [];
+    draft.apps = [app, ...draft.apps.filter((item) => String(item?.id || '') !== app.id)];
+  });
+  await touchEvent('APP_REGISTERED', `${app.name} app manifest loaded from URL`, { app_id: app.id, owner: app.owner });
+  if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+  return { ok: true, app: publicApp(app), validation, owner: ownerInfo.owner, import_mode: 'app-manifest-url', statusCode: 201 };
+}
+
+function findAppByCatalogId(state = {}, appId = '') {
+  const safeId = String(appId || '').trim();
+  if (!safeId) return null;
+  return (Array.isArray(state.apps) ? state.apps : [])
+    .find((item) => String(item?.id || '').trim() === safeId) || null;
+}
+
+async function handleAppHandoff(req, appId = '') {
+  const state = await storage.getState();
+  const current = currentAgentRequesterContext(state, req);
+  if (!current.user && current.apiKeyStatus === 'invalid') return { error: 'Invalid API key', statusCode: 401 };
+  if (!current.user && current.apiKeyStatus !== 'valid') return { error: 'Login or CAIt API key required', statusCode: 401 };
+  const body = await parseBody(req).catch(err => ({ __error: err.message }));
+  if (body.__error) return { error: body.__error, statusCode: 400 };
+  const app = findAppByCatalogId(state, appId);
+  if (!app) return { error: 'App not found', statusCode: 404 };
+  if (String(app.status || '').toLowerCase() === 'deprecated') return { error: 'App is not active', statusCode: 410 };
+  const createUrl = String(app.handoff?.createUrl || app.metadata?.manifest?.handoff?.createUrl || app.metadata?.manifest?.handoff?.create_url || '').trim();
+  if (!createUrl) return { error: 'App does not expose handoff.create_url', statusCode: 400 };
+  const methodInput = String(app.handoff?.method || app.metadata?.manifest?.handoff?.method || 'POST').trim().toUpperCase();
+  const method = ['POST', 'PUT', 'PATCH'].includes(methodInput) ? methodInput : 'POST';
+  let response;
+  let text = '';
+  try {
+    response = await fetch(createUrl, {
+      method,
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json',
+        'x-cait-app-id': String(app.id || ''),
+        'x-cait-transfer-id': String(body.transfer_id || body.transferId || '')
+      },
+      body: JSON.stringify({
+        ...body,
+        app_id: app.id,
+        app_name: app.name,
+        source_platform: 'CAIt'
+      })
+    });
+    text = await response.text();
+  } catch (error) {
+    return { error: `App handoff request failed: ${error.message}`, statusCode: 502 };
+  }
+  let data = {};
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    data = { raw: text.slice(0, 1000) };
+  }
+  const handoffUrl = String(data.handoff_url || data.handoffUrl || data.open_url || data.openUrl || data.url || '').trim();
+  if (!response.ok) {
+    return {
+      error: String(data.error || data.message || `App handoff failed (${response.status})`),
+      statusCode: response.status >= 400 && response.status < 600 ? response.status : 502,
+      upstream_status: response.status,
+      upstream_response: data
+    };
+  }
+  if (!handoffUrl) {
+    return { error: 'App handoff response did not include handoff_url', statusCode: 502, upstream_status: response.status, upstream_response: data };
+  }
+  await touchEvent('APP_HANDOFF', `${current.login} sent CAIt context to ${app.name}`, {
+    app_id: app.id,
+    app_name: app.name,
+    login: current.login,
+    transfer_id: String(body.transfer_id || body.transferId || ''),
+    handoff_url: handoffUrl
+  });
+  if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+  return {
+    ok: true,
+    app: publicApp(app),
+    handoff_url: handoffUrl,
+    upstream_status: response.status,
+    upstream_response: data,
+    statusCode: 200
+  };
+}
+
+function appContextAccessToken() {
+  return `ctx_${randomBytes(18).toString('base64url')}`;
+}
+
+function appContextChatUrl(req, record = {}) {
+  const url = new URL('/chat', requestOrigin(req));
+  url.searchParams.set('app_context_id', String(record.id || ''));
+  if (record.accessToken) url.searchParams.set('app_context_token', String(record.accessToken));
+  return `${url.pathname}${url.search}`;
+}
+
+function appContextOwnerAllowed(record = {}, current = null, token = '', policy = {}) {
+  if (!record?.id || appContextIsExpired(record)) return false;
+  const suppliedToken = String(token || '').trim();
+  if (suppliedToken && record.accessToken && suppliedToken === String(record.accessToken)) return true;
+  if (policy.openWriteApiEnabled) return true;
+  const owner = String(record.ownerLogin || '').trim().toLowerCase();
+  return Boolean(owner && loginsForCurrentAccount(current).includes(owner));
+}
+
+async function handleCreateAppContext(req) {
+  const current = currentAgentRequesterContext({ accounts: [] }, req);
+  const policy = runtimePolicy(req);
+  if (!current.user && current.apiKeyStatus === 'invalid') return { error: 'Invalid API key', statusCode: 401 };
+  const body = await parseBody(req).catch(err => ({ __error: err.message }));
+  if (body.__error) return { error: body.__error, statusCode: 400 };
+  const sourceApp = String(body.app_id || body.appId || body.source_app || body.sourceApp || body.context?.source_app || '').trim();
+  const ownerLogin = current.login || current.user?.login || current.apiKey?.accountLogin || current.apiKey?.account_login || '';
+  const record = createAppContextRecord({
+    ...(body.context && typeof body.context === 'object' ? body.context : body),
+    source_app: sourceApp || body.context?.source_app,
+    source_app_label: body.context?.source_app_label || body.source_app_label
+  }, { login: ownerLogin }, {
+    accessToken: appContextAccessToken(),
+    expiresAt: body.expires_at || body.expiresAt || ''
+  });
+  await storage.appendAppContext(record);
+  await touchEvent('APP_CONTEXT_CREATED', `${ownerLogin || 'api client'} created app context from ${record.sourceAppLabel || record.sourceApp}`, {
+    app_id: record.sourceApp,
+    context_id: record.id,
+    owner: ownerLogin
+  });
+  if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+  return {
+    ok: true,
+    app_context: publicAppContext(record),
+    app_context_id: record.id,
+    app_context_token: record.accessToken,
+    chat_url: appContextChatUrl(req, record),
+    statusCode: 201
+  };
+}
+
+async function handleGetAppContext(req, contextId = '') {
+  const current = currentAgentRequesterContext({ accounts: [] }, req);
+  const policy = runtimePolicy(req);
+  const url = new URL(req.url, requestOrigin(req));
+  const token = String(url.searchParams.get('token') || url.searchParams.get('app_context_token') || req.headers['x-cait-app-context-token'] || '').trim();
+  const record = await storage.getAppContextById(contextId);
+  if (!record) return { error: 'App context not found', statusCode: 404 };
+  if (appContextIsExpired(record)) return { error: 'App context expired', statusCode: 410 };
+  if (!appContextOwnerAllowed(record, current, token, policy)) {
+    if (!current.user && current.apiKeyStatus === 'invalid') return { error: 'Invalid API key', statusCode: 401 };
+    return { error: 'Login, owner access, or app context token required', statusCode: 401 };
+  }
+  return { ok: true, app_context: publicAppContext(record), statusCode: 200 };
+}
+
+async function handleListAppContexts(req) {
+  const current = currentAgentRequesterContext({ accounts: [] }, req);
+  const policy = runtimePolicy(req);
+  if (!current.user && current.apiKeyStatus === 'invalid') return { error: 'Invalid API key', statusCode: 401 };
+  if (!current.user && current.apiKeyStatus !== 'valid' && !policy.openWriteApiEnabled) return { error: 'Login or CAIt API key required', statusCode: 401 };
+  const url = new URL(req.url, requestOrigin(req));
+  const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') || 20) || 20));
+  const logins = new Set(loginsForCurrentAccount(current));
+  const records = await storage.listAppContexts({
+    limit,
+    admin: policy.openWriteApiEnabled,
+    ownerLogins: [...logins]
+  });
+  const contexts = records
+    .filter((record) => !appContextIsExpired(record))
+    .filter((record) => policy.openWriteApiEnabled || logins.has(String(record.ownerLogin || '').trim().toLowerCase()))
+    .map((record) => publicAppContext(record, { includePayload: false }));
+  return { ok: true, app_contexts: contexts, statusCode: 200 };
+}
+
+async function handleVerifyApp(req, appId) {
+  const state = await storage.getState();
+  const current = currentAgentRequesterContext(state, req);
+  const authorization = authorizeAppOwnerAction(state, req, appId, current);
+  if (authorization.error) return { error: authorization.error, statusCode: authorization.statusCode || 400 };
+  const result = await storage.mutate(async (draft) => {
+    const app = (Array.isArray(draft.apps) ? draft.apps : []).find((item) => String(item?.id || '') === String(appId || ''));
+    if (!app) return { error: 'App not found', statusCode: 404 };
+    const verification = await verifyAppHealth(app, req);
+    applyVerificationToAppRecord(app, verification);
+    return { ok: true, app: publicApp(app), verification };
+  });
+  if (result.error) return result;
+  await touchEvent(result.verification.ok ? 'APP_VERIFIED' : 'APP_FAILED', `${result.app.name} app verification ${result.verification.status}`, { app_id: result.app.id, status: result.verification.status });
+  if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+  return result;
+}
+
+async function handleDeleteApp(req, appId) {
+  const state = await storage.getState();
+  const current = currentAgentRequesterContext(state, req);
+  const authorization = authorizeAppOwnerAction(state, req, appId, current);
+  if (authorization.error) return { error: authorization.error, statusCode: authorization.statusCode || 400 };
+  const result = await storage.mutate(async (draft) => {
+    const app = (Array.isArray(draft.apps) ? draft.apps : []).find((item) => String(item?.id || '') === String(appId || ''));
+    if (!app) return { error: 'App not found', statusCode: 404 };
+    const visibleApp = publicApp(app) || { id: app.id, name: app.name };
+    const deletedAt = nowIso();
+    app.status = 'deprecated';
+    app.metadata = {
+      ...(app.metadata && typeof app.metadata === 'object' ? app.metadata : {}),
+      hidden_from_catalog: true,
+      deleted_at: deletedAt,
+      deletedAt,
+      deleted_reason: 'owner_removed_from_catalog',
+      deletedReason: 'owner_removed_from_catalog'
+    };
+    app.updatedAt = deletedAt;
+    return { ok: true, app: visibleApp, soft_deleted: true };
+  });
+  if (result.error) return result;
+  await touchEvent('APP_REMOVED', `${result.app.name} removed from app catalog`, { app_id: result.app.id });
+  if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+  return result;
+}
 function normalizeUsageForBilling(rawUsage, fallbackApiCost = 100) {
   if (rawUsage && typeof rawUsage === 'object') {
     return {
@@ -3884,10 +4463,16 @@ function resolveAgentJobEndpoint(agent) {
   return '';
 }
 function buildDispatchPayload(job, agent) {
+  const prompt = String(job.prompt || '').trim();
+  const additionalPrompt = commonOrderQualityRulesText();
+  const fullPrompt = [prompt, additionalPrompt].filter(Boolean).join('\n\n').trim();
   return {
     job_id: job.id,
     task_type: job.taskType,
     prompt: job.prompt,
+    additional_prompt: additionalPrompt,
+    additionalPrompt,
+    full_prompt: fullPrompt || prompt,
     input: job.input || {},
     parent_agent_id: job.parentAgentId,
     assigned_agent_id: agent.id,
@@ -3921,6 +4506,10 @@ const JOB_TRANSITIONS = {
 };
 function normalizeJobStatus(status) {
   return String(status || '').trim().toLowerCase();
+}
+function isBlockedAgentResultStatus(status) {
+  return ['blocked', 'action_required', 'needs_action', 'approval_required', 'connector_required', 'blocked_waiting_for_approval']
+    .includes(normalizeJobStatus(status));
 }
 function isTerminalJobStatus(status) {
   return ['completed', 'failed', 'timed_out'].includes(normalizeJobStatus(status));
@@ -3975,12 +4564,15 @@ function normalizeAgentReportPayload(payload = {}, reportCandidate = null) {
 function normalizeDispatchResponse(responseBody = {}) {
   const body = responseBody && typeof responseBody === 'object' ? responseBody : {};
   const status = String(body.status || '').trim().toLowerCase();
-  const accepted = body.accepted === true || status === 'accepted' || status === 'queued' || status === 'running' || status === 'dispatched';
-  const completed = status === 'completed' || Boolean(body.report || body.output || body.summary || (Array.isArray(body.files) && body.files.length));
+  const blocked = isBlockedAgentResultStatus(status);
+  const hasArtifacts = Boolean(body.report || body.output || body.summary || (Array.isArray(body.files) && body.files.length));
+  const accepted = body.accepted === true || blocked || status === 'accepted' || status === 'queued' || status === 'running' || status === 'dispatched';
+  const completed = !blocked && (status === 'completed' || ((!status || status === 'ok' || status === 'success') && hasArtifacts));
   return {
     accepted,
+    blocked,
     completed,
-    status: completed ? 'completed' : (status || (accepted ? 'accepted' : 'unknown')),
+    status: blocked ? 'blocked' : (completed ? 'completed' : (status || (accepted ? 'accepted' : 'unknown'))),
     report: normalizeAgentReportPayload(body, body.report || body.output || { summary: body.summary || 'No report provided.' }),
     files: Array.isArray(body.files) ? body.files : [],
     returnTargets: body.return_targets || body.returnTargets || ['api'],
@@ -3992,12 +4584,18 @@ function normalizeDispatchResponse(responseBody = {}) {
 function normalizeCallbackPayload(body = {}) {
   const payload = body && typeof body === 'object' ? body : {};
   const status = String(payload.status || (payload.failure_reason || payload.error ? 'failed' : 'completed')).trim().toLowerCase();
-  const normalizedStatus = status === 'failed' ? 'failed' : 'completed';
+  const normalizedStatus = status === 'failed' ? 'failed' : (isBlockedAgentResultStatus(status) ? 'blocked' : 'completed');
   return {
     status: normalizedStatus,
     report: normalizeAgentReportPayload(
       payload,
-      payload.report || payload.output || { summary: payload.summary || (normalizedStatus === 'failed' ? 'Agent reported failure' : 'No report provided.') }
+      payload.report || payload.output || {
+        summary: payload.summary || (
+          normalizedStatus === 'failed'
+            ? 'Agent reported failure'
+            : (normalizedStatus === 'blocked' ? 'Agent is blocked pending approval or connector setup' : 'No report provided.')
+        )
+      }
     ),
     files: Array.isArray(payload.files) ? payload.files : [],
     usage: normalizeUsageForBilling(payload.usage, 100),
@@ -4113,38 +4711,42 @@ async function completeJobFromAgentResult(jobId, agentId, payload = {}, meta = {
       payload.report || payload.output || { summary: payload.summary || 'No report provided.' }
     );
     const usage = usageWithObservedJobTokens(job, payload?.usage, outputReport);
-    const billing = estimateBilling(agent, usage);
+    const targetStatus = isBlockedAgentResultStatus(meta.targetStatus || payload.status) ? 'blocked' : 'completed';
+    const billing = targetStatus === 'completed' ? estimateBilling(agent, usage) : null;
     const completionAt = nowIso();
     job.assignedAgentId = agent.id;
     job.startedAt = job.startedAt || completionAt;
     job.lastCallbackAt = meta.source === 'callback' ? completionAt : (job.lastCallbackAt || null);
-    job.status = 'completed';
+    job.status = targetStatus;
     job.output = {
       report: outputReport,
       files: Array.isArray(payload.files) ? payload.files : [],
       returnTargets: payload.return_targets || payload.returnTargets || ['chat', 'api', 'webhook']
     };
-    job.completedAt = completionAt;
+    job.completedAt = targetStatus === 'completed' ? completionAt : null;
     job.usage = usage;
     job.actualBilling = billing;
-    job.deliveryQuality = {
-      score: deliveryQualityScoreForJob(job),
-      version: 'delivery-quality/v1',
-      checkedAt: completionAt
-    };
+    job.deliveryQuality = targetStatus === 'completed'
+      ? {
+          score: deliveryQualityScoreForJob(job),
+          version: 'delivery-quality/v1',
+          checkedAt: completionAt
+        }
+      : null;
     job.dispatch = {
       ...(job.dispatch || {}),
       externalJobId: meta.externalJobId || job.dispatch?.externalJobId || null,
       completionSource: meta.source || job.dispatch?.completionSource || null,
-      completionStatus: 'completed',
-      completedAt: completionAt,
+      completionStatus: targetStatus,
+      completedAt: targetStatus === 'completed' ? completionAt : null,
       lastCallbackAt: meta.source === 'callback' ? completionAt : (job.dispatch?.lastCallbackAt || null)
     };
-    job.logs.push(`completed by ${agent.id}`, billingLogLine(job, billing), `delivery quality score=${job.deliveryQuality.score}`);
+    job.logs.push(`${targetStatus} by ${agent.id}`);
+    if (billing) job.logs.push(billingLogLine(job, billing), `delivery quality score=${job.deliveryQuality.score}`);
     if (meta.source) job.logs.push(`completion source=${meta.source}`);
     if (meta.externalJobId) job.logs.push(`external_job_id=${meta.externalJobId}`);
-    settleAgentEarnings(job, agent, billing);
-    return { ok: true, job, billing, agent, workflowParentId: job.workflowParentId || null };
+    if (billing) settleAgentEarnings(job, agent, billing);
+    return { ok: true, mode: targetStatus, job, billing, agent, workflowParentId: job.workflowParentId || null };
   });
   if (result?.ok && result.workflowParentId) await reconcileWorkflowParent(result.workflowParentId);
   return result;
@@ -4221,7 +4823,7 @@ async function dispatchJobToAssignedAgent(job, agent) {
   }
   const normalized = normalizeDispatchResponse(body);
   normalized.usage = usageWithObservedJobTokens(job, normalized.usage, normalized.report);
-  if (!normalized.accepted && !normalized.completed) {
+  if (!normalized.accepted && !normalized.completed && !normalized.blocked) {
     return { ok: false, endpoint, failureReason: 'Dispatch response was malformed or did not acknowledge the job', statusCode: response.status, responseBody: body };
   }
   return { ok: true, endpoint, normalized, statusCode: response.status, responseBody: body };
@@ -4956,6 +5558,9 @@ async function resolveWorkIntentRequest(req) {
   }
   const prompt = String(body?.prompt || '').trim();
   if (!prompt) return { ok: true, kind: 'empty', action: '', source: 'empty' };
+  if (isNonOrderConversationIntentText(prompt)) {
+    return { ok: true, kind: 'chat', action: 'answer_in_chat', source: 'non_order_conversation', prompt };
+  }
   if (isDeveloperExecutionIntentText(prompt)) {
     const route = inferWorkIntentRoute(prompt);
     return {
@@ -4994,6 +5599,15 @@ async function prepareWorkOrderRequest(req) {
   }
   const prompt = String(body?.prompt || '').trim();
   const requestedStrategy = String(body?.requestedStrategy || body?.orderStrategy || '').trim().toLowerCase();
+  const selectedAgentId = selectedAgentIdFromOrderBody(body);
+  const selectedAgentTaskType = selectedAgentTaskTypeFromOrderBody(body);
+  let selectedAgentName = selectedAgentNameFromOrderBody(body);
+  if (selectedAgentId && !selectedAgentName) {
+    try {
+      const state = await storage.getState();
+      selectedAgentName = String(state?.agents?.find((agent) => String(agent?.id || '') === selectedAgentId)?.name || '').trim();
+    } catch {}
+  }
   if (!prompt) {
     return {
       ok: true,
@@ -5005,10 +5619,37 @@ async function prepareWorkOrderRequest(req) {
       reason: ''
     };
   }
-  const prepared = prepareWorkOrderSeed(prompt, requestedStrategy);
+  const prepared = prepareWorkOrderSeed(prompt, requestedStrategy, {
+    taskType: body?.task_type || body?.taskType || body?.selected_task_type || body?.selectedTaskType || selectedAgentTaskType || '',
+    selectedAgentId
+  });
+  const intakeClarification = buildIntakeClarification({
+    prompt,
+    task_type: prepared.taskType || 'research',
+    order_strategy: prepared.resolvedOrderStrategy || requestedStrategy || 'auto',
+    intake_answered: body?.intake_answered === true || body?.intakeAnswered === true,
+    selected_agent_id: selectedAgentId,
+    selected_agent_name: selectedAgentName
+  }, { taskType: prepared.taskType || 'research' });
+  if (intakeClarification) {
+    return {
+      ok: true,
+      prompt,
+      selected_agent_id: selectedAgentId,
+      selectedAgentId,
+      selected_agent_name: selectedAgentName,
+      selectedAgentName,
+      ...prepared,
+      ...intakeClarification
+    };
+  }
   return {
     ok: true,
     prompt,
+    selected_agent_id: selectedAgentId,
+    selectedAgentId,
+    selected_agent_name: selectedAgentName,
+    selectedAgentName,
     ...prepared
   };
 }
@@ -5022,19 +5663,24 @@ async function preflightWorkOrderRequest(req) {
   }
   const prompt = String(body?.prompt || '').trim();
   if (!prompt) return { ok: false, code: 'missing_prompt', error: 'prompt required', statusCode: 400 };
-  const seed = prepareWorkOrderSeed(prompt, body?.order_strategy || body?.requestedOrderStrategy || 'auto');
+  const seed = prepareWorkOrderSeed(prompt, body?.order_strategy || body?.requestedOrderStrategy || 'auto', {
+    taskType: body?.task_type || body?.taskType || selectedAgentTaskTypeFromOrderBody(body),
+    selectedAgentId: selectedAgentIdFromOrderBody(body)
+  });
   const taskType = String(body?.task_type || body?.taskType || seed.taskType || 'research').trim().toLowerCase();
   const resolvedOrderStrategy = String(body?.resolved_order_strategy || body?.resolvedOrderStrategy || seed.resolvedOrderStrategy || 'single').trim().toLowerCase();
   const state = await storage.getState();
   const current = currentUserContext(req);
   const account = current?.login ? accountSettingsForLogin(state, current.login, current.user, current.authProvider) : null;
-  const requestedAgentId = String(body?.agent_id || body?.agentId || '').trim();
+  const requestedAgentId = String(body?.agent_id || body?.agentId || selectedAgentIdFromOrderBody(body)).trim();
   const resolvedStrategyPlan = resolveOrderStrategy(state.agents, {
     ...body,
     task_type: taskType,
     prompt,
     budget_cap: Number(body?.budget_cap || body?.budgetCap || 0),
-    agent_id: requestedAgentId
+    agent_id: String(body?.agent_id || body?.agentId || '').trim(),
+    selected_agent_id: selectedAgentIdFromOrderBody(body),
+    selected_agent_task_type: selectedAgentTaskTypeFromOrderBody({ ...body, task_type: taskType })
   }, body?.order_strategy || body?.requestedOrderStrategy || resolvedOrderStrategy);
   if (resolvedStrategyPlan.strategy === 'multi' || resolvedOrderStrategy === 'multi') {
     const plan = resolvedStrategyPlan.plan || { plannedTasks: [], selections: [] };
@@ -5212,6 +5858,7 @@ async function snapshot(req) {
   const payload = {
     stats: statsOf(state),
     agents: state.agents.map((agent) => publicAgent(agent, state.agents)).filter(Boolean),
+    apps: (Array.isArray(state.apps) ? state.apps : []).map((app) => publicApp(app)).filter(Boolean),
     jobs,
     events: visibleEventsForRequest(state, req, current),
     billingAudits: visibleBillingAuditsForRequest(state, req, jobs, current),
@@ -5228,6 +5875,60 @@ async function snapshot(req) {
   if (chatTranscripts) payload.chatTranscripts = chatTranscripts;
   if (adminDashboard) payload.adminDashboard = adminDashboard;
   return payload;
+}
+
+function catalogPagination(url, defaultLimit = 10, maxLimit = 100) {
+  const requestedLimit = Number(url.searchParams.get('limit') || defaultLimit);
+  const requestedOffset = Number(url.searchParams.get('offset') || 0);
+  const limit = Number.isFinite(requestedLimit) ? Math.min(maxLimit, Math.max(1, requestedLimit)) : defaultLimit;
+  const offset = Number.isFinite(requestedOffset) ? Math.max(0, requestedOffset) : 0;
+  return { limit, offset };
+}
+
+function catalogPagePayload(items = [], url, key = 'items') {
+  const list = Array.isArray(items) ? items : [];
+  const { limit, offset } = catalogPagination(url);
+  const page = list.slice(offset, offset + limit);
+  return {
+    [key]: page,
+    total: list.length,
+    limit,
+    offset,
+    hasMore: offset + page.length < list.length
+  };
+}
+
+async function agentsCatalogPayload(req) {
+  const url = new URL(req.url, 'http://localhost');
+  const state = await storage.getState();
+  const agents = (Array.isArray(state.agents) ? state.agents : []).map((agent) => publicAgent(agent, state.agents)).filter(Boolean);
+  return catalogPagePayload(agents, url, 'agents');
+}
+
+async function appsCatalogPayload(req) {
+  const url = new URL(req.url, 'http://localhost');
+  const state = await storage.getState();
+  const apps = (Array.isArray(state.apps) ? state.apps : []).map((app) => publicApp(app)).filter(Boolean);
+  return catalogPagePayload(apps, url, 'apps');
+}
+
+async function mcpCatalogForPublicRequest() {
+  const state = await storage.getState();
+  return {
+    apps: (Array.isArray(state.apps) ? state.apps : []).map((app) => publicApp(app)).filter(Boolean),
+    agents: (Array.isArray(state.agents) ? state.agents : []).map((agent) => publicAgent(agent, state.agents)).filter(Boolean)
+  };
+}
+
+async function handleMcpRequest(req) {
+  const body = await parseBody(req).catch((error) => ({ __error: error.message }));
+  if (body.__error) return { error: body.__error, statusCode: 400 };
+  const result = handleMcpJsonRpc(body, await mcpCatalogForPublicRequest(), {
+    requestUrl: req.url,
+    origin: requestOrigin(req),
+    version: runtimeAppVersion
+  });
+  return result || { ok: true };
 }
 
 async function getSettingsPayload(req, url) {
@@ -6118,6 +6819,7 @@ async function handleStripeWebhook(req) {
 }
 
 async function performSingleJobCreate(req, body, current, options = {}) {
+  body = orderBodyWithCommonQualityRules(body);
   const touchUsage = options.touchUsage || (async () => {});
   const requester = requesterContextFromUser(current.user, current.authProvider, {
     login: current.login,
@@ -6166,7 +6868,7 @@ async function performSingleJobCreate(req, body, current, options = {}) {
     }
   };
   await touchEvent('JOB', `parent ${body.parent_agent_id} requested ${taskType}`);
-  const requestedAgentId = String(body.agent_id || '').trim();
+  const requestedAgentId = String(body.agent_id || selectedAgentIdFromOrderBody(body) || '').trim();
   const picked = pickAgent(state.agents, taskType, body.budget_cap || 0, requestedAgentId, {
     body,
     scheduled: Boolean(body?.input?._broker?.recurring),
@@ -6245,11 +6947,28 @@ async function performSingleJobCreate(req, body, current, options = {}) {
     warning: preflight.warning || ''
   };
 
-  const estimatedBilling = estimateBilling(picked.agent, {
-    api_cost: Number(body.estimated_api_cost || 100),
-    total_cost_basis: Number(body.estimated_total_cost_basis || 0) || undefined,
-    cost_basis: body.estimated_cost_basis || undefined
+  const listCreatorEstimate = listCreatorUsageEstimateForOrder({
+    ...body,
+    task_type: taskType,
+    prompt: executionPrompt,
+    input
   });
+  if (listCreatorEstimate) {
+    input._broker.listCreatorEstimate = {
+      requestedCount: listCreatorEstimate.requestedCount,
+      batchSize: listCreatorEstimate.batchSize,
+      batchCount: listCreatorEstimate.batchCount,
+      contactCaptureMode: listCreatorEstimate.contactCaptureMode
+    };
+  }
+  const estimatedUsage = listCreatorEstimate && !(Number(body.estimated_total_cost_basis || 0) > 0 || body.estimated_cost_basis)
+    ? listCreatorEstimate.usage
+    : {
+        api_cost: Number(body.estimated_api_cost || 100),
+        total_cost_basis: Number(body.estimated_total_cost_basis || 0) || undefined,
+        cost_basis: body.estimated_cost_basis || undefined
+      };
+  const estimatedBilling = estimateBilling(picked.agent, estimatedUsage);
   const job = {
     id: randomUUID(),
     jobKind: body.workflow_parent_id ? 'workflow_child' : 'job',
@@ -6391,7 +7110,7 @@ async function performSingleJobCreate(req, body, current, options = {}) {
         attempts: Number(draftJob.dispatch?.attempts || 0) + 1,
         retryable: false,
         nextRetryAt: null,
-        completionStatus: dispatch.normalized.completed ? 'completed' : 'accepted'
+        completionStatus: dispatch.normalized.blocked ? 'blocked' : (dispatch.normalized.completed ? 'completed' : 'accepted')
       };
       draftJob.logs.push(`dispatched to ${picked.agent.id} endpoint=${dispatch.endpoint}`);
 
@@ -6414,6 +7133,25 @@ async function performSingleJobCreate(req, body, current, options = {}) {
         draftJob.logs.push(`completed by dispatch response from ${picked.agent.id}`, billingLogLine(draftJob, billing), `delivery quality score=${draftJob.deliveryQuality.score}`);
         settleAgentEarnings(draftJob, draftAgent, billing);
         return { ok: true, mode: 'completed', job: draftJob, billing };
+      }
+
+      if (dispatch.normalized.blocked) {
+        draftJob.status = 'blocked';
+        draftJob.completedAt = null;
+        draftJob.failedAt = null;
+        draftJob.timedOutAt = null;
+        draftJob.failureReason = null;
+        draftJob.failureCategory = null;
+        draftJob.usage = dispatch.normalized.usage;
+        draftJob.output = {
+          report: dispatch.normalized.report,
+          files: dispatch.normalized.files,
+          returnTargets: dispatch.normalized.returnTargets
+        };
+        draftJob.actualBilling = null;
+        draftJob.deliveryQuality = null;
+        draftJob.logs.push(`dispatch blocked by ${picked.agent.id} status=${dispatch.normalized.status}`);
+        return { ok: true, mode: 'blocked', job: draftJob };
       }
 
       draftJob.logs.push(`dispatch accepted by ${picked.agent.id} status=${dispatch.normalized.status}`);
@@ -6452,6 +7190,27 @@ async function performSingleJobCreate(req, body, current, options = {}) {
         estimated_cost: job.billingEstimate,
         estimate_window: job.estimateWindow,
         actual_billing: final.billing,
+        workflow_parent_id: job.workflowParentId,
+        delivery: {
+          report: final.job.output?.report || null,
+          files: final.job.output?.files || [],
+          returnTargets: final.job.output?.returnTargets || ['api']
+        },
+        statusCode: 201
+      };
+    }
+    if (final.mode === 'blocked') {
+      await touchEvent('RUNNING', `${job.taskType}/${job.id.slice(0, 6)} blocked waiting for approval or connector setup`);
+      await touchUsage();
+      if (job.workflowParentId) await reconcileWorkflowParent(job.workflowParentId);
+      return {
+        job_id: job.id,
+        matched_agent_id: job.assignedAgentId,
+        selection_mode: picked.selectionMode,
+        inferred_task_type: taskType,
+        status: 'blocked',
+        estimated_cost: job.billingEstimate,
+        estimate_window: job.estimateWindow,
         workflow_parent_id: job.workflowParentId,
         delivery: {
           report: final.job.output?.report || null,
@@ -6502,6 +7261,7 @@ async function performSingleJobCreate(req, body, current, options = {}) {
 }
 
 async function handleCreateWorkflowJob(req, body, current, options = {}) {
+  body = orderBodyWithCommonQualityRules(body);
   if (String(body.agent_id || '').trim()) {
     return { error: 'Multi-agent objective does not support a single pinned agent. Clear the pin and retry.', statusCode: 400 };
   }
@@ -6512,7 +7272,10 @@ async function handleCreateWorkflowJob(req, body, current, options = {}) {
     return intakeClarification;
   }
   const state = await storage.getState();
-  const plan = options.workflowPlan || planWorkflowSelections(state.agents, taskType, body.prompt, body.budget_cap || 0);
+  const plan = options.workflowPlan || planWorkflowSelections(state.agents, taskType, body.prompt, body.budget_cap || 0, {
+    selectedAgentId: selectedAgentIdFromOrderBody(body),
+    selectedAgentTaskType: selectedAgentTaskTypeFromOrderBody(body)
+  });
   if (plan.selections.length < 2) {
     return {
       error: 'Need at least 2 ready agents for an Agent Team objective. Register or verify more agents first.',
@@ -6927,6 +7690,225 @@ async function handleXConnectorPost(req, res) {
     return json(res, Number(error?.statusCode || 502), { error: error.message || 'X post failed' });
   } finally {
     if (current?.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+  }
+}
+
+function clampGoogleReportRange(value = '') {
+  const days = Number(value || 28);
+  if (!Number.isFinite(days)) return 28;
+  return Math.max(1, Math.min(180, Math.round(days)));
+}
+
+function yyyyMmDd(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function googleReportDateRange(days = 28) {
+  const end = new Date();
+  end.setUTCDate(end.getUTCDate() - 1);
+  const start = new Date(end);
+  start.setUTCDate(start.getUTCDate() - Math.max(0, days - 1));
+  return { startDate: yyyyMmDd(start), endDate: yyyyMmDd(end) };
+}
+
+function numberFromGoogleMetric(value = '') {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function googleMetricValue(row = {}, index = 0) {
+  return numberFromGoogleMetric(row?.metricValues?.[index]?.value);
+}
+
+function googleDimensionValue(row = {}, index = 0) {
+  return String(row?.dimensionValues?.[index]?.value || '');
+}
+
+async function fetchGoogleSearchConsoleReport(accessToken, siteUrl = '', range = {}) {
+  const target = String(siteUrl || '').trim();
+  if (!target) return { site_url: '', rows: [], totals: { clicks: 0, impressions: 0 }, skipped: true };
+  const payload = await fetchGoogleAuthorizedJson(
+    `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(target)}/searchAnalytics/query`,
+    accessToken,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        startDate: range.startDate,
+        endDate: range.endDate,
+        dimensions: ['query', 'page'],
+        rowLimit: 50,
+        startRow: 0
+      })
+    }
+  );
+  const rows = (Array.isArray(payload?.rows) ? payload.rows : []).map((row) => {
+    const keys = Array.isArray(row?.keys) ? row.keys : [];
+    return {
+      query: String(keys[0] || ''),
+      page: String(keys[1] || ''),
+      clicks: Number(row?.clicks || 0),
+      impressions: Number(row?.impressions || 0),
+      ctr: Number(row?.ctr || 0),
+      position: Number(row?.position || 0)
+    };
+  });
+  return {
+    site_url: target,
+    rows,
+    totals: rows.reduce((acc, row) => ({
+      clicks: acc.clicks + Number(row.clicks || 0),
+      impressions: acc.impressions + Number(row.impressions || 0)
+    }), { clicks: 0, impressions: 0 })
+  };
+}
+
+async function fetchGoogleGa4RunReport(accessToken, property = '', body = {}) {
+  const target = String(property || '').trim();
+  if (!/^properties\/[A-Za-z0-9_-]+$/.test(target)) {
+    const error = new Error('A valid GA4 property id such as properties/123456789 is required.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return fetchGoogleAuthorizedJson(
+    `https://analyticsdata.googleapis.com/v1beta/${target}:runReport`,
+    accessToken,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    }
+  );
+}
+
+async function fetchGoogleGa4ReportWithMetricFallback(accessToken, property = '', range = {}, dimensions = [], limit = 50) {
+  const base = {
+    dateRanges: [{ startDate: range.startDate, endDate: range.endDate }],
+    dimensions: dimensions.map((name) => ({ name })),
+    limit: String(limit)
+  };
+  if (dimensions.length) base.orderBys = [{ metric: { metricName: 'sessions' }, desc: true }];
+  const candidates = ['keyEvents', 'conversions', ''];
+  let lastError = null;
+  for (const conversionMetric of candidates) {
+    try {
+      const metrics = [{ name: 'sessions' }];
+      if (conversionMetric) metrics.push({ name: conversionMetric });
+      const report = await fetchGoogleGa4RunReport(accessToken, property, { ...base, metrics });
+      return { report, conversionMetric };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error('GA4 report request failed');
+}
+
+function mapGoogleGa4Rows(report = {}, dimensions = []) {
+  return (Array.isArray(report?.rows) ? report.rows : []).map((row) => ({
+    dimensions: dimensions.map((_, index) => googleDimensionValue(row, index)),
+    sessions: googleMetricValue(row, 0),
+    conversions: googleMetricValue(row, 1)
+  }));
+}
+
+async function fetchGoogleGa4Report(accessToken, property = '', range = {}) {
+  const target = String(property || '').trim();
+  if (!target) return {
+    property: '',
+    totals: { sessions: 0, conversions: 0 },
+    landing_pages: [],
+    channels: [],
+    countries: [],
+    skipped: true
+  };
+  const [totalsResult, landingResult, channelsResult, countriesResult] = await Promise.all([
+    fetchGoogleGa4ReportWithMetricFallback(accessToken, target, range, [], 1),
+    fetchGoogleGa4ReportWithMetricFallback(accessToken, target, range, ['landingPagePlusQueryString'], 50),
+    fetchGoogleGa4ReportWithMetricFallback(accessToken, target, range, ['sessionDefaultChannelGroup'], 25),
+    fetchGoogleGa4ReportWithMetricFallback(accessToken, target, range, ['country'], 25)
+  ]);
+  const totalRow = mapGoogleGa4Rows(totalsResult.report, [])[0] || { sessions: 0, conversions: 0 };
+  return {
+    property: target,
+    conversion_metric: totalsResult.conversionMetric || landingResult.conversionMetric || channelsResult.conversionMetric || countriesResult.conversionMetric || '',
+    totals: {
+      sessions: Number(totalRow.sessions || 0),
+      conversions: Number(totalRow.conversions || 0)
+    },
+    landing_pages: mapGoogleGa4Rows(landingResult.report, ['landingPagePlusQueryString']).map((row) => ({
+      page: row.dimensions[0] || '(not set)',
+      sessions: row.sessions,
+      conversions: row.conversions
+    })),
+    channels: mapGoogleGa4Rows(channelsResult.report, ['sessionDefaultChannelGroup']).map((row) => ({
+      channel: row.dimensions[0] || '(not set)',
+      sessions: row.sessions,
+      conversions: row.conversions
+    })),
+    countries: mapGoogleGa4Rows(countriesResult.report, ['country']).map((row) => ({
+      country: row.dimensions[0] || '(not set)',
+      sessions: row.sessions,
+      conversions: row.conversions
+    }))
+  };
+}
+
+async function handleGoogleAnalyticsReport(req, res) {
+  const state = await storage.getState();
+  const current = currentAgentRequesterContext(state, req);
+  if (!current?.user && current.apiKeyStatus === 'invalid') return json(res, 401, { error: 'Invalid API key' });
+  if (!current?.user && current.apiKeyStatus !== 'valid') return json(res, 401, { error: 'Login or CAIt API key required' });
+  const url = new URL(req.url, 'http://localhost');
+  const gscSite = String(url.searchParams.get('gsc_site') || url.searchParams.get('search_console_site') || '').trim();
+  const ga4Property = String(url.searchParams.get('ga4_property') || url.searchParams.get('property') || '').trim();
+  if (!gscSite && !ga4Property) {
+    return json(res, 400, { error: 'Select at least one Google source before loading a report.' });
+  }
+  const days = clampGoogleReportRange(url.searchParams.get('range') || url.searchParams.get('days') || '28');
+  const dateRange = googleReportDateRange(days);
+  const account = current.account || accountSettingsForLogin(state, current.login, current.user, current.authProvider);
+  const connector = googleConnectorForAccount(account);
+  if (!connector?.connected || !connector?.accessTokenEnc) {
+    return json(res, 409, {
+      error: 'Google connection required before CAIt can read GA4 or Search Console reports.',
+      missing_connectors: ['google'],
+      missing_connector_capabilities: ['google.read_gsc', 'google.read_ga4'],
+      action: connectorActionLabel('connect_google')
+    });
+  }
+  try {
+    const tokenInfo = await googleAccessTokenForConnector(current.login, current.user, current.authProvider, connector);
+    const [gscResult, ga4Result] = await Promise.allSettled([
+      gscSite ? fetchGoogleSearchConsoleReport(tokenInfo.accessToken, gscSite, dateRange) : Promise.resolve(null),
+      ga4Property ? fetchGoogleGa4Report(tokenInfo.accessToken, ga4Property, dateRange) : Promise.resolve(null)
+    ]);
+    const warnings = [];
+    if (gscResult.status === 'rejected') warnings.push(`Search Console report: ${gscResult.reason?.message || gscResult.reason || 'request failed'}`);
+    if (ga4Result.status === 'rejected') warnings.push(`GA4 report: ${ga4Result.reason?.message || ga4Result.reason || 'request failed'}`);
+    if (current?.apiKey?.id) await recordOrderApiKeyUsage(current, req);
+    return json(res, 200, {
+      ok: true,
+      requested: {
+        range_days: days,
+        start_date: dateRange.startDate,
+        end_date: dateRange.endDate,
+        gsc_site: gscSite,
+        ga4_property: ga4Property
+      },
+      google: {
+        connected: true,
+        token_expires_at: String(tokenInfo.connector?.tokenExpiresAt || ''),
+        refreshed: tokenInfo.refreshed
+      },
+      search_console: gscResult.status === 'fulfilled' ? (gscResult.value || null) : null,
+      ga4: ga4Result.status === 'fulfilled' ? (ga4Result.value || null) : null,
+      warnings
+    });
+  } catch (error) {
+    return json(res, Number(error?.statusCode || 502), {
+      error: error.message || 'Google analytics report fetch failed',
+      code: error.code || 'google_analytics_report_failed'
+    });
   }
 }
 
@@ -7531,8 +8513,25 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (enforceRateLimit(req, res, url.pathname)) return;
   if (enforceBrowserWriteProtection(req, res, url.pathname)) return;
-  if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/app') || url.pathname === '/styles.css' || url.pathname === '/client.js')) {
-    if (serveStatic(res, url.pathname === '/' ? '/index.html' : url.pathname)) return;
+  if (req.method === 'GET' && (
+    url.pathname === '/' ||
+    url.pathname.startsWith('/app') ||
+    url.pathname === '/admin.css' ||
+    url.pathname === '/admin.js' ||
+    url.pathname === '/home.css' ||
+    url.pathname === '/chat.css' ||
+    url.pathname === '/chat.js' ||
+    url.pathname === '/styles.css' ||
+    url.pathname === '/client.js' ||
+    url.pathname === '/chat-engine.js'
+  )) {
+    if (serveStatic(res, url.pathname)) return;
+  }
+  if (req.method === 'GET' && isChatPagePath(url.pathname)) {
+    if (handleChatPageRequest(req, res)) return;
+  }
+  if (req.method === 'GET' && isAdminPagePath(url.pathname)) {
+    if (handleAdminPageRequest(req, res)) return;
   }
   if (req.method === 'GET' && isLoginPagePath(url.pathname)) {
     if (handleLoginPageRequest(req, res)) return;
@@ -7600,7 +8599,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/auth/github-app/connect') {
     if (!githubAppConfigured()) return json(res, 503, { error: 'GitHub App is not configured yet.', setup: githubAppRecommendedSettings(req) });
     const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
-    if (existingSession?.user && action !== 'link' && sessionHasGithubApp(existingSession)) return redirect(res, returnTo || '/');
+    if (existingSession?.user && sessionHasGithubApp(existingSession)) return redirect(res, returnTo || '/');
     const state = randomBytes(16).toString('hex');
     oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action, returnTo, loginSource, visitorId });
     return redirect(res, githubAppConnectUrl(req, state));
@@ -7708,13 +8707,15 @@ const server = http.createServer(async (req, res) => {
     if (!(githubClientId && githubClientSecret)) {
       if (githubAppConfigured()) {
         const state = randomBytes(16).toString('hex');
-        const { action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
+        const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
+        if (existingSession?.user && sessionHasGithubApp(existingSession)) return redirect(res, returnTo || '/');
         oauthStates.set(state, { createdAt: Date.now(), provider: 'github-app', action, returnTo, loginSource, visitorId });
         return redirect(res, githubAppConnectUrl(req, state));
       }
       return json(res, 503, { error: 'GitHub OAuth is not configured yet. Set GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET.' });
     }
     const { existingSession, action, returnTo, loginSource, visitorId } = oauthStartContext(req, url);
+    if (existingSession?.user && action === 'link' && sessionHasGithubOauth(existingSession)) return redirect(res, returnTo || '/');
     if (existingSession?.user && action !== 'link') return redirect(res, returnTo || '/');
     const state = randomBytes(16).toString('hex');
     oauthStates.set(state, { createdAt: Date.now(), provider: 'github-oauth', action, returnTo, loginSource, visitorId });
@@ -7939,7 +8940,7 @@ const server = http.createServer(async (req, res) => {
       return json(res, 400, { error: error.message });
     }
     const email = String(body?.email || '').trim().toLowerCase();
-    const returnTo = normalizeLocalRedirectPath(req, body?.return_to || '', '/?tab=work');
+    const returnTo = normalizeLocalRedirectPath(req, body?.return_to || '', '/chat');
     const loginSource = normalizeOAuthLoginSource(body?.login_source || 'login_page') || 'login_page';
     const visitorId = normalizeOAuthVisitorId(body?.visitor_id || '');
     if (!validateEmailAddress(email)) {
@@ -7987,7 +8988,7 @@ const server = http.createServer(async (req, res) => {
     const fallbackState = {
       action: 'login',
       loginSource: 'login_page',
-      returnTo: '/?tab=work',
+      returnTo: '/chat',
       visitorId: ''
     };
     if (!token) {
@@ -8070,6 +9071,9 @@ const server = http.createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/api/connectors/google/assets') {
     return handleGoogleConnectorAssets(req, res);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/connectors/google/analytics-report') {
+    return handleGoogleAnalyticsReport(req, res);
   }
   if (req.method === 'POST' && url.pathname === '/api/connectors/instagram/post') {
     return handleInstagramConnectorPost(req, res);
@@ -8294,11 +9298,15 @@ const server = http.createServer(async (req, res) => {
           repoMeta.default_branch,
           treeLoad.ok ? treeLoad.paths : []
         );
-        const draft = buildDraftManifestFromRepoAnalysis({
+        const draft = await buildDraftManifestFromRepoAnalysisWithAi({
           repoMeta,
           files: signalLoad.files,
+          repoTreePaths: treeLoad.ok ? treeLoad.paths : [],
           ownerLogin: current.githubIdentity?.login || current.user?.login || current.login || '',
           preferLocalEndpoints
+        }, {
+          env: process.env,
+          fetchImpl: fetch
         });
         if (current.apiKey?.id) await recordOrderApiKeyUsage(current, req);
         return json(res, 200, {
@@ -8312,6 +9320,7 @@ const server = http.createServer(async (req, res) => {
           missing_files: draft.analysis.missingFiles,
           runtime_hints: draft.analysis.runtimeHints,
           task_type_scores: draft.analysis.scoredTaskTypes,
+          manifest_intelligence: draft.analysis.ai || null,
           endpoint_hints: {
             absolute_health_urls: draft.analysis.absoluteHealthUrls,
             absolute_job_urls: draft.analysis.absoluteJobUrls,
@@ -8349,11 +9358,15 @@ const server = http.createServer(async (req, res) => {
         repoMeta.default_branch,
         treeLoad.ok ? treeLoad.paths : []
       );
-      const draft = buildDraftManifestFromRepoAnalysis({
+      const draft = await buildDraftManifestFromRepoAnalysisWithAi({
         repoMeta,
         files: signalLoad.files,
+        repoTreePaths: treeLoad.ok ? treeLoad.paths : [],
         ownerLogin: current.githubIdentity?.login || current.user?.login || current.login || '',
         preferLocalEndpoints
+      }, {
+        env: process.env,
+        fetchImpl: fetch
       });
       return json(res, 200, {
         ok: true,
@@ -8365,6 +9378,7 @@ const server = http.createServer(async (req, res) => {
         missing_files: draft.analysis.missingFiles,
         runtime_hints: draft.analysis.runtimeHints,
         task_type_scores: draft.analysis.scoredTaskTypes,
+        manifest_intelligence: draft.analysis.ai || null,
         endpoint_hints: {
           absolute_health_urls: draft.analysis.absoluteHealthUrls,
           absolute_job_urls: draft.analysis.absoluteJobUrls,
@@ -8556,7 +9570,58 @@ const server = http.createServer(async (req, res) => {
     if (result.error) return json(res, result.statusCode || 400, normalizeDeliveryScheduleFailureResponse(result));
     return json(res, result.statusCode || 200, result);
   }
-  if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, { agents: (await snapshot(req)).agents });
+  if (req.method === 'GET' && url.pathname === '/.well-known/mcp.json') return json(res, 200, buildMcpDiscovery(req.url, { origin: requestOrigin(req) }));
+  if (req.method === 'POST' && url.pathname === '/mcp') {
+    const result = await handleMcpRequest(req);
+    return json(res, 200, result);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, await agentsCatalogPayload(req));
+  if (req.method === 'GET' && url.pathname === '/api/apps') return json(res, 200, await appsCatalogPayload(req));
+  if (req.method === 'POST' && url.pathname === '/api/apps') {
+    const result = await handleRegisterApp(req);
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    return json(res, result.statusCode || 201, result);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/apps/import-manifest') {
+    const result = await handleImportAppManifest(req);
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    return json(res, result.statusCode || 201, result);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/apps/import-url') {
+    const result = await handleImportAppUrl(req);
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    return json(res, result.statusCode || 201, result);
+  }
+  if (req.method === 'POST' && /^\/api\/apps\/[^/]+\/handoff$/.test(url.pathname)) {
+    const result = await handleAppHandoff(req, decodeURIComponent(url.pathname.split('/')[3] || ''));
+    if (result.error) return json(res, result.statusCode || 400, result);
+    return json(res, result.statusCode || 200, result);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/app-contexts') {
+    const result = await handleListAppContexts(req);
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    return json(res, result.statusCode || 200, result);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/app-contexts') {
+    const result = await handleCreateAppContext(req);
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    return json(res, result.statusCode || 201, result);
+  }
+  if (req.method === 'GET' && /^\/api\/app-contexts\/[^/]+$/.test(url.pathname)) {
+    const result = await handleGetAppContext(req, decodeURIComponent(url.pathname.split('/')[3] || ''));
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    return json(res, result.statusCode || 200, result);
+  }
+  if (req.method === 'POST' && /^\/api\/apps\/[^/]+\/verify$/.test(url.pathname)) {
+    const result = await handleVerifyApp(req, url.pathname.split('/')[3] || '');
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    return json(res, 200, result);
+  }
+  if (req.method === 'DELETE' && /^\/api\/apps\/[^/]+$/.test(url.pathname)) {
+    const result = await handleDeleteApp(req, url.pathname.split('/')[3] || '');
+    if (result.error) return json(res, result.statusCode || 400, { error: result.error });
+    return json(res, 200, result);
+  }
   if (req.method === 'GET' && url.pathname === '/api/jobs') {
     const state = await storage.getState();
     const current = currentOrderRequesterContext(state, req);
@@ -8793,10 +9858,14 @@ const server = http.createServer(async (req, res) => {
       files: callback.files,
       usage: callback.usage,
       return_targets: callback.returnTargets
-    }, { source: 'callback', externalJobId: callback.externalJobId });
+    }, { source: 'callback', externalJobId: callback.externalJobId, targetStatus: callback.status });
     if (result.error) return json(res, result.statusCode || 400, { error: result.error, code: result.code || null, job_status: result.job?.status || null });
-    await touchEvent('COMPLETED', `${result.job.taskType}/${result.job.id.slice(0, 6)} completed by callback`);
-    await recordBillingOutcome(result.job, result.billing, 'callback');
+    if (result.mode === 'blocked') {
+      await touchEvent('RUNNING', `${result.job.taskType}/${result.job.id.slice(0, 6)} blocked by callback`);
+    } else {
+      await touchEvent('COMPLETED', `${result.job.taskType}/${result.job.id.slice(0, 6)} completed by callback`);
+      await recordBillingOutcome(result.job, result.billing, 'callback');
+    }
     return json(res, 200, {
       ok: true,
       status: result.job.status,
@@ -9265,10 +10334,14 @@ const server = http.createServer(async (req, res) => {
     const current = await storage.getState();
     const authorization = authorizeConnectedAgentAction(current, req, requestedAgentId);
     if (authorization.error) return json(res, authorization.statusCode || 400, { error: authorization.error });
-    const result = await completeJobFromAgentResult(resultSubmitMatch[1], requestedAgentId, body, { source: 'manual-result' });
+    const result = await completeJobFromAgentResult(resultSubmitMatch[1], requestedAgentId, body, { source: 'manual-result', targetStatus: body.status });
     if (result.error) return json(res, result.statusCode || 400, { error: result.error });
-    await touchEvent('COMPLETED', `${result.job.taskType}/${result.job.id.slice(0, 6)} completed by connected agent`);
-    await recordBillingOutcome(result.job, result.billing, 'manual-result');
+    if (result.mode === 'blocked') {
+      await touchEvent('RUNNING', `${result.job.taskType}/${result.job.id.slice(0, 6)} blocked by connected agent result`);
+    } else {
+      await touchEvent('COMPLETED', `${result.job.taskType}/${result.job.id.slice(0, 6)} completed by connected agent`);
+      await recordBillingOutcome(result.job, result.billing, 'manual-result');
+    }
     return json(res, 200, {
       ...result,
       delivery: {

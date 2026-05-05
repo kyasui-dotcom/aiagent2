@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { accountIdForLogin, buildAdminDashboard, buildConversionAnalytics, buildMonthlyAccountSummary, chatTrainingExamplesForClient, chatTranscriptsForClient, createChatTranscript, createConversionEventPayload, ownChatMemoryForClient, promptInjectionGuardForPrompt, requesterContextFromUser, updateChatTranscriptReviewInState, upsertAccountSettingsInState } from '../lib/shared.js';
+import { accountIdForLogin, buildAdminDashboard, buildConversionAnalytics, buildMonthlyAccountSummary, chatTrainingExamplesForClient, chatTranscriptsForClient, createChatTranscript, createConversionEventPayload, hideChatMemoryTranscriptForLoginInState, ownChatMemoryForClient, promptInjectionGuardForPrompt, requesterContextFromUser, updateChatTranscriptReviewInState, upsertAccountSettingsInState } from '../lib/shared.js';
 
 const requester = requesterContextFromUser({ login: 'alice', name: 'Alice Example' }, 'github-app');
 const state = {
@@ -229,6 +229,192 @@ state.chatTranscripts.push(
 );
 const chatMemory = ownChatMemoryForClient(state, 'alice', 20);
 assert.equal(chatMemory.filter((item) => item.prompt === duplicateBrief).length, 1, 'account chat memory should collapse duplicate structured briefs into one session row');
+
+const explicitSessionDuplicateBrief = [
+  'Task: cmo_leader',
+  'Goal: customer acquisition for aiagent-marketplace.net',
+  'Work split: CMO leader -> research -> landing',
+  'Deliver: execute action phase'
+].join('\n');
+state.chatTranscripts.push(
+  createChatTranscript({
+    id: 'chat_duplicate_a_turn_abcd_1',
+    session_id: 'chat_duplicate_a',
+    prompt: explicitSessionDuplicateBrief,
+    answer: 'Order accepted.',
+    answer_kind: 'order',
+    visitor_id: 'visitor_settings_qa',
+    current_tab: 'work'
+  }, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' }),
+  createChatTranscript({
+    id: 'chat_duplicate_b_turn_abcd_1',
+    session_id: 'chat_duplicate_b',
+    prompt: explicitSessionDuplicateBrief,
+    answer: 'Order progress updated.',
+    answer_kind: 'order',
+    visitor_id: 'visitor_settings_qa',
+    current_tab: 'work'
+  }, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' })
+);
+const explicitSessionChatMemory = ownChatMemoryForClient(state, 'alice', 20);
+assert.equal(
+  explicitSessionChatMemory.filter((item) => /cmo_leader/i.test(item.prompt || '') && /aiagent-marketplace\.net/i.test(item.prompt || '')).length,
+  1,
+  'account chat memory should collapse the same project even when explicit session ids differ'
+);
+
+state.chatTranscripts.push(
+  createChatTranscript({
+    id: 'chat_project_variant_turn_abcd_1',
+    session_id: 'chat_project_variant',
+    prompt: [
+      'Task: cmo_leader',
+      'Goal: grow signups for aiagent-marketplace.net',
+      'Work split: CMO leader -> research -> x_post',
+      'Deliver: action packet'
+    ].join('\n'),
+    answer: 'Project progress updated.',
+    answer_kind: 'order',
+    visitor_id: 'visitor_settings_qa',
+    current_tab: 'work'
+  }, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' })
+);
+const projectChatMemory = ownChatMemoryForClient(state, 'alice', 20);
+assert.equal(
+  projectChatMemory.filter((item) => /cmo_leader/i.test(item.prompt || '') && /aiagent-marketplace\.net/i.test(item.prompt || '')).length,
+  1,
+  'account chat memory should group same-domain CMO work as one project chat'
+);
+
+const restoreProjectPromptA = [
+  'Task: cmo_leader',
+  'Goal: improve signups for restore-test.example',
+  'Work split: CMO leader -> research -> landing',
+  'Deliver: action packet'
+].join('\n');
+const restoreProjectPromptB = [
+  'Task: cmo_leader',
+  'Goal: grow signups for restore-test.example',
+  'Work split: CMO leader -> research -> x_post',
+  'Deliver: action packet'
+].join('\n');
+const restoreProjectTranscriptA = createChatTranscript({
+  id: 'restore_project_a_turn_abcd_1',
+  session_id: 'restore_project_a',
+  prompt: restoreProjectPromptA,
+  answer: 'First grouped project row.',
+  answer_kind: 'order',
+  visitor_id: 'visitor_settings_qa',
+  current_tab: 'work'
+}, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' });
+const restoreProjectTranscriptB = createChatTranscript({
+  id: 'restore_project_b_turn_abcd_1',
+  session_id: 'restore_project_b',
+  prompt: restoreProjectPromptB,
+  answer: 'Second grouped project row.',
+  answer_kind: 'order',
+  visitor_id: 'visitor_settings_qa',
+  current_tab: 'work'
+}, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' });
+state.chatTranscripts.push(restoreProjectTranscriptA, restoreProjectTranscriptB);
+assert.equal(
+  ownChatMemoryForClient(state, 'alice', 20).filter((item) => /restore-test\.example/i.test(item.prompt || '')).length,
+  1,
+  'restore regression setup should collapse same-project rows before deletion'
+);
+const restoreHideResult = hideChatMemoryTranscriptForLoginInState(state, 'alice', 'restore_project_a', { login: 'alice', name: 'Alice Example' }, 'github-app');
+assert.ok(restoreHideResult.account.chatMemory.hiddenTranscriptIds.includes('restore_project_a'), 'group deletion should store the requested session id');
+assert.ok(restoreHideResult.account.chatMemory.hiddenTranscriptIds.includes('restore_project_b'), 'group deletion should also store sibling session ids');
+assert.ok(restoreHideResult.account.chatMemory.hiddenTranscriptIds.includes(restoreProjectTranscriptB.id), 'group deletion should also store sibling transcript ids');
+assert.equal(
+  ownChatMemoryForClient(state, 'alice', 20).some((item) => /restore-test\.example/i.test(item.prompt || '')),
+  false,
+  'deleted grouped project rows should not reappear from sibling transcripts after reload'
+);
+
+state.chatTranscripts.push(
+  createChatTranscript({
+    id: 'chat_task_only_a_turn_abcd_1',
+    session_id: 'chat_task_only_a',
+    prompt: 'Task: cmo_leader Goal: improve signup flow',
+    answer: 'Task-only project row A.',
+    answer_kind: 'order',
+    visitor_id: 'visitor_settings_qa',
+    current_tab: 'work'
+  }, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' }),
+  createChatTranscript({
+    id: 'chat_task_only_b_turn_abcd_1',
+    session_id: 'chat_task_only_b',
+    prompt: 'Task: cmo_leader Goal: launch acquisition work',
+    answer: 'Task-only project row B.',
+    answer_kind: 'order',
+    visitor_id: 'visitor_settings_qa',
+    current_tab: 'work'
+  }, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' })
+);
+const taskOnlyChatMemory = ownChatMemoryForClient(state, 'alice', 20);
+assert.equal(
+  taskOnlyChatMemory.filter((item) => /Task:\s*cmo_leader/i.test(item.prompt || '') && !/aiagent-marketplace\.net/i.test(item.prompt || '')).length,
+  1,
+  'account chat memory should collapse old task-only CMO rows when domain is unavailable'
+);
+
+const inferredSessionTranscript = createChatTranscript({
+  id: 'chat_session_inferred_turn_abcd_7',
+  prompt: 'Structured prompt without explicit session id.',
+  answer: 'Structured answer without explicit session id.',
+  answer_kind: 'assist',
+  visitor_id: 'visitor_settings_qa',
+  current_tab: 'work'
+}, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' });
+assert.equal(inferredSessionTranscript.sessionId, 'chat_session_inferred', 'transcript ids should backfill missing chat session ids');
+state.chatTranscripts.push(inferredSessionTranscript);
+const inferredSessionMemory = ownChatMemoryForClient(state, 'alice', 20);
+assert.ok(inferredSessionMemory.some((item) => item.sessionId === 'chat_session_inferred'), 'account chat memory should expose inferred session ids');
+
+const hideTargetSessionId = 'chat_hidden_target';
+const hideTargetTranscript = createChatTranscript({
+  id: `${hideTargetSessionId}_turn_abcd_1`,
+  session_id: hideTargetSessionId,
+  prompt: 'Hide this session row from account history.',
+  answer: 'This row should not return after deletion.',
+  answer_kind: 'assist',
+  visitor_id: 'visitor_settings_qa',
+  current_tab: 'work'
+}, { loggedIn: true, authProvider: 'google-oauth', login: 'alice' });
+state.chatTranscripts.push(hideTargetTranscript);
+assert.ok(ownChatMemoryForClient(state, 'alice', 20).some((item) => item.sessionId === hideTargetSessionId), 'session row should exist before deletion');
+const hideResult = hideChatMemoryTranscriptForLoginInState(state, 'alice', hideTargetSessionId, { login: 'alice', name: 'Alice Example' }, 'github-app');
+assert.ok(hideResult.account.chatMemory.hiddenTranscriptIds.includes(hideTargetSessionId), 'deleting by session id should store the session id tombstone');
+assert.ok(hideResult.account.chatMemory.hiddenTranscriptIds.includes(hideTargetTranscript.id), 'deleting by session id should store matching transcript ids');
+assert.equal(ownChatMemoryForClient(state, 'alice', 20).some((item) => item.sessionId === hideTargetSessionId), false, 'deleted session rows should not reappear from transcript history');
+
+const hiddenActiveSessionId = 'chat_hidden_active';
+const hiddenActiveJobId = 'job_hidden_active';
+state.jobs.push({
+  id: hiddenActiveJobId,
+  taskType: 'ops',
+  status: 'running',
+  prompt: 'Keep this active work hidden after its chat session is deleted.',
+  createdAt: '2026-04-05T00:00:00.000Z',
+  input: {
+    _broker: {
+      requester,
+      billingMode: 'monthly_invoice',
+      chatSessionId: hiddenActiveSessionId
+    }
+  }
+});
+assert.ok(
+  ownChatMemoryForClient(state, 'alice', 20).some((item) => item.sessionId === hiddenActiveSessionId && item.activeWork),
+  'linked active work should appear before chat deletion'
+);
+hideChatMemoryTranscriptForLoginInState(state, 'alice', hiddenActiveSessionId, { login: 'alice', name: 'Alice Example' }, 'github-app');
+assert.equal(
+  ownChatMemoryForClient(state, 'alice', 20).some((item) => item.sessionId === hiddenActiveSessionId || (Array.isArray(item.activeJobIds) && item.activeJobIds.includes(hiddenActiveJobId))),
+  false,
+  'deleted chat sessions should not reappear from active work rows'
+);
 
 const adminSessionId = 'settings-admin-session-history';
 state.chatTranscripts.push(

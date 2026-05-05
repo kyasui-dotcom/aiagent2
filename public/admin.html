@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CAIt Admin | Member and platform dashboard</title>
+  <meta name="description" content="Platform admin dashboard for CAIt member registrations, users, orders, chats, agents, apps, and operational status." />
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="canonical" href="https://aiagent-marketplace.net/admin" />
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="stylesheet" href="/chat.css?v=20260501d" />
+  <link rel="stylesheet" href="/admin.css?v=20260501a" />
+  <script type="module" src="/admin.js?v=20260501b"></script>
+</head>
+<body>
+  <main class="admin-shell" aria-label="CAIt admin dashboard">
+    <section class="admin-panel">
+      <header class="chatux-header">
+        <a class="chatux-brand" href="/" aria-label="CAIt">
+          <img src="/cait-icon.svg" alt="" />
+          <span>CAIt Admin</span>
+        </a>
+        <nav class="chatux-nav" aria-label="Admin pages">
+          <a href="/chat">Chat</a>
+          <a href="/agents.html">Agents</a>
+          <a href="/ai-agent-api.html">API</a>
+          <a href="/resources.html">Resources</a>
+          <a href="/news.html">News</a>
+        </nav>
+        <div class="chatux-header-tools" aria-label="Admin tools">
+          <button class="tool-icon-btn" id="refreshAdminBtn" type="button">Refresh</button>
+          <button class="tool-icon-btn" id="downloadAccountsBtn" type="button" disabled>Download CSV</button>
+          <div class="chatux-status" id="adminAuthStatus">Checking session...</div>
+        </div>
+      </header>
+
+      <section class="admin-hero">
+        <div>
+          <span class="admin-kicker">Platform Admin</span>
+          <h1>Member and operations dashboard.</h1>
+          <p>Track account registrations, recent users, chat/order activity, agents, apps, and review signals from the same leader-led CAIt runtime.</p>
+        </div>
+        <div class="admin-hero-meta">
+          <span>Generated</span>
+          <strong id="adminGeneratedAt">-</strong>
+        </div>
+      </section>
+
+      <section class="admin-gate" id="adminGate">
+        <strong>Loading admin dashboard.</strong>
+        <span>Checking your session and platform admin permissions.</span>
+      </section>
+
+      <section class="admin-dashboard" id="adminDashboard" hidden>
+        <section class="metric-grid" aria-label="Admin summary">
+          <article class="metric-card">
+            <span>Member registrations</span>
+            <strong id="adminRegistrationsMetric">-</strong>
+            <small id="adminRegistrationsDetail">24h - / 7d -</small>
+          </article>
+          <article class="metric-card">
+            <span>Chat sessions</span>
+            <strong id="adminChatsMetric">-</strong>
+            <small id="adminChatsDetail">24h - / 7d -</small>
+          </article>
+          <article class="metric-card">
+            <span>Orders</span>
+            <strong id="adminOrdersMetric">-</strong>
+            <small id="adminOrdersDetail">active - / failed -</small>
+          </article>
+          <article class="metric-card">
+            <span>Agents and apps</span>
+            <strong id="adminAgentsMetric">-</strong>
+            <small id="adminAgentsDetail">apps - / ready -</small>
+          </article>
+          <article class="metric-card">
+            <span>Open issues</span>
+            <strong id="adminIssuesMetric">-</strong>
+            <small id="adminIssuesDetail">reviewing - / resolved -</small>
+          </article>
+        </section>
+
+        <section class="admin-section">
+          <div class="section-head">
+            <div>
+              <span class="admin-kicker">Users</span>
+              <h2>Recent member registrations</h2>
+            </div>
+            <span id="accountsCountLabel">0 accounts</span>
+          </div>
+          <div class="admin-table admin-accounts-grid" id="accountsTable" aria-label="Member account table"></div>
+        </section>
+
+        <section class="admin-section split-section">
+          <article>
+            <div class="section-head compact">
+              <div>
+                <span class="admin-kicker">Work</span>
+                <h2>Recent orders</h2>
+              </div>
+              <span id="ordersCountLabel">0 orders</span>
+            </div>
+            <div class="admin-table admin-orders-grid" id="ordersTable" aria-label="Recent order table"></div>
+          </article>
+          <article>
+            <div class="section-head compact">
+              <div>
+                <span class="admin-kicker">Chat</span>
+                <h2>Recent sessions</h2>
+              </div>
+              <span id="chatsCountLabel">0 sessions</span>
+            </div>
+            <div class="admin-table admin-chats-grid" id="chatsTable" aria-label="Recent chat table"></div>
+          </article>
+        </section>
+
+        <section class="admin-section split-section">
+          <article>
+            <div class="section-head compact">
+              <div>
+                <span class="admin-kicker">Marketplace</span>
+                <h2>Agents</h2>
+              </div>
+              <span id="agentsCountLabel">0 agents</span>
+            </div>
+            <div class="admin-table admin-agents-grid" id="agentsTable" aria-label="Agent table"></div>
+          </article>
+          <article>
+            <div class="section-head compact">
+              <div>
+                <span class="admin-kicker">Apps</span>
+                <h2>Registered apps</h2>
+              </div>
+              <span id="appsCountLabel">0 apps</span>
+            </div>
+            <div class="admin-table admin-apps-grid" id="appsTable" aria-label="App table"></div>
+          </article>
+        </section>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

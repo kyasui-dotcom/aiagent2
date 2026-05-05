@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Publisher & Approval Studio | CAIt Apps</title>
+  <meta name="description" content="CAIt Publisher & Approval Studio manages posts, pages, metadata, directory packets, PR drafts, and approval queues before external execution." />
+  <meta name="robots" content="noindex,follow" />
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="stylesheet" href="/app-console.css?v=20260505c" />
+  <script type="module" src="/publisher-approval.js?v=20260505d"></script>
+</head>
+<body>
+  <main class="app-console-shell" aria-label="CAIt Publisher and Approval Studio">
+    <section class="app-console-panel">
+      <header class="app-console-header">
+        <a class="app-brand" href="/" aria-label="CAIt"><img src="/cait-icon.svg" alt="" /><span>Publisher & Approval</span></a>
+        <nav class="app-nav" aria-label="CAIt app navigation">
+          <a href="/chat">Chat</a>
+          <a href="/apps.html">Apps</a>
+          <a href="/analytics-console.html">Analytics</a>
+          <a href="/lead-ops.html">Lead Ops</a>
+          <a href="/delivery-manager.html">Deliveries</a>
+        </nav>
+        <div class="app-header-actions">
+          <button class="primary-btn" id="sendPacketBtn" type="button">Send to CAIt</button>
+        </div>
+      </header>
+      <div class="app-layout">
+        <aside class="side-nav" aria-label="Publisher sections">
+          <button class="active" type="button" data-section="posts">Content <span id="publisherPostsCount">0</span></button>
+          <button type="button" data-section="pages">Pages <span id="publisherPagesCount">0</span></button>
+          <button type="button" data-section="directory">Directory <span id="publisherDirectoryCount">0</span></button>
+          <button type="button" data-section="approval">Approval queue <span id="publisherApprovalCount">0</span></button>
+          <button type="button" data-section="settings">Header / footer <span id="publisherSettingsCount">0</span></button>
+        </aside>
+        <section class="workspace">
+          <div class="workspace-head">
+            <div>
+              <span class="kicker">Content, approval, and publish handoff</span>
+              <h1>Review what goes outside CAIt before it executes.</h1>
+              <p>Reduce publishing risk by approving content, directory submissions, and PR-ready changes before any external action runs.</p>
+            </div>
+            <div class="toolbar">
+              <select id="handoffTargetSelect" aria-label="Handoff target">
+                <option value="seo_gap">SEO Agent</option>
+                <option value="cmo_leader">CMO Leader</option>
+                <option value="build_team_leader">Build Team Leader</option>
+              </select>
+              <button class="ghost-btn" id="approveSelectedBtn" type="button">Approve selected</button>
+            </div>
+          </div>
+
+          <section class="editor-grid">
+            <article class="panel">
+              <h2 id="listTitle">Content queue</h2>
+              <div class="item-list" id="contentList"></div>
+            </article>
+            <article class="panel">
+              <div class="status-row">
+                <h2>Editor and approval packet</h2>
+                <span class="status-pill pending" id="statusPill">needs approval</span>
+              </div>
+              <div class="field-grid">
+                <div class="field-row"><label for="titleInput">Title</label><input id="titleInput" /></div>
+                <div class="field-row"><label for="slugInput">Slug / path</label><input id="slugInput" /></div>
+                <div class="field-row"><label for="metaInput">Meta description</label><textarea id="metaInput"></textarea></div>
+                <div class="field-row"><label for="bodyInput">Draft / change body</label><textarea id="bodyInput"></textarea></div>
+              </div>
+              <div class="inline-actions" style="margin-top:12px">
+                <button class="primary-btn" id="saveDraftBtn" type="button">Save draft</button>
+                <button class="ghost-btn" id="requestChangesBtn" type="button">Request changes</button>
+                <button class="ghost-btn" id="blockBtn" type="button">Block</button>
+              </div>
+            </article>
+          </section>
+
+          <section class="split-main">
+            <article class="panel">
+              <div class="status-row">
+                <h2>Repository handoff</h2>
+                <span class="status-pill pending" id="githubStatusPill">GitHub not checked</span>
+              </div>
+              <div class="inline-actions" style="margin-bottom:12px">
+                <button class="ghost-btn" id="connectGithubBtn" type="button">Connect GitHub</button>
+                <button class="ghost-btn" id="refreshReposBtn" type="button">Refresh repos</button>
+                <button class="ghost-btn" id="createPrBtn" type="button">Create PR handoff</button>
+              </div>
+              <p class="muted" id="githubStatusNote">Connect GitHub, choose a repository, approve the selected packet, then create a PR handoff.</p>
+              <div class="field-grid">
+                <div class="field-row">
+                  <label for="repoSelect">GitHub repository</label>
+                  <select id="repoSelect" aria-label="GitHub repository">
+                    <option value="">Connect GitHub and refresh repositories</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <label for="repoPathInput">Optional handoff file path</label>
+                  <input id="repoPathInput" placeholder=".cait/publish/approved-packet.md" />
+                </div>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="status-row">
+                <h2>Execution result</h2>
+                <button class="ghost-btn" id="copyPacketBtn" type="button">Copy packet</button>
+              </div>
+              <pre class="context-preview" id="publishResultPreview"></pre>
+            </article>
+          </section>
+
+          <section class="split-main">
+            <article class="panel">
+              <h2>Approval queue</h2>
+              <table class="data-table" id="approvalTable" aria-label="Approval queue"></table>
+            </article>
+            <article class="panel">
+              <h2>CAIt packet preview</h2>
+              <pre class="context-preview" id="packetPreview"></pre>
+            </article>
+          </section>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

@@ -2,15 +2,15 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://aiagent-marketplace.net/</loc>
-    <lastmod>2026-04-14</lastmod>
+    <lastmod>2026-05-01</lastmod>
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/resources.html</loc>
-    <lastmod>2026-04-14</lastmod>
+    <lastmod>2026-05-01</lastmod>
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/site-map.html</loc>
-    <lastmod>2026-04-14</lastmod>
+    <lastmod>2026-05-01</lastmod>
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/no-api-key-ai-agents.html</loc>
@@ -226,7 +226,7 @@
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/demo.html</loc>
-    <lastmod>2026-04-17</lastmod>
+    <lastmod>2026-05-01</lastmod>
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/glossary.html</loc>
@@ -234,7 +234,7 @@
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/news.html</loc>
-    <lastmod>2026-04-14</lastmod>
+    <lastmod>2026-05-01</lastmod>
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/contribute.html</loc>
@@ -253,8 +253,40 @@
     <lastmod>2026-04-14</lastmod>
   </url>
   <url>
+    <loc>https://aiagent-marketplace.net/news/leader-led-chat-workspace-replaces-old-work-ui.html</loc>
+    <lastmod>2026-05-01</lastmod>
+  </url>
+  <url>
+    <loc>https://aiagent-marketplace.net/news/common-intake-and-agent-specific-questions.html</loc>
+    <lastmod>2026-05-01</lastmod>
+  </url>
+  <url>
+    <loc>https://aiagent-marketplace.net/news/source-backed-orchestration-gates-for-cmo-workflows.html</loc>
+    <lastmod>2026-05-01</lastmod>
+  </url>
+  <url>
+    <loc>https://aiagent-marketplace.net/news/apps-now-register-beside-ai-agents.html</loc>
+    <lastmod>2026-05-01</lastmod>
+  </url>
+  <url>
+    <loc>https://aiagent-marketplace.net/news/x-client-ops-action-handoff.html</loc>
+    <lastmod>2026-05-01</lastmod>
+  </url>
+  <url>
+    <loc>https://aiagent-marketplace.net/news/signin-start-and-chat-routing-hardening.html</loc>
+    <lastmod>2026-05-01</lastmod>
+  </url>
+  <url>
+    <loc>https://aiagent-marketplace.net/news/wide-chat-and-delivery-surface-refresh.html</loc>
+    <lastmod>2026-05-01</lastmod>
+  </url>
+  <url>
+    <loc>https://aiagent-marketplace.net/news/order-progress-and-blocker-visibility.html</loc>
+    <lastmod>2026-05-01</lastmod>
+  </url>
+  <url>
     <loc>https://aiagent-marketplace.net/news/scheduled-ai-agent-work-needs-run-memory.html</loc>
-    <lastmod>2026-04-14</lastmod>
+    <lastmod>2026-04-20</lastmod>
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/news/buyer-orders-without-api-key-setup.html</loc>
@@ -286,7 +318,7 @@
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/news/open-core-repo-easier-to-evaluate.html</loc>
-    <lastmod>2026-04-14</lastmod>
+    <lastmod>2026-04-13</lastmod>
   </url>
   <url>
     <loc>https://aiagent-marketplace.net/glossary/artificial-intelligence.html</loc>

@@ -17,10 +17,15 @@
         <div class="sublogo">PRIVACY POLICY</div>
         <div class="doc-meta">Last updated: 2026-04-17</div>
       </div>
-      <nav class="doc-nav">
-        <a href="/" class="mini-btn link-btn">COCKPIT</a>
-        <a href="/help.html" class="mini-btn link-btn">HELP</a>
-        <a href="/terms.html" class="mini-btn link-btn">TERMS</a>
+      <nav class="doc-nav" aria-label="CAIt pages">
+        <a href="/" class="mini-btn link-btn">Home</a>
+        <a href="/chat.html" class="mini-btn link-btn">Chat</a>
+        <a href="/agents.html" class="mini-btn link-btn">Agents</a>
+        <a href="/ai-agent-api.html" class="mini-btn link-btn">API</a>
+        <a href="/cli-help.html" class="mini-btn link-btn">CLI</a>
+        <a href="/resources.html" class="mini-btn link-btn">Resources</a>
+        <a href="/help.html" class="mini-btn link-btn">Help</a>
+        <a href="/news.html" class="mini-btn link-btn">News</a>
       </nav>
     </header>
 
@@ -58,7 +63,7 @@
     <section class="doc-grid">
       <section class="box panel-stack">
         <div class="section-title">3. GITHUB AND THIRD-PARTY SERVICES</div>
-        <p>When you connect GitHub, CAIt processes the minimum metadata and repository access required by the configured integration mode. For draft manifest generation, CAIt may read a limited allowlist of repository files such as <code>README.md</code>, <code>package.json</code>, <code>pyproject.toml</code>, <code>requirements.txt</code>, and <code>Dockerfile</code>. GitHub App is preferred for repo-scoped permissions. OAuth fallback stays intentionally limited. CAIt may also rely on Cloudflare for hosting and storage.</p>
+        <p>When you connect GitHub, CAIt processes the minimum metadata and repository access required by the configured integration mode. For draft manifest generation, CAIt may read a limited allowlist of repository files such as <code>README.md</code>, <code>package.json</code>, <code>pyproject.toml</code>, <code>requirements.txt</code>, and <code>Dockerfile</code>. CAIt may use a configured model provider to analyze those selected repo signals and produce a more accurate draft description, feature profile, comparison axes, limitations, and evidence. GitHub App is preferred for repo-scoped permissions. OAuth fallback stays intentionally limited. CAIt may also rely on Cloudflare for hosting and storage.</p>
       </section>
       <section class="box panel-stack">
         <div class="section-title">4. SHARING</div>
@@ -88,6 +93,6 @@
       </section>
     </section>
   </main>
-  <script defer src="/analytics-loader.js?v=20260425a"></script>
+  <script defer src="/analytics-loader.js?v=20260505a"></script>
 </body>
 </html>

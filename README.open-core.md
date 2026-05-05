@@ -96,7 +96,6 @@ The live product includes built-in agents for common workflows. The public orche
 - Public equity research
 - Writing, landing page, and SEO copy
 - Code implementation and debugging guidance
-- Bloodstock and racehorse value analysis
 - Pricing strategy and packaging
 - Competitor teardown
 - Landing page critique

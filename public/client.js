@@ -9,7 +9,7 @@ import {
   matchSlashWorkAction,
   normalizeWorkActionPhrase,
   resolveStaticWorkAction
-} from './work-action-registry.js';
+} from './work-action-registry.js?v=20260430b';
 import {
   connectorActionLabel,
   deliveryAuthorityRequirementForAction,
@@ -31,6 +31,7 @@ import {
   deliveryScheduleSideEffectPlan,
   deliveryDraftDefaultsForType,
   deliveryControlFieldsForType,
+  extractSocialPostTextFromDeliveryContent,
   genericDeliverableSectionDescriptors,
   googleIncludeGroupsForCapabilities,
   deliveryPrimaryActionDescriptors,
@@ -45,8 +46,14 @@ import {
 } from './delivery-action-contract.js';
 import {
   inferWorkIntentRoute,
+  isNonOrderConversationIntentText,
   isRepoBackedCodeIntentText
-} from './work-intent-resolver.js';
+} from './work-intent-resolver.js?v=20260430b';
+import {
+  chatEngineBuildIntakeCombinedPrompt,
+  chatEngineBuildIntakeState,
+  chatEngineIsNeedsInputResponse
+} from './chat-engine.js?v=20260501a';
 
 const $ = (id) => document.getElementById(id);
 const PRODUCT_NAME = 'CAIt';
@@ -311,7 +318,6 @@ const els = {
   intakeQuestionCard: $('intakeQuestionCard'),
   intakeAnswer: $('intakeAnswer'),
   applyIntakeAnswerBtn: $('applyIntakeAnswerBtn'),
-  runIntakeAnywayBtn: $('runIntakeAnywayBtn'),
   clearIntakeBtn: $('clearIntakeBtn'),
   parallelToolsPanel: $('parallelToolsPanel'),
   parallelOrderSummary: $('parallelOrderSummary'),
@@ -538,6 +544,7 @@ const OPEN_CHAT_SESSION_MAX_SESSIONS = 30;
 const OPEN_CHAT_ORDER_PROGRESS_POLL_MS = 4000;
 const OPEN_CHAT_ORDER_PROGRESS_MAX_POLLS = 300;
 const OPEN_CHAT_ACCEPTANCE_PROGRESS_TICK_MS = 1200;
+const OPEN_CHAT_DISPATCH_IN_FLIGHT_TTL_MS = 45000;
 const LIVE_SNAPSHOT_REFRESH_MS = 5000;
 const ORDER_HISTORY_OPTIMISTIC_TTL_MS = 10 * 60 * 1000;
 
@@ -628,6 +635,7 @@ const state = {
   openChatProgressPollCount: 0,
   openChatPendingDispatchMessageId: '',
   openChatDispatchInFlightKey: '',
+  openChatDispatchInFlightAt: 0,
   optimisticOrderJobs: {},
   pendingOrderConfirmation: null,
   orderInputFiles: [],
@@ -899,6 +907,7 @@ function normalizeOrderProgressStatus(status = '') {
 function orderProgressTone(status = '') {
   const normalized = normalizeOrderProgressStatus(status);
   if (normalized === 'completed') return 'ok';
+  if (normalized === 'blocked') return 'warn';
   if (normalized === 'failed' || normalized === 'timed_out') return 'error';
   if (normalized === 'running' || normalized === 'claimed' || normalized === 'dispatched') return 'ok';
   return 'info';
@@ -910,6 +919,9 @@ function orderProgressSteps(status = '', options = {}) {
   if (normalized === 'completed') return ja
     ? ['注文受付', 'Agent処理', '納品完了']
     : ['Order accepted', 'Agent work', 'Delivery ready'];
+  if (normalized === 'blocked') return ja
+    ? ['注文受付', '実行工程', '承認待ち']
+    : ['Order accepted', 'Action phase', 'Approval needed'];
   if (normalized === 'failed' || normalized === 'timed_out') return ja
     ? ['注文受付', 'Agent接続', '停止']
     : ['Order accepted', 'Agent handoff', 'Stopped'];
@@ -1213,8 +1225,11 @@ function orderProgressMeta(subject = {}, options = {}) {
   let running = Math.max(0, Number(counts.running || 0));
   let queued = Math.max(0, Number(counts.queued || 0));
   if (!isWorkflow) {
-    if (status === 'completed' || status === 'failed' || status === 'timed_out') running = 0;
+    if (status === 'completed' || status === 'failed' || status === 'timed_out' || status === 'blocked') running = 0;
     else if (!running && !queued) running = 1;
+  } else if (status === 'blocked') {
+    running = 0;
+    queued = 0;
   } else if (!running && !queued && completed < total && status !== 'failed' && status !== 'timed_out') {
     queued = Math.max(1, total - completed - failed);
   }
@@ -1229,7 +1244,7 @@ function orderProgressMeta(subject = {}, options = {}) {
   pushState('failed', failed + blocked);
   while (states.length < shown) states.push(status === 'completed' ? 'completed' : 'queued');
   const ratioBase = total || 1;
-  const weighted = status === 'completed'
+  const weighted = status === 'completed' || status === 'blocked'
     ? ratioBase
     : Math.min(ratioBase, completed + (running * 0.62) + (queued * 0.18));
   const percent = status === 'failed' || status === 'timed_out'
@@ -1612,6 +1627,137 @@ function buildJobDeliveryCard(job = {}, options = {}) {
   };
 }
 
+function downloadableDeliveryFilesForJob(job = {}) {
+  return Array.isArray(job?.output?.files)
+    ? job.output.files.filter((file) => String(file?.content || '').trim())
+    : [];
+}
+
+function authorityConnectorActionsForJob(job = {}, options = {}) {
+  const report = job?.output?.report && typeof job.output.report === 'object' ? job.output.report : {};
+  const authority = authorityRequestFromReport(report);
+  if (!authorityRequestRequiresClientApproval(authority)) return [];
+  const connectors = new Set(
+    normalizeClientList(authority?.missingConnectors || authority?.missing_connectors || authority?.connectors, [])
+      .map(normalizeClientConnector)
+      .filter(Boolean)
+  );
+  const capabilities = normalizeClientConnectorCapabilityList(
+    authority?.missingConnectorCapabilities
+      || authority?.missing_connector_capabilities
+      || authority?.capabilities,
+    []
+  );
+  if (capabilities.includes('x.post')) connectors.add('x');
+  if (capabilities.includes('github.write_pr')) connectors.add('github');
+  if (capabilities.some((capability) => capability.startsWith('google.'))) connectors.add('google');
+  return [...connectors]
+    .map((connector) => connectorActionForChat(connector))
+    .filter((action) => action?.action)
+    .filter((action, index, actions) => actions.findIndex((item) => item.action === action.action) === index)
+    .map((action) => ({
+      action: action.action,
+      label: action.label || (options.ja ? '接続する' : 'CONNECT'),
+      orderId: String(job?.id || '').trim()
+    }));
+}
+
+function chatDeliveryDownloadActions(job = {}, options = {}) {
+  const ja = Boolean(options.ja);
+  const orderId = String(job?.id || '').trim();
+  const files = downloadableDeliveryFilesForJob(job);
+  if (!orderId || files.length < 1) return [];
+  return [
+    {
+      action: 'download_delivery_zip',
+      label: 'DOWNLOAD ZIP',
+      orderId
+    },
+    ...authorityConnectorActionsForJob(job, options),
+    {
+      action: 'open_work_tab',
+      label: ja ? 'DELIVERYを開く' : 'OPEN DELIVERY',
+      orderId
+    }
+  ];
+}
+
+function deliveryDownloadChatBody(job = {}, options = {}) {
+  const ja = Boolean(options.ja);
+  const orderId = String(job?.id || '').trim();
+  const status = normalizeOrderProgressStatus(job?.status || '');
+  const report = job?.output?.report && typeof job.output.report === 'object' ? job.output.report : {};
+  const authority = authorityRequestFromReport(report);
+  const authorityBlocked = status === 'blocked' || authorityRequestRequiresClientApproval(authority);
+  const files = downloadableDeliveryFilesForJob(job);
+  const names = files
+    .map((file) => String(file?.name || '').trim())
+    .filter(Boolean)
+    .slice(0, 10);
+  if (ja) {
+    return [
+      authorityBlocked
+        ? 'アクション工程まで進みました。納品ファイルは生成済みですが、外部投稿・送信は承認またはコネクター接続待ちです。'
+        : '納品ファイルをまとめてダウンロードできます。',
+      '',
+      `Order ID: ${orderId}`,
+      authorityBlocked && authority?.reason ? `承認待ち理由: ${authority.reason}` : '',
+      names.length ? `ZIP内容: ${names.join(', ')}` : '',
+      '下の DOWNLOAD ZIP から、このオーダーの納品物をまとめて取得できます。',
+      authorityBlocked ? '再発注や追加コンテキストはWork Chatで続けてください。' : ''
+    ].filter(Boolean).join('\n');
+  }
+  return [
+    authorityBlocked
+      ? 'The workflow reached the action phase. Delivery files are ready, but external posting/sending is waiting for approval or connector access.'
+      : 'The delivery files are ready to download as one ZIP.',
+    '',
+    `Order ID: ${orderId}`,
+    authorityBlocked && authority?.reason ? `Approval wait: ${authority.reason}` : '',
+    names.length ? `ZIP contents: ${names.join(', ')}` : '',
+    'Use DOWNLOAD ZIP below to get the delivery bundle for this order.',
+    authorityBlocked ? 'Use Work Chat for re-ordering or adding more context.' : ''
+  ].filter(Boolean).join('\n');
+}
+
+function upsertOpenChatDeliveryDownloadMessage(job = {}, options = {}) {
+  const safeOrderId = String(job?.id || '').trim();
+  const status = normalizeOrderProgressStatus(job?.status || '');
+  const actions = chatDeliveryDownloadActions(job, options);
+  if (!safeOrderId || !isTerminalOrderStatus(status) || !actions.length) return false;
+  const body = compactChatText(deliveryDownloadChatBody(job, options), 5000);
+  if (!body) return false;
+  const messages = Array.isArray(state.orderChatMessages) ? [...state.orderChatMessages] : [];
+  const index = messages.findIndex((message) => String(message?.deliveryZipForOrderId || '').trim() === safeOrderId);
+  const existing = index >= 0 ? messages[index] : null;
+  const actionKey = JSON.stringify(actions);
+  if (existing
+    && String(existing.body || '') === body
+    && String(existing.orderProgressStatus || '') === status
+    && JSON.stringify(existing.actions || []) === actionKey) {
+    return false;
+  }
+  finishOpenChatTyping({ render: false });
+  const message = {
+    ...(existing || {}),
+    id: existing?.id || makeOpenChatMessageId(),
+    role: 'agent',
+    label: PRODUCT_SHORT_NAME,
+    body,
+    tone: orderProgressTone(status),
+    steps: orderProgressSteps(status, { ja: options.ja }),
+    actions,
+    discussionTurns: [],
+    typing: false,
+    orderProgressStatus: status,
+    deliveryZipForOrderId: safeOrderId
+  };
+  if (index >= 0) messages[index] = message;
+  else messages.push(message);
+  state.orderChatMessages = messages.slice(-OPEN_CHAT_SESSION_MAX_MESSAGES);
+  return true;
+}
+
 function buildWorkflowChildDeliveryCard(child = {}, options = {}) {
   const ja = Boolean(options.ja);
   const files = deliveryFileNames(child?.files, 8);
@@ -1702,6 +1848,19 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
       ja ? '納品はWORKの詳細/Deliveryに表示されます。' : 'The delivery is available in WORK details / Delivery.'
     ].filter(Boolean).join('\n');
   }
+  if (status === 'blocked') {
+    return [
+      ja ? 'アクション工程で承認待ちになりました。' : 'The order reached the action phase and is waiting for approval.',
+      '',
+      orderId ? `Order ID: ${orderId}` : '',
+      ja ? `状態: ${status}` : `Status: ${status}`,
+      failure ? (ja ? `理由: ${failure}` : `Reason: ${failure}`) : '',
+      ja ? `接続先: ${agentLabel}` : `Route: ${agentLabel}`,
+      ...routingLines,
+      childLine,
+      ja ? '納品ファイルは生成済みの場合、チャットとWORKのDeliveryからダウンロードできます。' : 'If delivery files were generated, they are downloadable from chat and WORK Delivery.'
+    ].filter(Boolean).join('\n');
+  }
   return [
     ja ? '発注を受け付けました。CAItが接続と進捗確認を始めています。' : 'Order accepted. CAIt is starting dispatch and progress tracking.',
     '',
@@ -1742,6 +1901,23 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
       isWorkflow
         ? (ja ? '続いて、各子エージェントがそれぞれの担当領域のサマリーと納品物をこのチャットに出します。' : 'Next, each specialist will post the summary and delivery for its own area in this chat.')
         : (ja ? 'WORKの詳細/Deliveryでファイル、ソース、コストを確認できます。' : 'Open WORK details / Delivery to review files, sources, and cost.')
+    ].filter(Boolean).join('\n');
+  }
+  if (status === 'blocked') {
+    return [
+      ja ? 'アクション工程まで進みましたが、外部投稿・送信は承認またはコネクター接続待ちです。' : 'The workflow reached the action phase, but external posting/sending is waiting for approval or connector access.',
+      '',
+      `Order ID: ${job.id || 'unknown'}`,
+      ja ? `状態: blocked` : `Status: blocked`,
+      ja ? `接続先: ${route}` : `Route: ${route}`,
+      job?.failureReason ? (ja ? `理由: ${job.failureReason}` : `Reason: ${job.failureReason}`) : '',
+      childLine,
+      summary ? (ja ? `概要: ${summary}` : `Summary: ${summary}`) : '',
+      ...jobDeliveryFileLines(job, { ja }),
+      '',
+      ja
+        ? '次の対応: 必要なコネクターを接続・承認してください。再発注や追加コンテキストはWork Chatで続けてください。'
+        : 'Next: connect/approve the required connector. Use Work Chat for re-ordering or adding more context.'
     ].filter(Boolean).join('\n');
   }
   if (status === 'failed' || status === 'timed_out') {
@@ -1965,6 +2141,17 @@ function upsertOpenChatWorkflowChildDeliveryMessage(orderId = '', child = {}, op
   state.orderChatMessages = messages.slice(-OPEN_CHAT_SESSION_MAX_MESSAGES);
 }
 
+function isTerminalWorkflowChildDelivery(child = {}) {
+  const status = normalizeOrderProgressStatus(child?.status || '');
+  if (status !== 'blocked') return isTerminalOrderStatus(status);
+  const taskType = String(child?.taskType || child?.task_type || '').trim().toLowerCase();
+  const phase = String(child?.sequencePhase || child?.sequence_phase || '').trim().toLowerCase();
+  const reason = String(child?.failureReason || child?.failure_reason || child?.summary || '').trim();
+  const category = String(child?.failureCategory || child?.failure_category || child?.completionStatus || child?.completion_status || '').trim().toLowerCase();
+  if (!reason && /(^|_)(leader)$/.test(taskType) && ['checkpoint', 'final_summary'].includes(phase)) return false;
+  return !/(leader_checkpoint_blocked|leader_final_summary_blocked|workflow_blocked|blocked_by_workflow|blocked until|waiting for the earlier workflow phase|waiting for earlier)/i.test(`${category} ${reason}`);
+}
+
 function syncOpenChatWorkflowChildDeliveryMessages(job = {}, options = {}) {
   const safeOrderId = String(job?.id || '').trim();
   if (!safeOrderId) return;
@@ -1973,7 +2160,7 @@ function syncOpenChatWorkflowChildDeliveryMessages(job = {}, options = {}) {
   let changed = false;
   childRuns.forEach((child, index) => {
     const status = normalizeOrderProgressStatus(child?.status || '');
-    if (!isTerminalOrderStatus(status)) return;
+    if (!isTerminalWorkflowChildDelivery(child)) return;
     const beforeKey = workflowChildDeliveryMessageId(safeOrderId, child, index);
     const existing = (Array.isArray(state.orderChatMessages) ? state.orderChatMessages : [])
       .find((item) => item?.workflowChildDeliveryId === beforeKey);
@@ -2004,7 +2191,7 @@ function mergeProgressJobIntoSnapshot(job = {}) {
 }
 
 function isTerminalOrderStatus(status = '') {
-  return ['completed', 'failed', 'timed_out'].includes(normalizeOrderProgressStatus(status));
+  return ['completed', 'failed', 'timed_out', 'blocked'].includes(normalizeOrderProgressStatus(status));
 }
 
 function trackedOrderIdsForHistory() {
@@ -2016,6 +2203,7 @@ function trackedOrderIdsForHistory() {
   const rememberMessages = (messages = []) => {
     (Array.isArray(messages) ? messages : []).forEach((message) => {
       remember(message?.orderProgressId || '');
+      remember(message?.deliveryZipForOrderId || '');
     });
   };
   rememberMessages(state.orderChatMessages);
@@ -2092,6 +2280,7 @@ function syncOpenChatTrackedJobsFromSnapshot(snapshot = state.snapshot || {}) {
       deliveryCard: isTerminalOrderStatus(job?.status || '') ? buildJobDeliveryCard(job, { ja }) : null
     });
     syncOpenChatWorkflowChildDeliveryMessages(job, { ja });
+    upsertOpenChatDeliveryDownloadMessage(job, { ja });
     changed = true;
   });
   if (changed) {
@@ -2123,6 +2312,11 @@ async function pollOpenChatOrderProgress(orderId = '', options = {}) {
         deliveryCard: isTerminalOrderStatus(job?.status || '') ? buildJobDeliveryCard(job, options) : null
       });
       syncOpenChatWorkflowChildDeliveryMessages(job, options);
+      const deliveryDownloadChanged = upsertOpenChatDeliveryDownloadMessage(job, options);
+      if (deliveryDownloadChanged) {
+        renderWorkChatThread();
+        persistCurrentOpenChatSession();
+      }
       if (isTerminalOrderStatus(job.status)) {
         void trackChatTranscript(job.prompt || '', {
           kind: 'order',
@@ -2203,6 +2397,15 @@ const SUBSCRIPTION_PLAN_BASE_AMOUNTS = {
 const BILLING_DISPLAY_CURRENCY = 'USD';
 const LEGACY_LEDGER_UNITS_PER_USD = 150;
 const DEFAULT_MINIMUM_PAYOUT_AMOUNT = 1500;
+const LIST_CREATOR_BATCH_SIZE = 20;
+const LIST_CREATOR_MAX_REQUESTED_COMPANIES = 500;
+const LIST_CREATOR_BASE_COST_BASIS = Object.freeze({
+  total_cost_basis: 64,
+  compute_cost: 16,
+  tool_cost: 14,
+  labor_cost: 34,
+  api_cost: 0
+});
 const ORDER_INPUT_MAX_URLS = 20;
 const ORDER_INPUT_MAX_FILES = 5;
 const ORDER_INPUT_MAX_FILE_BYTES = 200 * 1024;
@@ -2224,6 +2427,10 @@ const usdFormatter = new Intl.NumberFormat('en-US', {
 });
 
 const ANALYTICS_ID = 'G-CDHM437KEX';
+const ANALYTICS_PRODUCTION_HOSTS = new Set(['aiagent-marketplace.net', 'www.aiagent-marketplace.net']);
+const ANALYTICS_DISABLE_COOKIE_NAME = 'cait_disable_ga4';
+const ANALYTICS_DISABLE_PARAMS = ['no_ga', 'disable_ga', 'cait_no_ga', 'cait_disable_ga4', 'ga_opt_out'];
+const ANALYTICS_ENABLE_PARAMS = ['enable_ga', 'cait_enable_ga4', 'ga_opt_in'];
 const GUEST_TRIAL_CREDIT_LIMIT = 500;
 let runtimeVisitorId = '';
 let runtimeRememberedTab = '';
@@ -2232,8 +2439,95 @@ const runtimeConversionEvents = new Set();
 const runtimeStartedLogins = new Set();
 const runtimeCompletedLogins = new Set();
 
-function initAnalytics() {
-  if (!ANALYTICS_ID || !/^https?:$/.test(window.location.protocol)) return;
+function analyticsFlagEnabled(value) {
+  return !['0', 'false', 'off', 'no'].includes(String(value || '1').trim().toLowerCase());
+}
+
+function rememberAnalyticsDisabled(value) {
+  try {
+    const maxAge = value ? 31536000 : 0;
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    document.cookie = `${ANALYTICS_DISABLE_COOKIE_NAME}=${value ? '1' : ''}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+  } catch {}
+}
+
+function rememberedAnalyticsDisabled() {
+  try {
+    return document.cookie.split(';').some((item) => item.trim() === `${ANALYTICS_DISABLE_COOKIE_NAME}=1`);
+  } catch {
+    return false;
+  }
+}
+
+function disableAnalytics(reason, persist = false) {
+  window[`ga-disable-${ANALYTICS_ID}`] = true;
+  window.__aiagent2AnalyticsDisabledReason = reason;
+  if (persist) rememberAnalyticsDisabled(true);
+}
+
+function applyAnalyticsQueryOptOut() {
+  const params = new URLSearchParams(window.location.search || '');
+  for (const key of ANALYTICS_ENABLE_PARAMS) {
+    if (params.has(key) && analyticsFlagEnabled(params.get(key))) {
+      rememberAnalyticsDisabled(false);
+      window[`ga-disable-${ANALYTICS_ID}`] = false;
+    }
+  }
+  for (const key of ANALYTICS_DISABLE_PARAMS) {
+    if (params.has(key) && analyticsFlagEnabled(params.get(key))) {
+      disableAnalytics(`query:${key}`, true);
+    }
+  }
+}
+
+function analyticsBaseSkipReason() {
+  if (!ANALYTICS_ID) return 'missing_id';
+  if (!/^https?:$/.test(window.location.protocol)) return 'unsupported_protocol';
+  if (!ANALYTICS_PRODUCTION_HOSTS.has(String(window.location.hostname || '').toLowerCase())) return 'non_production_host';
+  if (window[`ga-disable-${ANALYTICS_ID}`] || rememberedAnalyticsDisabled()) return 'opted_out';
+  return '';
+}
+
+function analyticsPlatformAdminStatus(status) {
+  return Boolean(status && typeof status === 'object' && status.isPlatformAdmin);
+}
+
+async function analyticsPromiseWithTimeout(promise, timeoutMs = 1500) {
+  let timeoutId = 0;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((resolve) => {
+        timeoutId = window.setTimeout(() => resolve(null), timeoutMs);
+      })
+    ]);
+  } finally {
+    if (timeoutId) window.clearTimeout(timeoutId);
+  }
+}
+
+async function analyticsAuthStatus() {
+  if (analyticsPlatformAdminStatus(state.snapshot?.auth)) return state.snapshot.auth;
+  if (window.__CAIT_FAST_AUTH_RESOLVED__) return window.__CAIT_FAST_AUTH_RESOLVED__;
+  if (window.__CAIT_FAST_AUTH_STATUS__ && typeof window.__CAIT_FAST_AUTH_STATUS__.then === 'function') {
+    return analyticsPromiseWithTimeout(window.__CAIT_FAST_AUTH_STATUS__);
+  }
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 1500);
+  try {
+    const response = await fetch('/auth/status', {
+      credentials: 'same-origin',
+      signal: controller.signal
+    });
+    return response.ok ? response.json() : null;
+  } catch {
+    return null;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
+function loadAnalytics() {
   if (window.__aiagent2AnalyticsLoaded) return;
   window.__aiagent2AnalyticsLoaded = true;
   window.dataLayer = window.dataLayer || [];
@@ -2244,6 +2538,26 @@ function initAnalytics() {
   document.head.appendChild(script);
   window.gtag('js', new Date());
   window.gtag('config', ANALYTICS_ID);
+}
+
+async function initAnalytics() {
+  applyAnalyticsQueryOptOut();
+  const initialReason = analyticsBaseSkipReason();
+  if (initialReason) {
+    disableAnalytics(initialReason);
+    return;
+  }
+  const status = await analyticsAuthStatus();
+  if (analyticsPlatformAdminStatus(status)) {
+    disableAnalytics('platform_admin', true);
+    return;
+  }
+  const finalReason = analyticsBaseSkipReason();
+  if (finalReason) {
+    disableAnalytics(finalReason);
+    return;
+  }
+  loadAnalytics();
 }
 
 function visitorId() {
@@ -2748,6 +3062,81 @@ function pointsLabel(value) {
   if (!Number.isFinite(n) || n <= 0) return '0 pts';
   const display = n.toFixed(1).replace(/\.0$/, '');
   return `${display} pts`;
+}
+
+function flattenEstimateText(value, parts = [], depth = 0) {
+  if (value == null || depth > 4) return parts;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value).trim();
+    if (text) parts.push(text);
+    return parts;
+  }
+  if (Array.isArray(value)) {
+    value.slice(0, 40).forEach((item) => flattenEstimateText(item, parts, depth + 1));
+    return parts;
+  }
+  if (typeof value === 'object') {
+    Object.values(value).slice(0, 80).forEach((item) => flattenEstimateText(item, parts, depth + 1));
+  }
+  return parts;
+}
+
+function inferListCreatorRequestedCount(value = '', fallback = LIST_CREATOR_BATCH_SIZE) {
+  const text = flattenEstimateText(value).join(' ').normalize('NFKC');
+  const fallbackCount = Math.max(1, Math.min(LIST_CREATOR_MAX_REQUESTED_COMPANIES, Math.round(Number(fallback || LIST_CREATOR_BATCH_SIZE) || LIST_CREATOR_BATCH_SIZE)));
+  const patterns = [
+    /(?:top|first|initial|shortlist|list|lead list|prospect list|候補|上位|まず|初回|リスト)\D{0,24}(\d{1,4})\s*(?:companies|company|leads|prospects|rows|社|件)/i,
+    /(\d{1,4})\s*(?:companies|company|leads|prospects|lead rows|prospect rows|rows|社|件)\b/i,
+    /(\d{1,4})\s*(?:件|社)(?:分|くらい|ほど|程度)?/i
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const count = Number(match?.[1] || 0);
+    if (Number.isFinite(count) && count > 0) {
+      return Math.max(1, Math.min(LIST_CREATOR_MAX_REQUESTED_COMPANIES, Math.round(count)));
+    }
+  }
+  return fallbackCount;
+}
+
+function listCreatorUsageEstimateForCount(count = LIST_CREATOR_BATCH_SIZE) {
+  const requestedCount = inferListCreatorRequestedCount(String(count), count);
+  const batchCount = Math.max(1, Math.ceil(requestedCount / LIST_CREATOR_BATCH_SIZE));
+  const scale = (value) => +(Number(value || 0) * batchCount).toFixed(2);
+  return {
+    requestedCount,
+    batchSize: LIST_CREATOR_BATCH_SIZE,
+    batchCount,
+    usage: {
+      total_cost_basis: scale(LIST_CREATOR_BASE_COST_BASIS.total_cost_basis),
+      compute_cost: scale(LIST_CREATOR_BASE_COST_BASIS.compute_cost),
+      tool_cost: scale(LIST_CREATOR_BASE_COST_BASIS.tool_cost),
+      labor_cost: scale(LIST_CREATOR_BASE_COST_BASIS.labor_cost),
+      api_cost: scale(LIST_CREATOR_BASE_COST_BASIS.api_cost)
+    },
+    contactCaptureMode: 'public_contact_only'
+  };
+}
+
+function normalizeTaskTypeToken(value = '') {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_\s-]/g, '')
+    .replace(/[\s-]+/g, '_')
+    .slice(0, 80) || 'research';
+}
+
+function listCreatorEstimateForDraft(draft = {}) {
+  const taskType = normalizeTaskTypeToken(draft.task_type || draft.taskType || currentRoutingTask());
+  if (taskType !== 'list_creator') return null;
+  const requestedCount = inferListCreatorRequestedCount([
+    draft.prompt,
+    draft.goal,
+    draft.input,
+    currentEffectiveOrderPrompt()
+  ]);
+  return listCreatorUsageEstimateForCount(requestedCount);
 }
 
 function safeText(el, value) {
@@ -3271,7 +3660,7 @@ function formatOrderApiCommand(token = '<CAIT_API_KEY>') {
     `  -H "authorization: Bearer ${token}" ^`,
     '  -d "{\\"parent_agent_id\\":\\"cloudcode-main\\",\\"task_type\\":\\"research\\",\\"followup_to_job_id\\":\\"<PREVIOUS_JOB_ID>\\",\\"prompt\\":\\"Answers: deliver as Markdown and focus on Japan.\\"}"',
     '',
-    '# Vague requests return status=needs_input before billing. Resubmit with answers or skip_intake=true.'
+    '# Vague requests return status=needs_input before billing. Resubmit with answers before billing or dispatch.'
   ].join('\n');
 }
 
@@ -3704,6 +4093,29 @@ function renderOpenChatModeControls() {
   }
 }
 
+function serializeOpenChatProgressMeta(meta = null) {
+  if (!meta || typeof meta !== 'object') return null;
+  const states = Array.isArray(meta.states)
+    ? meta.states.map((state) => compactChatText(state || '', 40)).filter(Boolean).slice(0, 24)
+    : [];
+  if (!states.length) return null;
+  return {
+    kind: compactChatText(meta.kind || '', 40),
+    total: Math.max(0, Math.round(Number(meta.total || states.length || 0) || 0)),
+    completed: Math.max(0, Math.round(Number(meta.completed || 0) || 0)),
+    running: Math.max(0, Math.round(Number(meta.running || 0) || 0)),
+    queued: Math.max(0, Math.round(Number(meta.queued || 0) || 0)),
+    failed: Math.max(0, Math.round(Number(meta.failed || 0) || 0)),
+    blocked: Math.max(0, Math.round(Number(meta.blocked || 0) || 0)),
+    percent: Math.max(0, Math.min(100, Math.round(Number(meta.percent || 0) || 0))),
+    states,
+    overflow: Math.max(0, Math.round(Number(meta.overflow || 0) || 0)),
+    route: compactChatText(meta.route || '', 160),
+    sideLabel: compactChatText(meta.sideLabel || '', 160),
+    note: compactChatText(meta.note || '', 240)
+  };
+}
+
 function serializeOpenChatMessageForSession(message = {}) {
   const role = String(message.role || '').trim() === 'user' ? 'user' : 'agent';
   const label = compactChatText(message.label || (role === 'user' ? 'YOU' : PRODUCT_SHORT_NAME), 80);
@@ -3728,7 +4140,10 @@ function serializeOpenChatMessageForSession(message = {}) {
     orderProgressId: compactChatText(message.orderProgressId || '', 120),
     workflowChildDeliveryId: compactChatText(message.workflowChildDeliveryId || '', 180),
     workflowParentId: compactChatText(message.workflowParentId || '', 120),
+    deliveryZipForOrderId: compactChatText(message.deliveryZipForOrderId || '', 120),
     orderProgressStatus: compactChatText(message.orderProgressStatus || '', 40),
+    pendingDispatch: Boolean(message.pendingDispatch),
+    progressMeta: serializeOpenChatProgressMeta(message.progressMeta || null),
     deliveryCard: message.deliveryCard && typeof message.deliveryCard === 'object'
       ? {
         kind: compactChatText(message.deliveryCard.kind || '', 40),
@@ -3745,7 +4160,8 @@ function serializeOpenChatMessageForSession(message = {}) {
         action: compactChatText(action?.action || '', 60),
         label: compactChatText(action?.label || '', 80),
         agentId: compactChatText(action?.agentId || '', 120),
-        connector: compactChatText(action?.connector || '', 60)
+        connector: compactChatText(action?.connector || '', 60),
+        orderId: compactChatText(action?.orderId || '', 120)
       })).filter((action) => action.action && action.label)
       : [],
     typing: false,
@@ -3755,6 +4171,103 @@ function serializeOpenChatMessageForSession(message = {}) {
 
 function makeOpenChatSessionId() {
   return `chat_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function openChatOrderIdsFromText(text = '') {
+  const ids = [];
+  const seen = new Set();
+  const remember = (value = '') => {
+    const id = compactChatText(value, 120);
+    if (!id || /^(pending|unknown|発行待ち|確定待ち)$/i.test(id)) return;
+    if (seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  const body = String(text || '');
+  const orderIdPattern = /\bOrder\s*ID\s*[:：]\s*([a-zA-Z0-9][a-zA-Z0-9_-]{5,})/gi;
+  let match = orderIdPattern.exec(body);
+  while (match) {
+    remember(match[1]);
+    match = orderIdPattern.exec(body);
+  }
+  return ids;
+}
+
+function openChatSessionOrderIdsFromMessages(messages = []) {
+  const ids = [];
+  const seen = new Set();
+  const remember = (value = '') => {
+    const id = compactChatText(value, 120);
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    ids.push(id);
+  };
+  for (const message of Array.isArray(messages) ? messages : []) {
+    remember(message?.orderProgressId || '');
+    remember(message?.deliveryZipForOrderId || '');
+    remember(message?.workflowParentId || '');
+    (Array.isArray(message?.actions) ? message.actions : []).forEach((action) => remember(action?.orderId || ''));
+    openChatOrderIdsFromText(message?.fullBody || message?.body || '').forEach(remember);
+  }
+  return ids;
+}
+
+function openChatActiveJobIdsFromSession(session = {}) {
+  return Array.isArray(session.activeJobIds || session.active_job_ids)
+    ? (session.activeJobIds || session.active_job_ids).map((item) => compactChatText(item, 120)).filter(Boolean).slice(0, 24)
+    : [];
+}
+
+function openChatExplicitLinkedOrderId(session = {}) {
+  return compactChatText(session.linkedOrderId || session.linked_order_id || session.orderId || session.order_id || '', 120);
+}
+
+function openChatSessionHasLinkedWork(session = {}, messages = null) {
+  const sessionMessages = Array.isArray(messages) ? messages : (Array.isArray(session.messages) ? session.messages : []);
+  const activeJobIds = openChatActiveJobIdsFromSession(session);
+  const messageOrderIds = openChatSessionOrderIdsFromMessages(sessionMessages);
+  const linkedOrderId = openChatExplicitLinkedOrderId(session);
+  const activeWork = session.activeWork === true || String(session.activeWork || '').toLowerCase() === 'true';
+  return Boolean(linkedOrderId || activeJobIds.length || messageOrderIds.length || activeWork);
+}
+
+function currentOpenChatSessionHasLinkedWork() {
+  const currentSessionId = compactChatText(state.currentOpenChatSessionId || '', 120);
+  const runtimeSession = currentSessionId && Array.isArray(state.openChatRuntimeSessions)
+    ? state.openChatRuntimeSessions.find((session) => session?.id === currentSessionId)
+    : null;
+  const messages = Array.isArray(state.orderChatMessages) && state.orderChatMessages.length
+    ? state.orderChatMessages
+    : (Array.isArray(runtimeSession?.messages) ? runtimeSession.messages : []);
+  return openChatSessionHasLinkedWork({
+    ...(runtimeSession || {}),
+    activeWork: Boolean(runtimeSession?.activeWork || hasActiveOpenChatOrderProgress()),
+    linkedOrderId: runtimeSession?.linkedOrderId || state.openChatProgressOrderId || '',
+    messages
+  }, messages);
+}
+
+function clearOpenChatDispatchDraftState(options = {}) {
+  state.openChatPreparedBrief = '';
+  state.openChatParallelPlan = [];
+  state.openChatClarifyOptions = [];
+  state.openChatVagueChoicePrompt = '';
+  state.openChatNaturalChoiceIntent = '';
+  state.openChatIntentShiftPrompt = '';
+  state.openChatIdeaBacklogPrompt = '';
+  state.openChatLeaderIntakePrompt = '';
+  state.openChatLeaderIntakeTask = '';
+  state.openChatPendingQuestionPrompt = '';
+  state.openChatPendingQuestionTask = '';
+  state.openChatPendingQuestionPattern = '';
+  state.pendingOrderConfirmation = null;
+  state.serverResolvedIntent = null;
+  state.serverPreparedOrder = null;
+  state.openChatDecisionSuppressed = true;
+  if (options.clearComposer !== false) {
+    if (els.jobPrompt) els.jobPrompt.value = '';
+    if (els.jobType) els.jobType.value = '';
+  }
 }
 
 function normalizeOpenChatSession(session = {}) {
@@ -3773,13 +4286,14 @@ function normalizeOpenChatSession(session = {}) {
     || session.jobPrompt
     || session.openChatPreparedBrief
     || 'New chat';
-  const activeJobIds = Array.isArray(session.activeJobIds || session.active_job_ids)
-    ? (session.activeJobIds || session.active_job_ids).map((item) => compactChatText(item, 120)).filter(Boolean).slice(0, 24)
-    : [];
-  const linkedOrderId = compactChatText(session.linkedOrderId || session.linked_order_id || session.orderId || session.order_id || '', 120);
-  const preparedBrief = compactChatText(session.openChatPreparedBrief || '', 9000);
-  const orderBoundBrief = (linkedOrderId || activeJobIds.length || session.activeWork)
-    ? (preparedBrief || messages.map((message) => extractPreparedBriefFromChatText(message.body || '')).find(Boolean) || '')
+  const activeJobIds = openChatActiveJobIdsFromSession(session);
+  const messageOrderIds = openChatSessionOrderIdsFromMessages(messages);
+  const linkedOrderId = openChatExplicitLinkedOrderId(session) || messageOrderIds[0] || '';
+  const hasLinkedWork = openChatSessionHasLinkedWork({ ...session, linkedOrderId, activeJobIds }, messages);
+  const rawPreparedBrief = compactChatText(session.openChatPreparedBrief || '', 9000);
+  const preparedBrief = hasLinkedWork ? '' : rawPreparedBrief;
+  const orderBoundBrief = hasLinkedWork
+    ? (rawPreparedBrief || messages.map((message) => extractPreparedBriefFromChatText(message.body || '')).find(Boolean) || '')
     : '';
   return {
     id,
@@ -3793,23 +4307,23 @@ function normalizeOpenChatSession(session = {}) {
     linkedOrderId,
     openChatMode: normalizeOpenChatMode(session.openChatMode || 'order'),
     openChatPreparedBrief: preparedBrief,
-    openChatParallelPlan: Array.isArray(session.openChatParallelPlan) ? session.openChatParallelPlan.slice(0, 8) : [],
-    openChatClarifyOptions: Array.isArray(session.openChatClarifyOptions) ? session.openChatClarifyOptions.slice(0, 8) : [],
-    openChatVagueChoicePrompt: compactChatText(session.openChatVagueChoicePrompt || '', 2000),
-    openChatNaturalChoiceIntent: compactChatText(session.openChatNaturalChoiceIntent || '', 160),
-    openChatIntentShiftPrompt: compactChatText(session.openChatIntentShiftPrompt || '', 2000),
-    openChatIdeaBacklogPrompt: compactChatText(session.openChatIdeaBacklogPrompt || '', 2000),
-    openChatLeaderIntakePrompt: compactChatText(session.openChatLeaderIntakePrompt || '', 2000),
-    openChatLeaderIntakeTask: compactChatText(session.openChatLeaderIntakeTask || '', 120),
-    openChatPendingQuestionPrompt: compactChatText(session.openChatPendingQuestionPrompt || '', 4000),
-    openChatPendingQuestionTask: compactChatText(session.openChatPendingQuestionTask || '', 120),
-    openChatPendingQuestionPattern: compactChatText(session.openChatPendingQuestionPattern || '', 120),
+    openChatParallelPlan: hasLinkedWork ? [] : (Array.isArray(session.openChatParallelPlan) ? session.openChatParallelPlan.slice(0, 8) : []),
+    openChatClarifyOptions: hasLinkedWork ? [] : (Array.isArray(session.openChatClarifyOptions) ? session.openChatClarifyOptions.slice(0, 8) : []),
+    openChatVagueChoicePrompt: hasLinkedWork ? '' : compactChatText(session.openChatVagueChoicePrompt || '', 2000),
+    openChatNaturalChoiceIntent: hasLinkedWork ? '' : compactChatText(session.openChatNaturalChoiceIntent || '', 160),
+    openChatIntentShiftPrompt: hasLinkedWork ? '' : compactChatText(session.openChatIntentShiftPrompt || '', 2000),
+    openChatIdeaBacklogPrompt: hasLinkedWork ? '' : compactChatText(session.openChatIdeaBacklogPrompt || '', 2000),
+    openChatLeaderIntakePrompt: hasLinkedWork ? '' : compactChatText(session.openChatLeaderIntakePrompt || '', 2000),
+    openChatLeaderIntakeTask: hasLinkedWork ? '' : compactChatText(session.openChatLeaderIntakeTask || '', 120),
+    openChatPendingQuestionPrompt: hasLinkedWork ? '' : compactChatText(session.openChatPendingQuestionPrompt || '', 4000),
+    openChatPendingQuestionTask: hasLinkedWork ? '' : compactChatText(session.openChatPendingQuestionTask || '', 120),
+    openChatPendingQuestionPattern: hasLinkedWork ? '' : compactChatText(session.openChatPendingQuestionPattern || '', 120),
     openChatLastStatus: compactChatText(session.openChatLastStatus || '', 1000),
     openChatLastStatusTone: ['ok', 'warn', 'error', 'info'].includes(String(session.openChatLastStatusTone || '')) ? session.openChatLastStatusTone : 'info',
     openChatDecisionSuppressedBriefKey: compactChatText(session.openChatDecisionSuppressedBriefKey || openChatDecisionBriefKey(orderBoundBrief), 80),
-    jobPrompt: compactChatText(session.jobPrompt || '', 9000),
+    jobPrompt: hasLinkedWork ? '' : compactChatText(session.jobPrompt || '', 9000),
     jobUrls: compactChatText(session.jobUrls || '', 5000),
-    jobType: compactChatText(session.jobType || '', 80),
+    jobType: hasLinkedWork ? '' : compactChatText(session.jobType || '', 80),
     selectedAgentId: compactChatText(session.selectedAgentId || '', 120),
     messages
   };
@@ -3831,6 +4345,31 @@ function normalizeOpenChatSessionFingerprintText(value = '') {
     .toLowerCase();
 }
 
+function openChatStructuredField(value = '', field = '') {
+  const safeField = String(field || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = String(value || '').match(new RegExp(`(?:^|\\n)\\s*${safeField}\\s*:\\s*([^\\n]+)`, 'i'));
+  return normalizeOpenChatSessionFingerprintText(
+    String(match?.[1] || '').replace(/\s+\b(task|goal|work split|deliver|output language|acceptance)\s*:.*$/i, '')
+  );
+}
+
+function openChatProjectFingerprint(value = '') {
+  const text = normalizeOpenChatSessionFingerprintText(value);
+  if (!text) return '';
+  const task = openChatStructuredField(value, 'task')
+    || (text.match(/\b(cmo_leader|research_team_leader|build_team_leader|cto_leader|cpo_leader|cfo_leader|legal_leader|research|teardown|seo_gap|landing|growth|x_post)\b/)?.[1] || '');
+  const domain = text.match(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)/i)?.[1]
+    || (/\baiagent[-_\s]?marketplace\b/i.test(text) ? 'aiagent-marketplace.net' : '');
+  const goal = openChatStructuredField(value, 'goal')
+    .replace(/\b(task|goal|work split|deliver|output language|acceptance)\b.*$/i, '')
+    .slice(0, 120);
+  if (task && domain) return `project:${task}:${domain}`;
+  if (domain && /(acquisition|signup|growth|marketing|seo|landing|集客|登録|獲得)/i.test(text)) return `project:growth:${domain}`;
+  if (task && goal) return `project:${task}:${goal}`;
+  if (task && /(^|\s)(task|goal|goa|work|deliver|order|leader|project|案件|プロジェクト|施策)(\s|:|$)/i.test(text)) return `project:${task}`;
+  return '';
+}
+
 function openChatSessionContentFingerprints(session = {}) {
   const messages = Array.isArray(session.messages) ? session.messages : [];
   const firstUserMessage = messages.find((message) => message?.role === 'user' && String(message?.body || '').trim()) || null;
@@ -3847,6 +4386,8 @@ function openChatSessionContentFingerprints(session = {}) {
     const normalized = normalizeOpenChatSessionFingerprintText(raw);
     const structured = isStructuredOrderBrief(raw) || /(^|\n)\s*(task|goal|work split|deliver|acceptance)\s*:/i.test(raw);
     if (!structured && normalized.length < 80) continue;
+    const projectKey = openChatProjectFingerprint(raw);
+    if (projectKey) keys.add(projectKey);
     keys.add(`content:${normalized.slice(0, 1000)}`);
   }
   return keys;
@@ -3872,6 +4413,8 @@ function openChatSessionIdentityKeys(session = {}) {
   for (const message of messages) {
     const progressOrderId = compactChatText(message?.orderProgressId || '', 120);
     if (progressOrderId) keys.add(`order:${progressOrderId}`);
+    const deliveryZipOrderId = compactChatText(message?.deliveryZipForOrderId || '', 120);
+    if (deliveryZipOrderId) keys.add(`order:${deliveryZipOrderId}`);
   }
   for (const fingerprint of openChatSessionContentFingerprints(session)) keys.add(fingerprint);
   return keys;
@@ -3890,11 +4433,35 @@ function findMatchingOpenChatSessionKey(map, incoming = {}) {
   return '';
 }
 
+function openChatSessionsShareIdentity(left = {}, right = {}) {
+  const leftKeys = openChatSessionIdentityKeys(left);
+  const rightKeys = openChatSessionIdentityKeys(right);
+  for (const key of leftKeys) {
+    if (rightKeys.has(key)) return true;
+  }
+  return false;
+}
+
+function dedupeOpenChatSessionsForDisplay(sessions = []) {
+  const visible = [];
+  for (const session of Array.isArray(sessions) ? sessions : []) {
+    const existingIndex = visible.findIndex((item) => openChatSessionsShareIdentity(item, session));
+    if (existingIndex >= 0) {
+      visible[existingIndex] = mergeOpenChatSessionRecords(visible[existingIndex], session);
+    } else {
+      visible.push(session);
+    }
+  }
+  return visible.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+}
+
 function mergeOpenChatSessionMessages(existingMessages = [], incomingMessages = []) {
   const merged = [];
   const keyOf = (message = {}) => {
     const progressOrderId = compactChatText(message.orderProgressId || '', 120);
     if (progressOrderId) return `order:${progressOrderId}`;
+    const deliveryZipOrderId = compactChatText(message.deliveryZipForOrderId || '', 120);
+    if (deliveryZipOrderId) return `delivery_zip:${deliveryZipOrderId}`;
     return [
       compactChatText(message.role || '', 40),
       compactChatText(message.label || '', 80),
@@ -4032,6 +4599,33 @@ function openChatTranscriptIdFromServerSessionId(sessionId = '') {
   return id.startsWith('server_') ? id.slice('server_'.length) : id;
 }
 
+function normalizeOpenChatMemoryDeleteId(id = '') {
+  return compactChatText(String(id || '').trim().replace(/^server_/, ''), 160);
+}
+
+function collectOpenChatMemoryDeleteIds(source = {}) {
+  const ids = new Set();
+  const remember = (value = '') => {
+    const normalized = normalizeOpenChatMemoryDeleteId(value);
+    if (normalized) ids.add(normalized);
+  };
+  const rememberJob = (value = '') => {
+    const normalized = normalizeOpenChatMemoryDeleteId(value);
+    if (!normalized) return;
+    ids.add(normalized);
+    ids.add(normalized.startsWith('job_') ? normalized : `job_${normalized}`);
+  };
+  remember(source?.id);
+  remember(source?.sessionId || source?.session_id);
+  remember(openChatTranscriptIdFromServerSessionId(source?.id || ''));
+  rememberJob(source?.linkedOrderId || source?.linked_order_id || source?.orderId || source?.order_id);
+  const activeJobIds = Array.isArray(source?.activeJobIds || source?.active_job_ids)
+    ? (source.activeJobIds || source.active_job_ids)
+    : [];
+  activeJobIds.forEach((jobId) => rememberJob(jobId));
+  return [...ids];
+}
+
 function readDeletedOpenChatServerSessionIds() {
   return new Set();
 }
@@ -4051,10 +4645,13 @@ function rememberDeletedOpenChatServerSessionIds(ids = []) {
 
 function removeSnapshotChatMemoryItems(transcriptIds = []) {
   const hidden = new Set((Array.isArray(transcriptIds) ? transcriptIds : [transcriptIds])
-    .map((id) => compactChatText(String(id || '').trim().replace(/^server_/, ''), 140))
+    .map((id) => normalizeOpenChatMemoryDeleteId(id))
     .filter(Boolean));
   if (!hidden.size || !Array.isArray(state.snapshot?.chatMemory)) return;
-  state.snapshot.chatMemory = state.snapshot.chatMemory.filter((item) => !hidden.has(String(item?.id || '')));
+  state.snapshot.chatMemory = state.snapshot.chatMemory.filter((item) => {
+    const itemIds = collectOpenChatMemoryDeleteIds(item);
+    return !itemIds.some((id) => hidden.has(id));
+  });
 }
 
 function sessionFromServerChatMemory(item = {}) {
@@ -4184,21 +4781,41 @@ function markCurrentOpenChatSessionLinkedOrder(orderId = '', options = {}) {
     ...current,
     activeWork: active ? true : nextActiveJobIds.length > 0,
     linkedOrderId: current.linkedOrderId || safeOrderId,
-    activeJobIds: nextActiveJobIds
+    activeJobIds: nextActiveJobIds,
+    openChatPreparedBrief: '',
+    openChatParallelPlan: [],
+    openChatClarifyOptions: [],
+    jobPrompt: ''
   });
+  clearOpenChatDispatchDraftState();
   writeOpenChatSessions(upsertOpenChatSessionCollection(runtimeSessions, session));
   renderOpenChatSessionControls();
+  renderOpenChatChoiceBar();
+  syncCreateJobButtonForCurrentPrompt();
   return session;
 }
 
 function renderOpenChatSessionControls() {
-  const sessions = readOpenChatSessions();
+  const sessions = dedupeOpenChatSessionsForDisplay(readOpenChatSessions());
+  const currentSessionId = compactChatText(state.currentOpenChatSessionId || '', 120);
+  const currentSession = currentSessionId
+    ? (sessions.find((session) => session.id === currentSessionId) || null)
+    : null;
+  const savedSessions = currentSession
+    ? sessions.filter((session) => session.id !== currentSession.id && !openChatSessionsShareIdentity(session, currentSession))
+    : sessions;
   if (els.openChatSessionStatus) {
-    if (sessions.length) {
-      els.openChatSessionStatus.textContent = `${sessions.length} saved chat${sessions.length === 1 ? '' : 's'} · account history + current session`;
+    if (currentSession && savedSessions.length) {
+      els.openChatSessionStatus.textContent = `${savedSessions.length} project${savedSessions.length === 1 ? '' : 's'} · current chat active`;
+    } else if (currentSession) {
+      els.openChatSessionStatus.textContent = state.snapshot?.auth?.loggedIn
+        ? 'Current chat active. No other saved projects yet.'
+        : 'Current chat only. Sign in to save it to your account.';
+    } else if (savedSessions.length) {
+      els.openChatSessionStatus.textContent = `${savedSessions.length} project${savedSessions.length === 1 ? '' : 's'} · account history`;
     } else {
       els.openChatSessionStatus.textContent = state.snapshot?.auth?.loggedIn
-        ? 'No saved account chats yet. Send a message to create one.'
+        ? 'No saved projects yet. Send a message to create one.'
         : 'Sign in to save chat history. Until then, this chat stays only in the current page.';
     }
   }
@@ -4213,25 +4830,36 @@ function renderOpenChatSessionControls() {
   if (!els.openChatSessionList) return;
   if (!sessions.length) {
     els.openChatSessionList.innerHTML = state.snapshot?.auth?.loggedIn
-      ? '<div class="empty-session-list">No saved chats yet. Send a message and it will appear here.</div>'
+      ? '<div class="empty-session-list">No saved projects yet. Send a message and it will appear here.</div>'
       : '<div class="empty-session-list">Sign in to save chat history to your account.</div>';
     return;
   }
-  els.openChatSessionList.innerHTML = sessions.map((session) => {
+  const renderSessionRow = (session, options = {}) => {
     const active = session.id === state.currentOpenChatSessionId;
     const messageCount = Array.isArray(session.messages) ? session.messages.length : 0;
     const hasBrief = isStructuredOrderBrief(session.openChatPreparedBrief || session.jobPrompt || '');
     const workFlag = session.activeWork ? ' · active work' : '';
+    const currentFlag = options.current ? ' · current' : '';
     return `
       <div class="chat-session-row ${active ? 'active' : ''}">
         <button type="button" class="chat-session-item" data-open-chat-session-id="${escapeHtml(session.id)}">
           <span class="chat-session-title">${escapeHtml(session.title || 'New chat')}</span>
-          <span class="chat-session-meta">${escapeHtml(openChatSessionTimeLabel(session.updatedAt))} · ${messageCount} msg${hasBrief ? ' · draft' : ''}${workFlag}</span>
+          <span class="chat-session-meta">${escapeHtml(openChatSessionTimeLabel(session.updatedAt))} · ${messageCount} msg${hasBrief ? ' · draft' : ''}${workFlag}${currentFlag}</span>
         </button>
         <button type="button" class="mini-btn chat-session-delete" aria-label="Delete chat" data-delete-chat-session-id="${escapeHtml(session.id)}">x</button>
       </div>
     `;
-  }).join('');
+  };
+  const sections = [];
+  if (currentSession) {
+    sections.push('<div class="chat-session-group-label">CURRENT SESSION</div>');
+    sections.push(renderSessionRow(currentSession, { current: true }));
+  }
+  if (savedSessions.length) {
+    sections.push(`<div class="chat-session-group-label">${currentSession ? 'PROJECTS' : 'PROJECT HISTORY'}</div>`);
+    sections.push(savedSessions.map((session) => renderSessionRow(session)).join(''));
+  }
+  els.openChatSessionList.innerHTML = sections.join('');
   els.openChatSessionList.querySelectorAll('[data-open-chat-session-id]').forEach((button) => {
     button.onclick = () => loadOpenChatSession(button.dataset.openChatSessionId || '');
   });
@@ -4295,22 +4923,23 @@ function loadOpenChatSession(sessionId = '') {
   state.currentOpenChatSessionId = session.id;
   state.orderChatMessages = session.messages.map(serializeOpenChatMessageForSession);
   state.openChatMode = normalizeOpenChatMode(session.openChatMode || 'clarify');
-  state.openChatPreparedBrief = compactChatText(session.openChatPreparedBrief || '', 9000);
-  state.openChatParallelPlan = Array.isArray(session.openChatParallelPlan) ? session.openChatParallelPlan.slice(0, 8) : [];
-  state.openChatClarifyOptions = Array.isArray(session.openChatClarifyOptions) ? session.openChatClarifyOptions.slice(0, 8) : [];
-  state.openChatVagueChoicePrompt = compactChatText(session.openChatVagueChoicePrompt || '', 2000);
-  state.openChatNaturalChoiceIntent = compactChatText(session.openChatNaturalChoiceIntent || '', 160);
-  state.openChatIntentShiftPrompt = compactChatText(session.openChatIntentShiftPrompt || '', 2000);
-  state.openChatIdeaBacklogPrompt = compactChatText(session.openChatIdeaBacklogPrompt || '', 2000);
-  state.openChatLeaderIntakePrompt = compactChatText(session.openChatLeaderIntakePrompt || '', 2000);
-  state.openChatLeaderIntakeTask = compactChatText(session.openChatLeaderIntakeTask || '', 120);
-  state.openChatPendingQuestionPrompt = compactChatText(session.openChatPendingQuestionPrompt || '', 4000);
-  state.openChatPendingQuestionTask = compactChatText(session.openChatPendingQuestionTask || '', 120);
-  state.openChatPendingQuestionPattern = compactChatText(session.openChatPendingQuestionPattern || '', 120);
+  const sessionHasLinkedWork = openChatSessionHasLinkedWork(session, state.orderChatMessages);
+  state.openChatPreparedBrief = sessionHasLinkedWork ? '' : compactChatText(session.openChatPreparedBrief || '', 9000);
+  state.openChatParallelPlan = sessionHasLinkedWork ? [] : (Array.isArray(session.openChatParallelPlan) ? session.openChatParallelPlan.slice(0, 8) : []);
+  state.openChatClarifyOptions = sessionHasLinkedWork ? [] : (Array.isArray(session.openChatClarifyOptions) ? session.openChatClarifyOptions.slice(0, 8) : []);
+  state.openChatVagueChoicePrompt = sessionHasLinkedWork ? '' : compactChatText(session.openChatVagueChoicePrompt || '', 2000);
+  state.openChatNaturalChoiceIntent = sessionHasLinkedWork ? '' : compactChatText(session.openChatNaturalChoiceIntent || '', 160);
+  state.openChatIntentShiftPrompt = sessionHasLinkedWork ? '' : compactChatText(session.openChatIntentShiftPrompt || '', 2000);
+  state.openChatIdeaBacklogPrompt = sessionHasLinkedWork ? '' : compactChatText(session.openChatIdeaBacklogPrompt || '', 2000);
+  state.openChatLeaderIntakePrompt = sessionHasLinkedWork ? '' : compactChatText(session.openChatLeaderIntakePrompt || '', 2000);
+  state.openChatLeaderIntakeTask = sessionHasLinkedWork ? '' : compactChatText(session.openChatLeaderIntakeTask || '', 120);
+  state.openChatPendingQuestionPrompt = sessionHasLinkedWork ? '' : compactChatText(session.openChatPendingQuestionPrompt || '', 4000);
+  state.openChatPendingQuestionTask = sessionHasLinkedWork ? '' : compactChatText(session.openChatPendingQuestionTask || '', 120);
+  state.openChatPendingQuestionPattern = sessionHasLinkedWork ? '' : compactChatText(session.openChatPendingQuestionPattern || '', 120);
   state.openChatLastStatus = compactChatText(session.openChatLastStatus || 'Chat session loaded.\n\nContinue from the restored context.', 1000);
   state.openChatLastStatusTone = ['ok', 'warn', 'error', 'info'].includes(String(session.openChatLastStatusTone || '')) ? session.openChatLastStatusTone : 'info';
   state.openChatDecisionSuppressedBriefKey = compactChatText(session.openChatDecisionSuppressedBriefKey || '', 80);
-  state.openChatDecisionSuppressed = false;
+  state.openChatDecisionSuppressed = sessionHasLinkedWork;
   state.selectedAgentId = compactChatText(session.selectedAgentId || '', 120);
   if (els.jobAgentId) els.jobAgentId.value = state.selectedAgentId;
   state.pendingIntake = null;
@@ -4324,9 +4953,9 @@ function loadOpenChatSession(sessionId = '') {
       || (Array.isArray(state.orderChatMessages) ? state.orderChatMessages.length : 0)
       || String(session.jobPrompt || '').trim()
   );
-  if (els.jobPrompt) els.jobPrompt.value = session.jobPrompt || '';
+  if (els.jobPrompt) els.jobPrompt.value = sessionHasLinkedWork ? '' : session.jobPrompt || '';
   if (els.jobUrls) els.jobUrls.value = session.jobUrls || '';
-  if (els.jobType) els.jobType.value = session.jobType || '';
+  if (els.jobType) els.jobType.value = sessionHasLinkedWork ? '' : session.jobType || '';
   renderOrderComposer();
   const statusParts = String(state.openChatLastStatus || '').split(/\n\n+/);
   updateWorkChatStatusCard(statusParts.shift() || 'Chat session loaded.', statusParts.join('\n\n') || 'Continue from the restored context.', state.openChatLastStatusTone);
@@ -4364,33 +4993,49 @@ async function deleteOpenChatSession(sessionId = '') {
   const targetId = compactChatText(sessionId || '', 160);
   if (!targetId) return;
   const targetSession = readOpenChatSessions().find((session) => session.id === targetId) || null;
-  const serverMemoryId = targetSession?.serverManaged
-    ? (targetSession?.sessionId || openChatTranscriptIdFromServerSessionId(targetId) || targetSession?.linkedOrderId || targetId)
-    : '';
+  const serverMemoryIds = targetSession?.serverManaged
+    ? collectOpenChatMemoryDeleteIds(targetSession)
+    : [];
   writeOpenChatSessions((Array.isArray(state.openChatRuntimeSessions) ? state.openChatRuntimeSessions : [])
     .filter((session) => String(session?.id || '').trim() !== targetId));
   if (state.currentOpenChatSessionId === targetId) startNewOpenChatSession({ silent: true });
-  removeSnapshotChatMemoryItems(serverMemoryId);
+  removeSnapshotChatMemoryItems(serverMemoryIds);
   renderOpenChatSessionControls();
-  if (!serverMemoryId || !state.snapshot?.auth?.loggedIn) {
+  if (!serverMemoryIds.length || !state.snapshot?.auth?.loggedIn) {
     flash('Saved chat removed from this browser session.', 'info');
     return;
   }
-  try {
-    const result = await api(`/api/settings/chat-memory/${encodeURIComponent(serverMemoryId)}`, { method: 'DELETE' });
-    if (Array.isArray(result?.chatMemory) && state.snapshot) state.snapshot.chatMemory = result.chatMemory;
-    const cancelled = Array.isArray(result?.cancelled_job_ids) ? result.cancelled_job_ids.length : 0;
+  const results = await Promise.allSettled(serverMemoryIds.map((memoryId) => (
+    api(`/api/settings/chat-memory/${encodeURIComponent(memoryId)}`, { method: 'DELETE' })
+  )));
+  const fulfilled = results
+    .filter((result) => result.status === 'fulfilled')
+    .map((result) => result.value);
+  const latestChatMemory = fulfilled.findLast?.((result) => Array.isArray(result?.chatMemory))
+    || [...fulfilled].reverse().find((result) => Array.isArray(result?.chatMemory));
+  if (Array.isArray(latestChatMemory?.chatMemory) && state.snapshot) state.snapshot.chatMemory = latestChatMemory.chatMemory;
+  const cancelled = fulfilled.reduce((count, result) => count + (Array.isArray(result?.cancelled_job_ids) ? result.cancelled_job_ids.length : 0), 0);
+  if (fulfilled.length) {
     flash(cancelled ? 'Chat deleted and linked work stopped.' : 'Chat deleted from account history.', 'info');
-  } catch (error) {
+  } else {
+    const error = results.find((result) => result.status === 'rejected')?.reason || new Error('Account history update failed.');
     flash(`Chat hidden locally. Account history update failed: ${error.message}`, 'warn');
   }
 }
 
 async function clearOpenChatHistory() {
   const serverTranscriptIds = new Set();
+  const remember = (ids = []) => {
+    for (const id of Array.isArray(ids) ? ids : [ids]) {
+      const normalized = normalizeOpenChatMemoryDeleteId(id);
+      if (normalized) serverTranscriptIds.add(normalized);
+    }
+  };
   for (const item of Array.isArray(state.snapshot?.chatMemory) ? state.snapshot.chatMemory : []) {
-    const transcriptId = compactChatText(String(item?.id || '').trim().replace(/^server_/, ''), 140);
-    if (transcriptId) serverTranscriptIds.add(transcriptId);
+    remember(collectOpenChatMemoryDeleteIds(item));
+  }
+  for (const session of readOpenChatSessions()) {
+    if (session?.serverManaged) remember(collectOpenChatMemoryDeleteIds(session));
   }
   startNewOpenChatSession({ silent: true });
   writeOpenChatSessions([]);
@@ -4398,11 +5043,21 @@ async function clearOpenChatHistory() {
   renderOpenChatSessionControls();
   const transcriptIds = Array.from(serverTranscriptIds);
   if (state.snapshot?.auth?.loggedIn && transcriptIds.length) {
-    await Promise.allSettled(transcriptIds.map((transcriptId) => {
+    const results = await Promise.allSettled(transcriptIds.map((transcriptId) => {
       return transcriptId
         ? api(`/api/settings/chat-memory/${encodeURIComponent(transcriptId)}`, { method: 'DELETE' })
         : Promise.resolve();
     }));
+    const fulfilled = results
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => result.value);
+    const latestChatMemory = fulfilled.findLast?.((result) => Array.isArray(result?.chatMemory))
+      || [...fulfilled].reverse().find((result) => Array.isArray(result?.chatMemory));
+    if (Array.isArray(latestChatMemory?.chatMemory) && state.snapshot) state.snapshot.chatMemory = latestChatMemory.chatMemory;
+    if (!fulfilled.length) {
+      flash('Chat hidden locally. Account history update failed.', 'warn');
+      return;
+    }
   }
   flash(transcriptIds.length ? 'Account chat history deleted.' : 'No saved account chat history to delete.', 'info');
 }
@@ -5279,6 +5934,24 @@ function openJobDetail(jobId = '') {
   renderJobs(state.snapshot?.jobs || []);
 }
 
+async function loadJobForChatAction(orderId = '') {
+  const safeOrderId = String(orderId || '').trim();
+  if (!safeOrderId) return null;
+  const existing = jobById(safeOrderId);
+  if (downloadableDeliveryFilesForJob(existing).length) return existing;
+  const response = await api(`/api/jobs/${encodeURIComponent(safeOrderId)}?visitor_id=${encodeURIComponent(visitorId())}`, {
+    preserveAuthOn401: true
+  });
+  const job = response?.job && typeof response.job === 'object'
+    ? { ...response.job, id: response.job.id || safeOrderId }
+    : { ...(response || {}), id: response?.id || safeOrderId };
+  if (job?.id) {
+    mergeProgressJobIntoSnapshot(job);
+    return jobById(job.id) || job;
+  }
+  return existing;
+}
+
 function compactChatText(value = '', maxLength = 900) {
   const text = String(value || '').trim();
   if (!text) return '';
@@ -6017,7 +6690,8 @@ function openChatDecisionSeedContext(original = '') {
     return { prompt: leaderPrompt, taskType };
   }
   const seedPrompt = String(original || openChatPreviousUserMessageBody() || '').trim();
-  const taskType = openChatPreserveSeedTaskType(seedPrompt, '');
+  const confirmationBody = latestOpenChatAgentConfirmationBody();
+  const taskType = openChatPreserveSeedTaskType([seedPrompt, confirmationBody].filter(Boolean).join('\n'), '');
   return { prompt: seedPrompt, taskType };
 }
 
@@ -6048,11 +6722,12 @@ function fallbackStructuredBriefFromOpenChatConfirmation() {
   const confirmation = looksJapanese(context)
     ? 'ユーザーはこの内容で発注すると確認しました。会話で提供された情報を使い、同じヒアリングを繰り返さず、不足分は仮定として明記してください。'
     : 'The user confirmed this should be sent as an order. Use the conversation context, do not repeat the same intake, and state missing details as assumptions.';
+  const clarificationContext = [confirmation, confirmationBody].filter(Boolean).join('\n\n');
   const brief = isStructuredOrderBrief(seed.prompt)
     ? seed.prompt
     : buildOpenChatDispatchBriefFromPendingAnswer(
       original || openChatPreviousUserMessageBody() || confirmationBody,
-      confirmation,
+      clarificationContext,
       taskType,
       inputCounts
     );
@@ -6313,6 +6988,26 @@ function isOpenChatExplicitDispatchRequest(prompt = '') {
     || (workImperative && !questionOnly);
 }
 
+function openChatAnswerMustPauseForSendOrder(prompt = '', answer = null) {
+  const patternId = String(answer?.patternId || '').trim();
+  if (patternId === 'pattern_leader_intake_followup' || patternId === 'pattern_pending_question_followup') return true;
+  if (answer?.clearLeaderIntake || answer?.leaderIntakePrompt || answer?.leaderIntakeTask) return true;
+  if (answer?.clearPendingQuestion || answer?.pendingQuestionPrompt || answer?.pendingQuestionTask) return true;
+  if (openChatLooksNumberedLeaderIntakeAnswer(prompt)) return true;
+  if (openChatPendingLeaderIntakeContext() || state.openChatPendingQuestionPrompt) return true;
+  return false;
+}
+
+function openChatCanDirectDispatchAssistAnswer(prompt = '', answer = null) {
+  if (!answer || chatAnswerKind(answer) !== 'assist') return false;
+  if (!isOpenChatExplicitDispatchRequest(prompt)) return false;
+  if (openChatAnswerMustPauseForSendOrder(prompt, answer)) return false;
+  // A message that creates or updates a brief must stop at review. Direct dispatch
+  // is only allowed for a separate confirmation against an already prepared brief.
+  if (!isStructuredOrderBrief(lastOpenChatPreparedBrief())) return false;
+  return isOpenChatRunConfirmation(prompt) || openChatLooksConfirmOrderChoice(prompt);
+}
+
 function isOpenChatGenericProceed(prompt = '') {
   const text = String(prompt || '').replace(/\s+/g, ' ').trim();
   return /^(はい|はいお願いします|お願いします|お願い|進めて|進めてください|やって|やってください|頼む|go|yes|yep|ok|okay|please|proceed)$/i.test(text);
@@ -6529,6 +7224,12 @@ function buildOpenChatIdeaOperatorFollowup(prompt = '', inputCounts = {}) {
     kind: 'clarify',
     tone: 'info',
     suppressTrio: true,
+    clearLeaderIntake: true,
+    clearPendingQuestion: true,
+    clearVagueChoice: true,
+    clearNaturalChoice: true,
+    clearIntentShift: true,
+    clearClarifyOptions: true,
     body: ja
       ? [
         'Bさんとして優先順位づけします。まず見る軸は3つです。',
@@ -6565,7 +7266,7 @@ function isOpenChatBenignNegativeReply(prompt = '') {
 }
 
 function isOpenChatPausePrompt(prompt = '') {
-  const text = String(prompt || '').replace(/\s+/g, ' ').trim();
+  const text = String(prompt || '').replace(/\s+/g, ' ').trim().replace(/[?？!！。.,、\s]+$/g, '');
   if (!text) return false;
   return /^(一旦保留|いったん保留|保留|あとで|後で|また後で|ストップ|止めて|中断|キャンセル|やめる|やっぱやめる|今はやめる|pause|hold|stop|later|not now|cancel)$/i.test(text)
     || /^(いや|いえ)[、。,.!\s-]*(?:一旦保留|いったん保留|保留|あとで|後で|ストップ|止めて|中断|キャンセル|やめる|今はやめる|pause|hold|stop|later|not now|cancel)$/i.test(text);
@@ -7314,7 +8015,7 @@ function openChatImplicitLeaderIntakeTask(prompt = '') {
   const inferred = inferClientTaskSequence('', text)[0] || '';
   if (OPEN_CHAT_LEADER_INTAKE_TASKS.has(inferred)) return inferred;
   if (isFreeWebGrowthIntentText('', text)) return 'cmo_leader';
-  if (/(?:売上|収益|集客|流入|登録|会員登録|サインアップ|ユーザー獲得|顧客獲得|CVR|コンバージョン|反応|認知|問い合わせ|購入|継続|解約|マーケ|マーケティング|ローンチ|投稿|拡散|sales|revenue|growth|traffic|acquisition|signups|customers|conversion|retention|churn|marketing|launch|distribution)/i.test(text)) {
+  if (/(?:売上|収益|集客|流入|登録|会員登録|サインアップ|ユーザー獲得|顧客獲得|CVR|コンバージョン|反応|認知|問い合わせ|購入|継続|解約|マーケ|マーケティング|ローンチ|投稿|拡散|sales|revenue|growth|traffic|acquisition|aquisition|signups|customers|cutomers|conversion|retention|churn|marketing|launch|distribution|get\s+new\s+(?:customers|cutomers|users|signups|leads))/i.test(text)) {
     return 'cmo_leader';
   }
   return '';
@@ -7330,7 +8031,7 @@ function openChatLeaderIntakeSignals(prompt = '', inputCounts = {}) {
     audience: /(誰向け|対象|顧客|ユーザー|ペルソナ|ICP|業界|開発者|創業者|法人|個人|audience|customer|user|persona|segment|icp|developer|founder|buyer|b2b|b2c)/i.test(text),
     currentState: /(現状|今|現在|月間|PV|登録|売上|CVR|流入|チャネル|使っている|課題|数字|baseline|current|traffic|signup|revenue|conversion|funnel|channel|metric|analytics)/i.test(text),
     constraints: /(制約|予算|広告費|無料|なし|使わない|期間|地域|日本|英語|NG|避け|X|Twitter|Reddit|Indie Hackers|SEO|Product Hunt|budget|no ads|without ads|free|constraint|region|deadline|channel|avoid)/i.test(text),
-    deliverable: /(納品|出力|形式|レポート|表|計画|プラン|施策|アクション|投稿|媒体|コピー|KPI|チェックリスト|deliver|output|report|table|plan|copy|asset|checklist|brief|strategy|roadmap|action|channel)/i.test(text),
+    deliverable: /(納品|出力|形式|レポート|表|計画|プラン|施策|アクション|実行|投稿|媒体|コピー|KPI|チェックリスト|deliver|output|report|table|plan|copy|asset|checklist|brief|strategy|roadmap|action|execution|channel)/i.test(text),
     system: hasAttachment || /(リポジトリ|repo|GitHub|コード|システム|アプリ|API|DB|データベース|設計|実装|バグ|エラー|テスト|repository|codebase|system|api|database|architecture|bug|error|test|deploy)/i.test(text),
     legalScope: /(規約|プライバシー|特商法|返金|課金|表示|契約|個人情報|同意|免責|法域|日本法|terms|privacy|refund|billing|contract|compliance|jurisdiction|policy|disclaimer)/i.test(text),
     numbers: /(円|ドル|%|％|月額|単価|原価|粗利|利益|売上|費用|LTV|CAC|ARPU|MRR|ARR|churn|margin|cost|price|revenue|profit|unit economics|\d)/i.test(text),
@@ -7466,7 +8167,7 @@ function openChatCanonicalOrderTaskType(taskType = '', context = '') {
   const leaderTask = openChatNormalizeLeaderIntakeTask(token);
   if (leaderTask) return leaderTask;
   if (/(?:\bcmo\b|chief marketing|marketing leader|マーケ責任者|cmo的|マーケ部長|マーケティング責任者)/i.test(matched)) return 'cmo_leader';
-  if (/(?:売上|収益|集客|流入|登録|会員登録|サインアップ|ユーザー獲得|顧客獲得|CVR|コンバージョン|反応|認知|問い合わせ|購入|継続|解約|マーケ|マーケティング|ローンチ|投稿|拡散|sales|revenue|growth|traffic|acquisition|signups|customers|conversion|retention|churn|marketing|launch|distribution)/i.test(matched)) {
+  if (/(?:売上|収益|集客|流入|登録|会員登録|サインアップ|ユーザー獲得|顧客獲得|CVR|コンバージョン|反応|認知|問い合わせ|購入|継続|解約|マーケ|マーケティング|ローンチ|投稿|拡散|sales|revenue|growth|traffic|acquisition|aquisition|signups|customers|cutomers|conversion|retention|churn|marketing|launch|distribution|get\s+new\s+(?:customers|cutomers|users|signups|leads))/i.test(matched)) {
     return 'cmo_leader';
   }
   return '';
@@ -7597,11 +8298,58 @@ function buildOpenChatLeaderIntakeClarifyAnswer(taskType = 'cmo_leader', prompt 
   };
 }
 
+function openChatLooksLeaderIntakePromptBody(body = '') {
+  const text = String(body || '').trim();
+  if (!text) return false;
+  return /(回答をもらったら、同じ質問は繰り返さず|After that, I will not repeat the same questions|I will not repeat the whole intake|同じ質問は繰り返しません)/i.test(text)
+    && /(SEND ORDER|チームリーダー|Team Leader|目的や商材内容|objective and product context|足りないところだけ確認します|only ask for what is still missing)/i.test(text);
+}
+
+function openChatLeaderIntakeTaskFromPromptBody(body = '', original = '') {
+  const inferred = openChatNormalizeLeaderIntakeTask(openChatImplicitLeaderIntakeTask(original))
+    || openChatNormalizeLeaderIntakeTask(inferClientTaskSequence('', original)[0]);
+  if (inferred) return inferred;
+  const text = String(body || '');
+  if (/(この調査で最終的に何を判断|What decision should this research support)/i.test(text)) return 'research_team_leader';
+  if (/(対象のシステム、リポジトリ|What system, repository)/i.test(text)) return 'build_team_leader';
+  if (/(対象プロダクトや機能|What product or feature)/i.test(text)) return 'cpo_leader';
+  if (/(商売モデル、商品、価格|business model, product, price)/i.test(text)) return 'cfo_leader';
+  if (/(確認したい法務領域|legal area should be reviewed)/i.test(text)) return 'legal_leader';
+  if (/(商材・サービス内容|target customer|誰向けに売りたい|growth plan|集客プラン)/i.test(text)) return 'cmo_leader';
+  return '';
+}
+
+function recoverOpenChatLeaderIntakeContextFromMessages() {
+  const messages = Array.isArray(state.orderChatMessages) ? state.orderChatMessages : [];
+  const recent = messages.slice(-10);
+  for (let index = recent.length - 1; index >= 0; index -= 1) {
+    const message = recent[index];
+    if (message?.role !== 'agent') continue;
+    const body = String(message.fullBody || message.body || '').trim();
+    if (!openChatLooksLeaderIntakePromptBody(body)) continue;
+    const priorUsers = recent
+      .slice(0, index)
+      .filter((item) => item?.role === 'user')
+      .map((item) => String(item.fullBody || item.body || '').trim())
+      .filter(Boolean);
+    const original = priorUsers.find((item) => openChatImplicitLeaderIntakeTask(item))
+      || priorUsers[0]
+      || openChatPreviousUserMessageBody();
+    const taskType = openChatLeaderIntakeTaskFromPromptBody(body, original);
+    if (original && taskType) return { prompt: original, taskType, recovered: true };
+  }
+  return null;
+}
+
 function openChatPendingLeaderIntakeContext() {
   const prompt = String(state.openChatLeaderIntakePrompt || '').trim();
   const taskType = String(state.openChatLeaderIntakeTask || '').trim();
-  if (!prompt || !taskType) return null;
-  return { prompt, taskType };
+  if (prompt && taskType) return { prompt, taskType };
+  const recovered = recoverOpenChatLeaderIntakeContextFromMessages();
+  if (!recovered) return null;
+  state.openChatLeaderIntakePrompt = compactChatText(recovered.prompt, 2000);
+  state.openChatLeaderIntakeTask = compactChatText(recovered.taskType, 120);
+  return recovered;
 }
 
 function combinedLeaderIntakePrompt(original = '', answer = '') {
@@ -7671,12 +8419,31 @@ function buildOpenChatLeaderOrderBrief(taskType = 'cmo_leader', original = '', a
   ].join('\n');
 }
 
+function buildOpenChatRecoveredLeaderIntakeAnswer(prompt = '', inputCounts = {}) {
+  const answer = String(prompt || '').trim();
+  if (!openChatLooksNumberedLeaderIntakeAnswer(answer)) return null;
+  const previousAgentBody = openChatPreviousAgentMessageBody();
+  if (!openChatLooksLeaderIntakePromptBody(previousAgentBody)) return null;
+  const recovered = recoverOpenChatLeaderIntakeContextFromMessages();
+  const original = String(recovered?.prompt || openChatPreviousUserMessageBody() || '').trim();
+  const taskType = String(
+    recovered?.taskType
+      || openChatLeaderIntakeTaskFromPromptBody(previousAgentBody, original)
+      || openChatNormalizeLeaderIntakeTask(openChatImplicitLeaderIntakeTask(`${original}\n${answer}`))
+      || 'cmo_leader'
+  ).trim();
+  if (!original || !taskType) return null;
+  state.openChatLeaderIntakePrompt = compactChatText(original, 2000);
+  state.openChatLeaderIntakeTask = compactChatText(taskType, 120);
+  return buildOpenChatLeaderIntakeFollowupAnswer(answer, inputCounts);
+}
+
 function openChatNormalizeDispatchTask(taskType = '', original = '', answer = '') {
   const task = openChatCanonicalOrderTaskType(taskType, `${original}\n${answer}`) || String(taskType || '').toLowerCase();
   const text = openChatIntentMatchText(`${original}\n${answer}`);
   if (isFreeWebGrowthIntentText(task, text)) return 'cmo_leader';
   if (task === 'growth' || task === 'marketing' || task === 'cmo' || task === 'cmo_leader') return 'cmo_leader';
-  if (/(集客|売上|顧客|ユーザー|マーケ|ローンチ|投稿|媒体|growth|marketing|acquisition|sales|customers|users|launch|distribution)/i.test(text)) {
+  if (/(集客|売上|顧客|ユーザー|マーケ|ローンチ|投稿|媒体|growth|marketing|acquisition|aquisition|sales|customers|cutomers|users|launch|distribution|get\s+new\s+(?:customers|cutomers|users|signups|leads))/i.test(text)) {
     return 'cmo_leader';
   }
   return task || openChatCanonicalOrderTaskType(inferClientTaskSequence('', `${original}\n${answer}`)[0], `${original}\n${answer}`) || currentRoutingTask() || 'research';
@@ -7688,6 +8455,15 @@ function openChatLooksOrderIntentOnly(answer = '') {
   if (/https?:\/\//i.test(text)) return false;
   if (/(対象|ユーザー|顧客|商材|商品|サービス|URL|広告費|予算|媒体|投稿|納品|成果物|persona|audience|customer|product|service|budget|channel|deliverable)/i.test(text)) return false;
   return /(発注|注文|依頼|お願い|頼みたい|やって|進めて|実行|対応|order|send order|dispatch|execute|proceed)/i.test(text);
+}
+
+function openChatLooksNumberedLeaderIntakeAnswer(prompt = '') {
+  const raw = String(prompt || '').trim();
+  if (!raw || raw.length > 2400) return false;
+  const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+  const numbered = lines.filter((line) => /^(?:[1-5１-５][\).．、:：]|Q?[1-5１-５][:：]|A[1-5１-５][:：])\s*\S+/i.test(line)).length;
+  if (numbered < 2 && !/^(?:1|１)[\).．、:：]/.test(raw)) return false;
+  return /(https?:\/\/|商材|商品|サービス|プロダクト|対象|ユーザー|顧客|ICP|目的|登録|会員|広告費|予算|SEO|X|Twitter|Reddit|媒体|投稿|納品|プラン|アクション|product|service|customer|audience|objective|signup|budget|channel|deliverable|plan|action)/i.test(raw);
 }
 
 function openChatLeaderHasMinimumRouteContext(taskType = '', prompt = '', inputCounts = {}) {
@@ -7771,9 +8547,7 @@ function buildOpenChatLeaderIntakeFollowupAnswer(prompt = '', inputCounts = {}) 
   const pending = openChatPendingLeaderIntakeContext();
   const answer = String(prompt || '').trim();
   if (!pending || !answer || isStructuredOrderBrief(answer)) return null;
-  const questionLikeAnswer = /[?？]/.test(answer)
-    || /^(?:what|how|why|can|do|does|is|are|where|when)\b/i.test(answer)
-    || /(ですか|ますか|教えて|とは|料金|課金|ログイン|登録|使い方)/i.test(answer);
+  const questionLikeAnswer = openChatLooksStandaloneQuestionText(answer);
   const asksProductQuestion = openChatProductQuestionContext(answer)
     && questionLikeAnswer;
   if (openChatLooksGreetingPrompt(answer) || openChatLooksLowInfoTestPrompt(answer) || asksProductQuestion) return null;
@@ -7856,6 +8630,19 @@ function buildOpenChatLeaderIntakeFollowupAnswer(prompt = '', inputCounts = {}) 
 function buildOpenChatLeaderIntakeAnswer(prompt = '', inputCounts = {}) {
   const text = String(prompt || '').trim();
   if (!text || isStructuredOrderBrief(text)) return null;
+  if (openChatLooksNumberedLeaderIntakeAnswer(text) && openChatLooksLeaderIntakePromptBody(openChatPreviousAgentMessageBody())) {
+    const original = openChatPreviousUserMessageBody() || recoverOpenChatLeaderIntakeContextFromMessages()?.prompt || '';
+    const taskType = openChatLeaderIntakeTaskFromPromptBody(openChatPreviousAgentMessageBody(), original)
+      || openChatNormalizeLeaderIntakeTask(openChatImplicitLeaderIntakeTask(`${original}\n${text}`))
+      || 'cmo_leader';
+    if (original && taskType) {
+      state.openChatLeaderIntakePrompt = compactChatText(original, 2000);
+      state.openChatLeaderIntakeTask = compactChatText(taskType, 120);
+      const followup = buildOpenChatLeaderIntakeFollowupAnswer(text, inputCounts);
+      if (followup) return followup;
+    }
+    return null;
+  }
   const taskType = openChatImplicitLeaderIntakeTask(text) || inferClientTaskSequence('', text)[0] || currentRoutingTask() || 'research';
   const missing = openChatMissingLeaderIntakeFields(taskType, text, inputCounts);
   if (!missing.length) return null;
@@ -7906,9 +8693,7 @@ function buildOpenChatPendingQuestionFollowupAnswer(prompt = '', inputCounts = {
   if (!pending || !answer || isStructuredOrderBrief(answer)) return null;
   if (state.openChatLeaderIntakePrompt || state.openChatVagueChoicePrompt || state.openChatNaturalChoiceIntent || state.openChatIntentShiftPrompt || state.openChatIdeaBacklogPrompt) return null;
   if (/^[0-9０-９]+$/.test(answer) && Array.isArray(state.openChatClarifyOptions) && state.openChatClarifyOptions.length) return null;
-  const questionLikeAnswer = /[?？]/.test(answer)
-    || /^(?:what|how|why|can|do|does|is|are|where|when)\b/i.test(answer)
-    || /(ですか|ますか|教えて|とは|料金|課金|ログイン|登録|使い方)/i.test(answer);
+  const questionLikeAnswer = openChatLooksStandaloneQuestionText(answer);
   const asksStandaloneProductQuestion = openChatProductQuestionContext(answer)
     && questionLikeAnswer;
   if (openChatLooksGreetingPrompt(answer) || openChatLooksLowInfoTestPrompt(answer) || asksStandaloneProductQuestion) return null;
@@ -8650,15 +9435,24 @@ function buildOpenChatClarifyModeAnswer(prompt = '', inputCounts = {}, options =
   };
 }
 
+function openChatLooksStandaloneQuestionText(prompt = '') {
+  const raw = String(prompt || '').trim();
+  const text = openChatIntentMatchText(raw);
+  if (!raw) return false;
+  return /[?？]/.test(raw)
+    || /^(?:what|how|why|can|do|does|is|are|where|when)\b/i.test(raw)
+    || /(ですか|ますか|何|どう|なに|できますか|できる[?？か]|教えて|とは|使い方)/.test(raw)
+    || /(?:料金|課金|支払|ログイン|登録).{0,18}(?:ですか|ますか|でき|教えて|方法|やり方|どう|何|なに|\?|\？)/i.test(raw)
+    || /\b(?:help|start|confused|what|how)\b/i.test(text);
+}
+
 function openChatProductQuestionContext(prompt = '') {
   const raw = String(prompt || '').trim();
   const text = openChatIntentMatchText(raw);
   if (!text) return false;
   const productContext = /\b(cait|ca\s*it|aiagent2|ai agent2|ai agent marketplace|aim|agent marketplace|work chat|order|delivery|deposit|billing|payment|stripe|github|google|cli|api|payout|provider|manifest|verify|verification)\b/i.test(text)
     || /(CAIt|aiagent2|ai agent marketplace|エージェントマーケット|ワークチャット|オーダー|注文|納品|デポジット|残高|料金|課金|支払|ログイン|登録|使い方|github|google|stripe|api|cli|入金|出金|受け取り|マニフェスト|ベリファイ|検証)/i.test(text);
-  const questionShape = /[?？]|\b(what|how|why|can|do|does|is|are|where|when)\b/i.test(raw)
-    || /(ですか|ますか|何|どう|なに|できる|教えて|とは|使い方)/.test(raw)
-    || /\b(help|start|confused|what|how)\b/i.test(text);
+  const questionShape = openChatLooksStandaloneQuestionText(raw);
   return productContext && questionShape;
 }
 
@@ -8986,6 +9780,7 @@ function openChatDefaultDecisionOptions(ja = false) {
 
 function openChatComposerDecisionOptions() {
   if (state.openChatDecisionSuppressed) return [];
+  if (currentOpenChatSessionHasLinkedWork()) return [];
   const preparedBrief = lastOpenChatPreparedBrief();
   if (isOpenChatDecisionSuppressedForBrief(preparedBrief)) return [];
   const rawOptions = Array.isArray(state.openChatClarifyOptions) ? state.openChatClarifyOptions : [];
@@ -9068,14 +9863,16 @@ function buildOpenChatPreorderConfirmAnswer(original = '', prompt = '', inputCou
 function buildOpenChatConfirmedDispatchDraft(original = '', inputCounts = {}) {
   const seed = openChatDecisionSeedContext(original);
   const source = String(seed.prompt || original || '').trim();
-  const taskType = openChatPreserveSeedTaskType(source, seed.taskType);
+  const confirmationBody = latestOpenChatAgentConfirmationBody();
+  const taskType = openChatPreserveSeedTaskType([source, confirmationBody].filter(Boolean).join('\n'), seed.taskType);
   const ja = looksJapanese(source) || looksJapanese(original);
   const confirmationContext = ja
     ? 'ユーザーはこの方向で発注すると確認しました。会話内で不足する情報は同じ質問を繰り返さず、納品内で仮定として明記してください。'
     : 'The user confirmed this should become an order. Do not repeat the same questions; if details are missing, state assumptions in the delivery.';
+  const clarificationContext = [confirmationContext, confirmationBody].filter(Boolean).join('\n\n');
   const brief = isStructuredOrderBrief(source)
     ? rewriteStructuredBriefTaskType(source, taskType)
-    : buildOpenChatDispatchBriefFromPendingAnswer(source, confirmationContext, taskType, inputCounts);
+    : buildOpenChatDispatchBriefFromPendingAnswer(source, clarificationContext, taskType, inputCounts);
   const finalTaskType = openChatPreserveSeedTaskType(brief, structuredOrderBriefParts(brief).taskType || taskType);
   return {
     prompt: isStructuredOrderBrief(brief) ? rewriteStructuredBriefTaskType(brief, finalTaskType) : brief,
@@ -10739,6 +11536,123 @@ function openChatLooksHighStakesAdvice(prompt = '') {
   return /(should i (?:buy|sell|invest)|investment advice|legal advice|medical advice|diagnose me|treatment plan|lawsuit strategy|tax filing advice|買うべき|売るべき|投資判断|投資助言|法律相談|訴訟戦略|税務申告|医療診断|診断して|治療方針|薬を飲むべき)/i.test(text);
 }
 
+function openChatLibraryCommandScope(prompt = '') {
+  const text = String(prompt || '').trim();
+  const lower = text.toLowerCase();
+  if (/^\/(?:history|tools|library)\b/.test(lower)) return 'all';
+  if (/(最近|過去|使った|利用した).*(アプリ).*(ai\s*agent|aiagent|エージェント).*(一覧|履歴|呼び出|見せて|表示)/i.test(text)) return 'all';
+  if (/(最近|過去|使った|利用した).*(ai\s*agent|aiagent|エージェント).*(アプリ).*(一覧|履歴|呼び出|見せて|表示)/i.test(text)) return 'all';
+  if (/^\/apps\b/.test(lower) || /^(最近|過去|使った|利用した)?.*(アプリ).*(一覧|履歴|呼び出|見せて|表示)/.test(text)) return 'apps';
+  if (/^\/agents\b/.test(lower) || /^\/aiagents\b/.test(lower) || /^(最近|過去|使った|利用した)?.*(ai\s*agent|aiagent|エージェント).*(一覧|履歴|呼び出|見せて|表示)/i.test(text)) return 'agents';
+  if (/(最近|過去|使った|利用した).*(アプリ|ai\s*agent|aiagent|エージェント).*(一覧|履歴|呼び出|見せて|表示)/i.test(text)) return 'all';
+  return '';
+}
+
+function openChatTaskLabel(taskType = '') {
+  const task = String(taskType || '').trim().toLowerCase();
+  const labels = {
+    cmo_leader: 'CMO Leader',
+    research_team_leader: 'Research Team Leader',
+    build_team_leader: 'Build Team Leader',
+    research: 'Research Agent',
+    teardown: 'Competitor Teardown Agent',
+    data_analysis: 'Data Analysis Agent',
+    growth: 'Growth Operator Agent',
+    media_planner: 'Media Planner Agent',
+    writing: 'Writing Agent',
+    list_creator: 'List Creator Agent',
+    landing: 'Landing Agent',
+    seo_gap: 'SEO Agent',
+    acquisition_automation: 'Acquisition Automation Agent',
+    directory_submission: 'Directory Submission Agent',
+    x_post: 'X Ops Connector Agent'
+  };
+  if (labels[task]) return labels[task];
+  return task ? task.split(/[_\s-]+/).filter(Boolean).map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`).join(' ') : 'AI Agent';
+}
+
+function openChatRecentAgentLines(limit = 8) {
+  const jobs = Array.isArray(state.snapshot?.jobs) ? state.snapshot.jobs : [];
+  const rows = [];
+  const seen = new Set();
+  const remember = (taskType = '', agentName = '', status = '', source = '') => {
+    const task = String(taskType || '').trim().toLowerCase();
+    if (!task) return;
+    const key = `${task}:${String(agentName || '').trim().toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    rows.push([
+      `- ${agentName || openChatTaskLabel(task)}`,
+      `task=${task}`,
+      status ? `status=${status}` : '',
+      source ? `source=${source}` : ''
+    ].filter(Boolean).join(' / '));
+  };
+  [...jobs]
+    .sort((left, right) => String(right.createdAt || right.created_at || '').localeCompare(String(left.createdAt || left.created_at || '')))
+    .forEach((job) => {
+      remember(job.workflow?.plannedTasks?.[0] || job.taskType || job.task_type, '', job.status || '', 'order');
+      (Array.isArray(job.workflow?.childRuns) ? job.workflow.childRuns : []).forEach((child) => {
+        remember(child.taskType || child.dispatchTaskType, child.agentName || '', child.status || '', 'workflow');
+      });
+    });
+  if (!rows.length) {
+    const agents = Array.isArray(state.snapshot?.agents) ? state.snapshot.agents : [];
+    agents.slice(0, limit).forEach((agent) => {
+      const task = Array.isArray(agent.taskTypes) ? agent.taskTypes[0] : '';
+      remember(task, agent.name || '', agent.verificationStatus || '', 'catalog');
+    });
+  }
+  return rows.slice(0, limit);
+}
+
+function buildOpenChatReusableToolsAnswer(prompt = '') {
+  const scope = openChatLibraryCommandScope(prompt);
+  if (!scope) return null;
+  const ja = looksJapanese(prompt);
+  const showApps = scope === 'all' || scope === 'apps';
+  const showAgents = scope === 'all' || scope === 'agents';
+  const appLines = [
+    '- X Client Ops / app=x-client-ops / action=X post draft, strategy handoff, approval queue / url=https://x.niche-s.com/'
+  ];
+  const agentLines = openChatRecentAgentLines();
+  return {
+    kind: 'command',
+    tone: 'info',
+    patternId: 'pattern_app_agent_library',
+    suppressTrio: true,
+    body: ja
+      ? [
+          'チャットから再利用できるアプリ/AIエージェント候補です。',
+          '',
+          showApps ? 'Apps:' : '',
+          ...(showApps ? appLines : []),
+          showAgents ? '' : '',
+          showAgents ? 'AI Agents:' : '',
+          ...(showAgents ? (agentLines.length ? agentLines : ['- まだ利用履歴がありません。注文または納品取得後にここへ出ます。']) : []),
+          '',
+          '使い方: /apps, /agents, /history。新チャットではカードから直接 Open / Use again できます。旧Work Chatでは下のボタンからWORK履歴またはAGENTSへ移動してください。'
+        ].filter(Boolean).join('\n')
+      : [
+          'Reusable app / AI agent candidates from this chat.',
+          '',
+          showApps ? 'Apps:' : '',
+          ...(showApps ? appLines : []),
+          showAgents ? '' : '',
+          showAgents ? 'AI Agents:' : '',
+          ...(showAgents ? (agentLines.length ? agentLines : ['- No usage history yet. It appears after orders or delivery sync.']) : []),
+          '',
+          'Use /apps, /agents, or /history. The new Chat UX shows direct Open / Use again cards; this Work Chat links you to WORK history or AGENTS.'
+        ].filter(Boolean).join('\n'),
+    actions: [
+      { action: 'open_work_tab', label: ja ? 'WORK履歴を開く' : 'OPEN WORK' },
+      { action: 'browse_agents', label: ja ? 'AGENTSを開く' : 'OPEN AGENTS' },
+      { action: 'connect_x', label: ja ? 'X連携' : 'CONNECT X' }
+    ],
+    status: 'Reusable app and agent library shown.\n\nNo order was created and no billing occurred.'
+  };
+}
+
 function openChatLooksShortPromptSource(prompt = '') {
   const text = String(prompt || '').trim();
   if (!text || isStructuredOrderBrief(text)) return false;
@@ -11061,7 +11975,7 @@ function buildOpenChatPatternGuardAnswer(prompt = '', inputCounts = {}, options 
     );
   }
 
-  if (/(can you|can an agent|can this service|is it possible|do you support|できる[？?]?|できますか|対応できますか|使えますか|可能ですか)/i.test(compact)) {
+  if (/(can you|can an agent|can this service|is it possible|do you support|できる[？?]|できますか|対応できますか|使えますか|可能ですか)/i.test(compact)) {
     const topic = compactChatText(compact.replace(/^(can you|can an agent|can this service|is it possible|do you support|これ|これって|これは|対応|できますか|できる|可能ですか)[\s、。?？]*/i, ''), 120);
     return openChatPatternAnswer(
       'pattern_capability_question',
@@ -11690,16 +12604,20 @@ function quickOrderChatAnswer(prompt = '', inputCounts = {}) {
   if (longPromptAnswer) return longPromptAnswer;
   if (isStructuredOrderBrief(text)) return null;
   const compact = text.replace(/\s+/g, ' ').trim();
+  const reusableToolsAnswer = buildOpenChatReusableToolsAnswer(compact);
+  if (reusableToolsAnswer) return reusableToolsAnswer;
+  const recoveredLeaderIntakeAnswer = buildOpenChatRecoveredLeaderIntakeAnswer(compact, inputCounts);
+  if (recoveredLeaderIntakeAnswer) return recoveredLeaderIntakeAnswer;
+  const leaderIntakeFollowupAnswer = buildOpenChatLeaderIntakeFollowupAnswer(compact, inputCounts);
+  if (leaderIntakeFollowupAnswer) return leaderIntakeFollowupAnswer;
+  const pendingQuestionFollowupAnswer = buildOpenChatPendingQuestionFollowupAnswer(compact, inputCounts);
+  if (pendingQuestionFollowupAnswer) return pendingQuestionFollowupAnswer;
   const precommandPatternAnswer = buildOpenChatPatternGuardAnswer(compact, inputCounts, { phase: 'precommand' });
   if (precommandPatternAnswer) return precommandPatternAnswer;
   const lowInfoTestAnswer = buildOpenChatLowInfoTestAnswer(compact);
   if (lowInfoTestAnswer) return lowInfoTestAnswer;
   const greetingAnswer = buildOpenChatGreetingAnswer(compact);
   if (greetingAnswer) return greetingAnswer;
-  const leaderIntakeFollowupAnswer = buildOpenChatLeaderIntakeFollowupAnswer(compact, inputCounts);
-  if (leaderIntakeFollowupAnswer) return leaderIntakeFollowupAnswer;
-  const pendingQuestionFollowupAnswer = buildOpenChatPendingQuestionFollowupAnswer(compact, inputCounts);
-  if (pendingQuestionFollowupAnswer) return pendingQuestionFollowupAnswer;
   const intentShiftFollowup = buildOpenChatIntentShiftFollowup(compact, inputCounts);
   if (intentShiftFollowup) return intentShiftFollowup;
   const ideaOperatorFollowup = buildOpenChatIdeaOperatorFollowup(compact, inputCounts);
@@ -11760,7 +12678,7 @@ function quickOrderChatAnswer(prompt = '', inputCounts = {}) {
   if (compact.length > 260) return null;
   const ja = looksJapanese(compact);
   const matchText = openChatIntentMatchText(compact);
-  const hasQuestionShape = /[?？]|\b(what|how|why|can|do|does|is|are|where|when)\b/i.test(compact) || /(ですか|ますか|何|どう|なに|できる|教えて|とは|料金|課金|支払|ログイン|登録|使い方)/.test(compact);
+  const hasQuestionShape = openChatLooksStandaloneQuestionText(compact);
   const productContext = /\b(cait|ca\s*it|aiagent2|ai agent2|ai agent marketplace|aim|agent|order|work|delivery|deposit|billing|payment|stripe|github|google|cli|api|payout|provider|manifest|verify|verification)\b/i.test(matchText)
     || /(CAIt|aiagent2|ai agent marketplace|エージェント|オーダー|注文|ワーク|納品|デポジット|残高|料金|課金|支払|ログイン|登録|使い方|できること|これは何|github|google|stripe|api|cli|入金|出金|受け取り|マニフェスト|ベリファイ|検証)/i.test(matchText);
 
@@ -11820,7 +12738,7 @@ function quickOrderChatAnswer(prompt = '', inputCounts = {}) {
 function openChatHasActiveLocalFollowupState(prompt = '') {
   const text = String(prompt || '').replace(/\s+/g, ' ').trim();
   if (!text) return false;
-  if (state.openChatLeaderIntakePrompt || state.openChatPendingQuestionPrompt || state.openChatIntentShiftPrompt || state.openChatIdeaBacklogPrompt) return true;
+  if (openChatPendingLeaderIntakeContext() || state.openChatPendingQuestionPrompt || state.openChatIntentShiftPrompt || state.openChatIdeaBacklogPrompt) return true;
   if (state.openChatVagueChoicePrompt || state.openChatNaturalChoiceIntent) return true;
   if (/^[0-9A-Da-d]$/.test(openChatChoiceReplyToken(text)) && Array.isArray(state.openChatClarifyOptions) && state.openChatClarifyOptions.length) return true;
   if (lastOpenChatPreparedBrief() && (isOpenChatRunConfirmation(text) || openChatFollowupMode(text) || isOpenChatGenericProceed(text))) return true;
@@ -11836,16 +12754,22 @@ function buildOpenChatLocalPriorityAnswer(prompt = '', inputCounts = {}) {
   if (longPromptAnswer) return longPromptAnswer;
   if (isStructuredOrderBrief(text)) return null;
   const compact = text.replace(/\s+/g, ' ').trim();
+  const pauseAnswer = buildOpenChatPauseAnswer(compact);
+  if (pauseAnswer) return pauseAnswer;
+  const statusAnswer = buildOpenChatStatusAnswer(compact);
+  if (statusAnswer) return statusAnswer;
+  const recoveredLeaderIntakeAnswer = buildOpenChatRecoveredLeaderIntakeAnswer(compact, inputCounts);
+  if (recoveredLeaderIntakeAnswer) return recoveredLeaderIntakeAnswer;
+  const leaderIntakeFollowupAnswer = buildOpenChatLeaderIntakeFollowupAnswer(compact, inputCounts);
+  if (leaderIntakeFollowupAnswer) return leaderIntakeFollowupAnswer;
+  const pendingQuestionFollowupAnswer = buildOpenChatPendingQuestionFollowupAnswer(compact, inputCounts);
+  if (pendingQuestionFollowupAnswer) return pendingQuestionFollowupAnswer;
   const precommandPatternAnswer = buildOpenChatPatternGuardAnswer(compact, inputCounts, { phase: 'precommand' });
   if (precommandPatternAnswer) return precommandPatternAnswer;
   const lowInfoTestAnswer = buildOpenChatLowInfoTestAnswer(compact);
   if (lowInfoTestAnswer) return lowInfoTestAnswer;
   const greetingAnswer = buildOpenChatGreetingAnswer(compact);
   if (greetingAnswer) return greetingAnswer;
-  const leaderIntakeFollowupAnswer = buildOpenChatLeaderIntakeFollowupAnswer(compact, inputCounts);
-  if (leaderIntakeFollowupAnswer) return leaderIntakeFollowupAnswer;
-  const pendingQuestionFollowupAnswer = buildOpenChatPendingQuestionFollowupAnswer(compact, inputCounts);
-  if (pendingQuestionFollowupAnswer) return pendingQuestionFollowupAnswer;
   const intentShiftFollowup = buildOpenChatIntentShiftFollowup(compact, inputCounts);
   if (intentShiftFollowup) return intentShiftFollowup;
   const ideaOperatorFollowup = buildOpenChatIdeaOperatorFollowup(compact, inputCounts);
@@ -11873,14 +12797,22 @@ function buildOpenChatPreLlmGuardAnswer(prompt = '', inputCounts = {}) {
   const longPromptAnswer = buildOpenChatLongPromptGuardAnswer(text, inputCounts);
   if (longPromptAnswer) return longPromptAnswer;
   const compact = text.replace(/\s+/g, ' ').trim();
+  const pauseAnswer = buildOpenChatPauseAnswer(compact);
+  if (pauseAnswer) return pauseAnswer;
+  const statusAnswer = buildOpenChatStatusAnswer(compact);
+  if (statusAnswer) return statusAnswer;
+  const recoveredLeaderIntakeAnswer = buildOpenChatRecoveredLeaderIntakeAnswer(compact, inputCounts);
+  if (recoveredLeaderIntakeAnswer) return recoveredLeaderIntakeAnswer;
+  const leaderIntakeFollowupAnswer = buildOpenChatLeaderIntakeFollowupAnswer(compact, inputCounts);
+  if (leaderIntakeFollowupAnswer) return leaderIntakeFollowupAnswer;
+  const pendingQuestionFollowupAnswer = buildOpenChatPendingQuestionFollowupAnswer(compact, inputCounts);
+  if (pendingQuestionFollowupAnswer) return pendingQuestionFollowupAnswer;
   const precommandPatternAnswer = buildOpenChatPatternGuardAnswer(compact, inputCounts, { phase: 'precommand' });
   if (precommandPatternAnswer) return precommandPatternAnswer;
   const localPriorityAnswer = buildOpenChatLocalPriorityAnswer(compact, inputCounts);
   if (localPriorityAnswer) return localPriorityAnswer;
   const commandAnswer = buildOpenChatCommandAnswer(compact);
   if (commandAnswer) return commandAnswer;
-  const leaderIntakeFollowupAnswer = buildOpenChatLeaderIntakeFollowupAnswer(compact, inputCounts);
-  if (leaderIntakeFollowupAnswer) return leaderIntakeFollowupAnswer;
   const leaderIntakeAnswer = buildOpenChatLeaderIntakeAnswer(compact, inputCounts);
   if (leaderIntakeAnswer) return leaderIntakeAnswer;
   const naturalChoiceFollowup = buildOpenChatNaturalChoiceFollowup(compact, inputCounts);
@@ -12074,6 +13006,21 @@ function preorderIntentLlmAnswerFromResult(prompt = '', result = {}, fallbackAns
   const action = String(result.action || '').trim();
   const leaderGuard = openChatLlmLeaderIntakeGuardAnswer(prompt, result, fallbackAnswer);
   if (leaderGuard) return leaderGuard;
+  if (action === 'answer_in_chat') {
+    const chatAnswer = compactChatText(String(result.chat_answer || result.chatAnswer || result.summary || result.narrowing_question || ''), 1400);
+    return {
+      kind: 'quick',
+      tone: 'info',
+      patternId: 'pattern_openai_chat_answer',
+      responseSource: result.source === 'openai' ? 'openai' : (result.source || 'llm'),
+      llmProvider: result.source || 'openai',
+      suppressTrio: true,
+      body: chatAnswer || (ja
+        ? 'ここでは発注せず、チャットとして扱いました。続けて相談できます。'
+        : 'I treated this as chat, not an order. You can keep discussing it here.'),
+      status: 'Answered in chat with OpenAI.\n\nNo order was created and no billing occurred.'
+    };
+  }
   const previousBrief = lastOpenChatPreparedBrief();
   const orderContext = `${prompt}\n${rawBrief}\n${previousBrief}`;
   const rawTaskType = isStructuredOrderBrief(rawBrief)
@@ -12242,7 +13189,7 @@ async function buildOpenChatPreorderIntentLlmAnswer(prompt = '', inputCounts = {
         fallback_intent: fallbackAnswer?.naturalChoiceIntent || fallbackAnswer?.patternId || '',
         prepared_brief: options.preparedBrief || fallbackAnswer?.nextPrompt || lastOpenChatPreparedBrief() || '',
         conversation_context: openChatConversationContextForLlm(),
-        desired_output: 'If enough context exists, return a polished CAIt order brief in order_brief. Otherwise ask one clarifying question.',
+        desired_output: 'If this is not an order request, answer in chat with action=answer_in_chat. If enough context exists for an order, return a polished CAIt order brief in order_brief. Otherwise ask one clarifying question.',
         user_language: looksJapanese(prompt) ? 'Japanese' : 'English',
         input_counts: {
           url_count: Number(inputCounts.urlCount || 0),
@@ -12572,7 +13519,8 @@ function renderChatActions(actions = []) {
       action: String(action?.action || '').trim(),
       label: String(action?.label || '').trim(),
       agentId: String(action?.agentId || '').trim(),
-      connector: String(action?.connector || '').trim()
+      connector: String(action?.connector || '').trim(),
+      orderId: String(action?.orderId || '').trim()
     }))
     .filter((action) => action.action && action.label)
     .slice(0, 4);
@@ -12583,7 +13531,8 @@ function renderChatActions(actions = []) {
         <button class="mini-btn" type="button"
           data-chat-action="${escapeHtml(action.action)}"
           data-chat-agent-id="${escapeHtml(action.agentId)}"
-          data-chat-connector="${escapeHtml(action.connector)}">${escapeHtml(action.label)}</button>
+          data-chat-connector="${escapeHtml(action.connector)}"
+          data-chat-order-id="${escapeHtml(action.orderId)}">${escapeHtml(action.label)}</button>
       `).join('')}
     </div>
   `;
@@ -12662,6 +13611,34 @@ function catAvatarMarkup() {
   `;
 }
 
+function acceptanceCatMarkup() {
+  return `
+    <span class="acceptance-cait-icon b2-cat-avatar" aria-hidden="true">
+      <svg class="cat-pixel-svg acceptance-cait-svg" viewBox="0 0 272 224" focusable="false">
+        <rect class="cat-pixel cat-fur" x="24" y="56" width="32" height="32" />
+        <rect class="cat-pixel cat-fur" x="56" y="24" width="32" height="32" />
+        <rect class="cat-pixel cat-fur" x="88" y="56" width="96" height="32" />
+        <rect class="cat-pixel cat-fur" x="184" y="24" width="32" height="32" />
+        <rect class="cat-pixel cat-fur" x="216" y="56" width="32" height="32" />
+        <rect class="cat-pixel cat-fur" x="48" y="88" width="176" height="88" />
+        <rect class="cat-pixel cat-fur" x="64" y="176" width="144" height="16" />
+        <rect class="cat-pixel cat-muzzle" x="80" y="116" width="40" height="32" />
+        <rect class="cat-pixel cat-muzzle" x="152" y="116" width="40" height="32" />
+        <rect class="cat-pixel cat-ink" x="92" y="124" width="16" height="16" />
+        <rect class="cat-pixel cat-ink" x="164" y="124" width="16" height="16" />
+        <rect class="cat-pixel cat-ink" x="128" y="152" width="16" height="16" />
+        <rect class="cat-pixel cat-cheek" x="72" y="152" width="24" height="24" />
+        <rect class="cat-pixel cat-cheek" x="176" y="152" width="24" height="24" />
+        <rect class="cat-pixel cat-muzzle" x="104" y="176" width="64" height="16" />
+        <rect class="cat-pixel cat-ink" x="28" y="132" width="48" height="8" />
+        <rect class="cat-pixel cat-ink" x="196" y="132" width="48" height="8" />
+        <rect class="cat-pixel cat-ink" x="32" y="156" width="44" height="8" />
+        <rect class="cat-pixel cat-ink" x="196" y="156" width="44" height="8" />
+      </svg>
+    </span>
+  `;
+}
+
 function renderOrderProgressVisual(meta = {}, options = {}) {
   const ja = Boolean(options.ja);
   const states = Array.isArray(meta.states) ? meta.states : [];
@@ -12688,11 +13665,13 @@ function renderOrderProgressVisual(meta = {}, options = {}) {
       </div>
       <div class="order-acceptance-scene" aria-hidden="true">
         <div class="acceptance-cait">
-          <span class="acceptance-cait-face">CAIt</span>
+          ${acceptanceCatMarkup()}
           <span class="acceptance-cait-arm"></span>
         </div>
         <div class="acceptance-envelope">
+          <span class="acceptance-envelope-letter"></span>
           <span class="acceptance-envelope-flap"></span>
+          <span class="acceptance-envelope-stamp"></span>
         </div>
         <div class="acceptance-bot">
           <span class="acceptance-bot-head"></span>
@@ -12878,8 +13857,16 @@ function openChatConfirmationPauseBlock(brief = '', taskType = 'research', sourc
   ].join('\n');
 }
 
-function renderWorkChatThread() {
+function shouldStickWorkChatScrollToBottom(el = els.workChatThread) {
+  if (!el) return true;
+  const distanceFromBottom = Number(el.scrollHeight || 0) - Number(el.scrollTop || 0) - Number(el.clientHeight || 0);
+  return distanceFromBottom <= 96;
+}
+
+function renderWorkChatThread(options = {}) {
   if (!els.workChatThread) return;
+  const previousBottomOffset = Math.max(0, Number(els.workChatThread.scrollHeight || 0) - Number(els.workChatThread.scrollTop || 0));
+  const stickToBottom = options.forceScroll === true || shouldStickWorkChatScrollToBottom(els.workChatThread);
   const messages = [];
   const introTitle = formatWorkUiText(appSettingValue('work_chat_intro_title', APP_SETTING_DEFAULTS.work_chat_intro_title));
   const introBody = formatWorkUiText(appSettingValue('work_chat_intro_body', APP_SETTING_DEFAULTS.work_chat_intro_body));
@@ -12912,11 +13899,16 @@ function renderWorkChatThread() {
     button.onclick = () => runAction(button, async () => {
       await handleChatActionButton(button.dataset.chatAction || '', {
         agentId: button.dataset.chatAgentId || '',
-        connector: button.dataset.chatConnector || ''
+        connector: button.dataset.chatConnector || '',
+        orderId: button.dataset.chatOrderId || ''
       });
     });
   });
-  els.workChatThread.scrollTop = els.workChatThread.scrollHeight;
+  if (stickToBottom) {
+    els.workChatThread.scrollTop = els.workChatThread.scrollHeight;
+  } else {
+    els.workChatThread.scrollTop = Math.max(0, Number(els.workChatThread.scrollHeight || 0) - previousBottomOffset);
+  }
 }
 
 function openChatDecisionOriginalPrompt() {
@@ -13078,6 +14070,16 @@ async function handleChatActionButton(action = '', detail = {}) {
     connect_google: async () => { openPrimaryGoogleSignIn(); },
     connect_x: async () => { connectXAccount(); },
     post_current_to_x: async () => { void postCurrentComposerToX(); },
+    download_delivery_zip: async () => {
+      const orderId = String(detail.orderId || state.selectedJobId || '').trim();
+      const job = await loadJobForChatAction(orderId);
+      const files = downloadableDeliveryFilesForJob(job || {});
+      if (!job?.id || !files.length) {
+        flash('No downloadable delivery ZIP is available for this order yet.', 'warn');
+        return;
+      }
+      downloadDeliveryZip(files, job);
+    },
     register_card: async () => {
       openSettingsSection('payments');
       if (!ensureSettingsLogin()) return;
@@ -13101,7 +14103,15 @@ async function handleChatActionButton(action = '', detail = {}) {
     open_cli_tab: async () => { switchTab('connect'); updateCliPanels(state.snapshot); },
     open_settings: async () => { switchTab('settings'); },
     open_feedback_tab: async () => { openFeedbackForm(); },
-    open_work_tab: async () => { switchTab('work'); focusWorkResults(); },
+    open_work_tab: async () => {
+      switchTab('work');
+      const orderId = String(detail.orderId || '').trim();
+      if (orderId) {
+        const job = jobById(orderId) || await loadJobForChatAction(orderId);
+        if (job?.id) openJobDetail(job.id);
+      }
+      focusWorkResults();
+    },
     browse_agents: async () => { openAgentCatalog(); },
     list_agent: async () => { openAgentListingFlow(); },
     use_agent_team: async () => {
@@ -13176,17 +14186,21 @@ async function postCurrentComposerToX() {
     flash(`X post is ${text.length} characters. Shorten it to 280 or less before posting.`, 'warn');
     return;
   }
-  const confirmed = window.confirm(`Post this to your connected X account?\n\n${text}`);
+  const confirmed = window.confirm(deliveryExecutionPromptPresentation('x_post', {
+    postText: text,
+    xAccountLabel: xConnectorIdentityForClient(account).label
+  }).confirm);
   if (!confirmed) return;
   try {
-    const result = await api('/api/connectors/x/post', {
-      method: 'POST',
-      body: JSON.stringify({
-        text,
-        confirm_post: true,
-        source: 'work_chat'
-      })
-    });
+  const result = await api('/api/connectors/x/post', {
+    method: 'POST',
+    body: JSON.stringify({
+      text,
+      confirm_post: true,
+      ...xApprovalPayloadForClient(text),
+      source: 'work_chat'
+    })
+  });
     if (state.snapshot?.accountSettings?.connectors && result.x) {
       state.snapshot.accountSettings.connectors.x = result.x;
     }
@@ -13912,7 +14926,7 @@ function currentOrderDraft() {
         intake: {
           ...state.pendingIntake,
           answer: intakeAnswer,
-          confirmed: true
+          answered: true
         }
       }
     };
@@ -13929,7 +14943,6 @@ function currentOrderDraft() {
     budget_cap: Number(els.jobBudget?.value || 300),
     deadline_sec: Number(els.jobDeadline?.value || 120),
     followup_to_job_id: state.followupToJobId || undefined,
-    skip_intake: state.intakeConfirmed || state.pendingOrderConfirmation?.accepted || undefined,
     confirmation: state.pendingOrderConfirmation?.accepted ? {
       accepted: true,
       agent_id: state.pendingOrderConfirmation.agentId || undefined,
@@ -13971,8 +14984,8 @@ function renderIntakePanel() {
     ...questions.map((question, index) => `${index + 1}. ${question}`),
     '',
     state.intakeConfirmed
-      ? 'SEND ORDER will now use skip_intake and the clarification context.'
-      : 'Answer these, then APPLY ANSWERS. If the request is intentionally broad, use USE CURRENT REQUEST.'
+      ? 'Clarification context is attached. SEND ORDER will use the answered details.'
+      : 'Answer these, then APPLY ANSWERS. CAIt will not dispatch until the missing details are supplied.'
   ];
   els.intakeQuestionCard.textContent = lines.join('\n');
   els.intakePanel.className = `detail-box action-card ${state.intakeConfirmed ? 'ok' : 'warn'} compact-card`;
@@ -13980,14 +14993,9 @@ function renderIntakePanel() {
 }
 
 function handleNeedsInputResponse(response = {}, draft = {}) {
-  state.pendingIntake = response.intake || {
-    id: `intake_${Date.now().toString(36)}`,
-    originalPrompt: draft.prompt || response.prompt || '',
-    taskType: response.inferred_task_type || draft.task_type || 'research',
-    questions: Array.isArray(response.questions) ? response.questions : [],
-    createdAt: new Date().toISOString(),
-    answerMode: 'resubmit_with_skip_intake'
-  };
+  state.pendingIntake = chatEngineBuildIntakeState(response, draft.prompt || response.prompt || '', {
+    taskType: response.inferred_task_type || draft.task_type || 'research'
+  });
   state.intakeConfirmed = false;
   state.intakeAnswer = '';
   if (els.intakeAnswer) els.intakeAnswer.value = '';
@@ -14004,26 +15012,21 @@ function handleNeedsInputResponse(response = {}, draft = {}) {
   flash('Clarification questions returned. No order was billed or dispatched.', 'info');
 }
 
-function applyIntakeAnswers(options = {}) {
+function applyIntakeAnswers() {
   if (!state.pendingIntake) throw new Error('No clarification questions are active.');
   const answer = String(els.intakeAnswer?.value || '').trim();
-  if (!answer && !options.runAnyway) throw new Error('Answer the clarification questions first, or choose USE CURRENT REQUEST.');
+  if (!answer) throw new Error('Answer the clarification questions first.');
   state.intakeAnswer = answer;
   state.intakeConfirmed = true;
   const original = String(state.pendingIntake.originalPrompt || els.jobPrompt?.value || '').trim();
   if (els.jobPrompt) {
-    els.jobPrompt.value = [
-      original,
-      '',
-      options.runAnyway
-        ? 'Clarification note: proceed with the current broad request. Make reasonable assumptions and state them clearly.'
-        : `Clarification answers:\n${answer}`,
-      '',
-      'Use these clarification details and produce the requested delivery. State any remaining assumptions briefly.'
-    ].join('\n');
+    els.jobPrompt.value = chatEngineBuildIntakeCombinedPrompt(
+      { ...state.pendingIntake, originalPrompt: original },
+      answer
+    );
   }
   renderOrderComposer();
-  flash(options.runAnyway ? 'Intake skipped for this order. SEND ORDER will run it as-is.' : 'Answers applied. SEND ORDER will run the clarified order.', 'ok');
+  flash('Answers applied. SEND ORDER will run the clarified order.', 'ok');
 }
 
 function followupSourceJob() {
@@ -14068,6 +15071,38 @@ function routePlanOfDraft(draft = {}) {
 
 function apiPayloadFromOrderDraft(draft = {}) {
   const { resolved_order_strategy, route_plan, ...payload } = draft;
+  const listCreatorEstimate = listCreatorEstimateForDraft(payload);
+  if (listCreatorEstimate && !(Number(payload.estimated_total_cost_basis || 0) > 0 || payload.estimated_cost_basis)) {
+    const input = payload.input && typeof payload.input === 'object' && !Array.isArray(payload.input)
+      ? payload.input
+      : {};
+    const broker = input._broker && typeof input._broker === 'object' && !Array.isArray(input._broker)
+      ? input._broker
+      : {};
+    return {
+      ...payload,
+      estimated_total_cost_basis: listCreatorEstimate.usage.total_cost_basis,
+      estimated_cost_basis: {
+        compute: listCreatorEstimate.usage.compute_cost,
+        tool: listCreatorEstimate.usage.tool_cost,
+        labor: listCreatorEstimate.usage.labor_cost,
+        api: listCreatorEstimate.usage.api_cost,
+        total: listCreatorEstimate.usage.total_cost_basis
+      },
+      input: {
+        ...input,
+        _broker: {
+          ...broker,
+          listCreatorEstimate: {
+            requestedCount: listCreatorEstimate.requestedCount,
+            batchSize: listCreatorEstimate.batchSize,
+            batchCount: listCreatorEstimate.batchCount,
+            contactCaptureMode: listCreatorEstimate.contactCaptureMode
+          }
+        }
+      }
+    };
+  }
   return payload;
 }
 
@@ -14101,14 +15136,14 @@ function estimateWindowOfDraft(draft) {
     const planned = routePlanOfDraft(draft);
     if (planned.picks.length < 2) return null;
     return planned.picks.reduce((acc, item) => {
-      const estimate = estimateWindowOfAgent(item.agent, item.taskType);
+      const estimate = estimateWindowOfAgent(item.agent, item.taskType, { prompt: draft.prompt, input: draft.input });
       acc.min += Number(estimate?.estimateMinTotal || 0);
       acc.max += Number(estimate?.estimateMaxTotal || 0);
       return acc;
     }, { min: 0, max: 0 });
   }
   const agent = queuedDraftAgent(draft) || readyAgentsForTask(draft.task_type)[0] || null;
-  const estimate = estimateWindowOfAgent(agent, draft.task_type);
+  const estimate = estimateWindowOfAgent(agent, draft.task_type, { prompt: draft.prompt, input: draft.input });
   if (!estimate) return null;
   return { min: Number(estimate.estimateMinTotal || 0), max: Number(estimate.estimateMaxTotal || 0) };
 }
@@ -14364,7 +15399,7 @@ function validateOrderDraft(draft, options = {}) {
     throw new Error('Write a request or add source URLs/files first.');
   }
   if (state.pendingIntake && !state.intakeConfirmed) {
-    throw new Error('Answer the clarification questions first, or choose USE CURRENT REQUEST.');
+    throw new Error('Answer the clarification questions first.');
   }
   if (checkFunding) ensureOrderFunding();
   const resolvedStrategy = resolvedOrderStrategyOfDraft(draft);
@@ -14586,7 +15621,7 @@ function agentPricingGuideText(agent = null) {
   return 'Usage-based: the end user pays measured usage plus provider markup. CAIt platform margin stays fixed at 10% of the end-user order total.';
 }
 
-function estimateWindowOfAgent(agent, taskType = currentRoutingTask()) {
+function estimateWindowOfAgent(agent, taskType = currentRoutingTask(), options = {}) {
   if (!agent) return null;
   const map = {
     research: { minSec: 35, maxSec: 240, minApi: 2, maxApi: 10 },
@@ -14601,7 +15636,10 @@ function estimateWindowOfAgent(agent, taskType = currentRoutingTask()) {
     automation: { minSec: 110, maxSec: 560, minApi: 5, maxApi: 24 },
     ops: { minSec: 55, maxSec: 300, minApi: 3, maxApi: 14 }
   };
-  const picked = map[String(taskType || '').toLowerCase()] || map.research;
+  const normalizedTaskType = String(taskType || '').toLowerCase();
+  const picked = normalizedTaskType === 'list_creator'
+    ? { minSec: 70, maxSec: 260, minApi: 2, maxApi: 10 }
+    : (map[normalizedTaskType] || map.research);
   const providerMarkupRate = providerMarkupRateOf(agent);
   const platformMarginRate = platformMarginRateOf(agent);
   const pricing = agentPricingConfig(agent);
@@ -14640,6 +15678,22 @@ function estimateWindowOfAgent(agent, taskType = currentRoutingTask()) {
       pricingNote = `Provider pricing = ${usdFormatter.format(pricing.subscriptionMonthlyPriceUsd)}/month, with end-user usage overage on top. CAIt bills the provider 10% of the monthly fee.`;
     }
   }
+  let listCreatorPlan = null;
+  if (normalizedTaskType === 'list_creator' && pricing.pricingModel === 'usage_based') {
+    const promptForEstimate = options.prompt !== undefined
+      ? options.prompt
+      : currentEffectiveOrderPrompt();
+    listCreatorPlan = listCreatorUsageEstimateForCount(inferListCreatorRequestedCount([
+      promptForEstimate,
+      options.input
+    ]));
+    estimateMinTotal = calcTotal(listCreatorPlan.usage.total_cost_basis);
+    estimateMaxTotal = estimateMinTotal;
+    typicalTotal = estimateMinTotal;
+    picked.minSec = Math.max(picked.minSec, 70 * listCreatorPlan.batchCount);
+    picked.maxSec = Math.max(picked.maxSec, 260 * listCreatorPlan.batchCount);
+    pricingNote = `List Creator estimate = ${listCreatorPlan.requestedCount} companies, ${listCreatorPlan.batchCount} batch${listCreatorPlan.batchCount === 1 ? '' : 'es'} of ${LIST_CREATOR_BATCH_SIZE}. Public email/contact capture is included only when visibly public and source-traced.`;
+  }
   return {
     durationMinSec: picked.minSec,
     durationMaxSec: picked.maxSec,
@@ -14649,7 +15703,8 @@ function estimateWindowOfAgent(agent, taskType = currentRoutingTask()) {
     confidence: agent.verificationStatus === 'verified' ? 'high' : 'medium',
     pricingModel: pricing.pricingModel,
     providerMonthlyUsd: pricing.subscriptionMonthlyPriceUsd,
-    pricingNote
+    pricingNote,
+    listCreatorPlan
   };
 }
 
@@ -14663,6 +15718,59 @@ function agentManifest(agent) {
   return agent?.metadata?.manifest && typeof agent.metadata.manifest === 'object'
     ? agent.metadata.manifest
     : {};
+}
+
+function agentTrustList(value, fallback = []) {
+  const source = Array.isArray(value) ? value : (typeof value === 'string' ? value.split(/[,\n]/) : fallback);
+  return [...new Set(source
+    .map((item) => String(item || '').trim())
+    .filter(Boolean))];
+}
+
+function agentTrustProfile(agent = {}) {
+  const manifest = agentManifest(agent);
+  const metadata = agent?.metadata && typeof agent.metadata === 'object' ? agent.metadata : {};
+  const manifestMetadata = manifest.metadata && typeof manifest.metadata === 'object' ? manifest.metadata : {};
+  const verification = agentVerification(agent);
+  const verificationDetails = verification.details && typeof verification.details === 'object' ? verification.details : {};
+  const source = agent?.trust && typeof agent.trust === 'object'
+    ? agent.trust
+    : (metadata.trust && typeof metadata.trust === 'object'
+        ? metadata.trust
+        : (manifest.trust && typeof manifest.trust === 'object'
+            ? manifest.trust
+            : (manifestMetadata.trust && typeof manifestMetadata.trust === 'object'
+                ? manifestMetadata.trust
+                : (verificationDetails.trust && typeof verificationDetails.trust === 'object' ? verificationDetails.trust : {}))));
+  const verified = agent.verificationStatus === 'verified' || metadata.builtIn;
+  const score = Number(source.score);
+  const level = String(source.level || (verified ? 'verified' : 'unverified')).trim().toLowerCase().replace(/[\s-]+/g, '_');
+  const label = String(source.label || (verified ? 'Verified agent' : 'Unverified agent')).trim();
+  const summary = String(source.summary || (verified
+    ? 'Verified endpoint with delivery review; inspect evidence and acceptance checks before acting.'
+    : 'Trust profile is not declared yet. Verify endpoint, owner, manifest, evidence policy, and delivery history before routing work.')).trim();
+  const qualityChecks = agentTrustList(source.quality_checks || source.qualityChecks, verified
+    ? ['Endpoint verification', 'Delivery review', 'Evidence/assumption separation']
+    : ['Endpoint verification required', 'Manifest review required', 'Delivery history required']);
+  const evidenceRequirements = agentTrustList(source.evidence_requirements || source.evidenceRequirements, ['Prompt, files, URLs, sources, connector proof, and approval where applicable']);
+  const limitations = agentTrustList(source.limitations, ['Trust score is workflow assurance, not a guarantee of business correctness']);
+  const tone = ['approval_gated', 'source_bound', 'orchestration_reviewed', 'verified', 'built_in_verified'].includes(level)
+    ? (level === 'approval_gated' ? 'warn' : 'ok')
+    : 'info';
+  return {
+    version: String(source.version || 'agent-trust/client-derived'),
+    level,
+    label,
+    score: Number.isFinite(score) ? score : (verified ? 82 : 45),
+    summary,
+    executionLayer: String(source.execution_layer || source.executionLayer || '').trim(),
+    sourcePolicy: String(source.source_policy || source.sourcePolicy || '').trim(),
+    actionPolicy: String(source.action_policy || source.actionPolicy || '').trim(),
+    qualityChecks,
+    evidenceRequirements,
+    limitations,
+    tone
+  };
 }
 
 function agentRole(agent) {
@@ -15046,6 +16154,30 @@ function connectorStatusForClient(auth = state.snapshot?.auth || {}, account = s
     microsoft: false,
     vercel: false,
     cloudflare: false
+  };
+}
+
+function xConnectorIdentityForClient(account = state.snapshot?.accountSettings || null) {
+  const x = account?.connectors?.x && typeof account.connectors.x === 'object' ? account.connectors.x : {};
+  const username = String(x.username || '').trim().replace(/^@+/, '');
+  const userId = String(x.xUserId || x.providerUserId || '').trim();
+  const displayName = String(x.displayName || '').trim();
+  return {
+    connected: Boolean(x.connected && username),
+    username,
+    handle: username ? `@${username}` : '',
+    userId,
+    displayName,
+    label: username ? `@${username}` : (displayName || userId || 'connected X account')
+  };
+}
+
+function xApprovalPayloadForClient(postText = '') {
+  const identity = xConnectorIdentityForClient();
+  return {
+    approved_x_username: identity.handle || identity.username || '',
+    approved_x_user_id: identity.userId || '',
+    approved_text: String(postText || '').trim()
   };
 }
 
@@ -15938,6 +17070,15 @@ function runNextAction(job) {
   if (!job) return { title: 'NO ORDER SELECTED', body: 'Select an order to inspect current state and recommended next action.', tone: 'info' };
   if (job.jobKind === 'workflow') {
     const counts = job.workflow?.statusCounts || {};
+    const authority = authorityRequestFromReport(job.output?.report || {});
+    if (authorityRequestRequiresClientApproval(authority)) {
+      return {
+        title: 'ACTION APPROVAL REQUIRED',
+        body: `${counts.completed || 0}/${counts.total || 0} internal work items finished, but external execution is blocked until approval/connector setup is complete. Required: ${describeAuthorityNeed(authority.missingConnectorCapabilities, authority.missingConnectors)}.`,
+        tone: 'warn'
+      };
+    }
+    if (job.status === 'blocked') return { title: 'AGENT TEAM BLOCKED', body: `${counts.completed || 0}/${counts.total || 0} agent runs completed. Resolve the blocked specialist or connector gate before treating this as final.`, tone: 'warn' };
     if (job.status === 'completed') return { title: 'AGENT TEAM COMPLETED', body: `${counts.completed || 0}/${counts.total || 0} internal work items completed. Review the combined integrated delivery.`, tone: 'ok' };
     if (job.status === 'failed') return { title: 'ACTION: INSPECT AGENT RUN FAILURES', body: `${counts.failed || 0} agent runs failed. Review run statuses and retry the failed path only.`, tone: 'error' };
     return { title: 'AGENT TEAM RUNNING', body: `${counts.completed || 0}/${counts.total || 0} agent runs completed. Wait for remaining agent runs or inspect the workflow detail.`, tone: 'info' };
@@ -17411,6 +18552,208 @@ function downloadDeliveryFile(file = {}) {
   flash(`Downloaded ${file.name || 'delivery file'}.`, 'ok');
 }
 
+function downloadDeliverySummaryFile(run = null, summaryText = '') {
+  const content = String(summaryText || '').trim();
+  if (!content) {
+    flash('No summary to download.', 'error');
+    return;
+  }
+  const orderId = String(run?.id || '').trim().slice(0, 8);
+  const fileName = `delivery-summary-${orderId || new Date().toISOString().slice(0, 10)}.md`;
+  const blob = new Blob([`${content}\n`], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  flash(`Downloaded ${fileName}.`, 'ok');
+}
+
+let deliveryZipCrcTable = null;
+
+function deliveryZipUtf8Bytes(value = '') {
+  return new TextEncoder().encode(String(value || ''));
+}
+
+function deliveryZipCrc32(bytes = new Uint8Array()) {
+  if (!deliveryZipCrcTable) {
+    deliveryZipCrcTable = new Uint32Array(256);
+    for (let index = 0; index < 256; index += 1) {
+      let value = index;
+      for (let bit = 0; bit < 8; bit += 1) {
+        value = (value & 1) ? (0xedb88320 ^ (value >>> 1)) : (value >>> 1);
+      }
+      deliveryZipCrcTable[index] = value >>> 0;
+    }
+  }
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc = deliveryZipCrcTable[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function deliveryZipSafeName(value = '', index = 0) {
+  const raw = String(value || `delivery-${index + 1}.txt`).trim();
+  const safe = raw
+    .replace(/[\\/:*?"<>|]+/g, '-')
+    .replace(/[\x00-\x1f]+/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 160)
+    .trim();
+  return safe || `delivery-${index + 1}.txt`;
+}
+
+function deliveryZipUniqueName(name = '', seen = new Set()) {
+  const safeName = deliveryZipSafeName(name, seen.size);
+  const lower = safeName.toLowerCase();
+  if (!seen.has(lower)) {
+    seen.add(lower);
+    return safeName;
+  }
+  const dot = safeName.lastIndexOf('.');
+  const base = dot > 0 ? safeName.slice(0, dot) : safeName;
+  const ext = dot > 0 ? safeName.slice(dot) : '';
+  let counter = 2;
+  while (counter < 1000) {
+    const candidate = `${base}-${counter}${ext}`;
+    const candidateLower = candidate.toLowerCase();
+    if (!seen.has(candidateLower)) {
+      seen.add(candidateLower);
+      return candidate;
+    }
+    counter += 1;
+  }
+  const fallback = `${base}-${Date.now()}${ext}`;
+  seen.add(fallback.toLowerCase());
+  return fallback;
+}
+
+function deliveryZipDosDateTime(date = new Date()) {
+  const year = Math.max(1980, Math.min(2107, date.getFullYear()));
+  return {
+    time: ((date.getHours() & 31) << 11) | ((date.getMinutes() & 63) << 5) | ((Math.floor(date.getSeconds() / 2)) & 31),
+    date: (((year - 1980) & 127) << 9) | (((date.getMonth() + 1) & 15) << 5) | (date.getDate() & 31)
+  };
+}
+
+function deliveryZipHeader(size) {
+  const bytes = new Uint8Array(size);
+  return { bytes, view: new DataView(bytes.buffer) };
+}
+
+function deliveryZipLocalHeader(record) {
+  const header = deliveryZipHeader(30 + record.nameBytes.length);
+  header.view.setUint32(0, 0x04034b50, true);
+  header.view.setUint16(4, 20, true);
+  header.view.setUint16(6, 0x0800, true);
+  header.view.setUint16(8, 0, true);
+  header.view.setUint16(10, record.time, true);
+  header.view.setUint16(12, record.date, true);
+  header.view.setUint32(14, record.crc, true);
+  header.view.setUint32(18, record.size, true);
+  header.view.setUint32(22, record.size, true);
+  header.view.setUint16(26, record.nameBytes.length, true);
+  header.view.setUint16(28, 0, true);
+  header.bytes.set(record.nameBytes, 30);
+  return header.bytes;
+}
+
+function deliveryZipCentralHeader(record) {
+  const header = deliveryZipHeader(46 + record.nameBytes.length);
+  header.view.setUint32(0, 0x02014b50, true);
+  header.view.setUint16(4, 20, true);
+  header.view.setUint16(6, 20, true);
+  header.view.setUint16(8, 0x0800, true);
+  header.view.setUint16(10, 0, true);
+  header.view.setUint16(12, record.time, true);
+  header.view.setUint16(14, record.date, true);
+  header.view.setUint32(16, record.crc, true);
+  header.view.setUint32(20, record.size, true);
+  header.view.setUint32(24, record.size, true);
+  header.view.setUint16(28, record.nameBytes.length, true);
+  header.view.setUint16(30, 0, true);
+  header.view.setUint16(32, 0, true);
+  header.view.setUint16(34, 0, true);
+  header.view.setUint16(36, 0, true);
+  header.view.setUint32(38, 0, true);
+  header.view.setUint32(42, record.offset, true);
+  header.bytes.set(record.nameBytes, 46);
+  return header.bytes;
+}
+
+function buildDeliveryZipBlob(files = []) {
+  const inputFiles = (Array.isArray(files) ? files : [])
+    .map((file, index) => ({
+      name: file?.name || `delivery-${index + 1}.txt`,
+      content: String(file?.content || '')
+    }))
+    .filter((file) => file.content);
+  if (!inputFiles.length) return null;
+
+  const seen = new Set();
+  const timestamp = deliveryZipDosDateTime(new Date());
+  const records = [];
+  const localChunks = [];
+  let offset = 0;
+
+  inputFiles.forEach((file, index) => {
+    const name = deliveryZipUniqueName(file.name, seen);
+    const nameBytes = deliveryZipUtf8Bytes(name);
+    const dataBytes = deliveryZipUtf8Bytes(file.content);
+    const record = {
+      nameBytes,
+      dataBytes,
+      crc: deliveryZipCrc32(dataBytes),
+      size: dataBytes.length,
+      offset,
+      time: timestamp.time,
+      date: timestamp.date
+    };
+    const localHeader = deliveryZipLocalHeader(record);
+    records.push(record);
+    localChunks.push(localHeader, dataBytes);
+    offset += localHeader.length + dataBytes.length;
+  });
+
+  const centralOffset = offset;
+  const centralChunks = records.map((record) => deliveryZipCentralHeader(record));
+  const centralSize = centralChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const end = deliveryZipHeader(22);
+  end.view.setUint32(0, 0x06054b50, true);
+  end.view.setUint16(4, 0, true);
+  end.view.setUint16(6, 0, true);
+  end.view.setUint16(8, records.length, true);
+  end.view.setUint16(10, records.length, true);
+  end.view.setUint32(12, centralSize, true);
+  end.view.setUint32(16, centralOffset, true);
+  end.view.setUint16(20, 0, true);
+
+  return new Blob([...localChunks, ...centralChunks, end.bytes], { type: 'application/zip' });
+}
+
+function downloadDeliveryZip(files = [], run = null) {
+  const zipBlob = buildDeliveryZipBlob(files);
+  if (!zipBlob) {
+    flash('No delivery files to zip.', 'error');
+    return;
+  }
+  const orderId = String(run?.id || '').trim().slice(0, 8);
+  const fileName = `delivery-${orderId || new Date().toISOString().slice(0, 10)}.zip`;
+  const url = URL.createObjectURL(zipBlob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  flash(`Downloaded ${fileName}.`, 'ok');
+}
+
 function normalizeArticleText(value = '') {
   return String(value || '').replace(/\r\n/g, '\n').trim();
 }
@@ -17845,6 +19188,8 @@ function repoOptionsDatalist(id = '') {
 function suggestedSocialPostText(content = '') {
   const normalized = normalizeArticleText(content);
   if (!normalized) return '';
+  const extracted = extractSocialPostTextFromDeliveryContent(normalized, { maxLength: 280 });
+  if (extracted) return extracted;
   const blocks = normalized
     .split(/\n\s*\n/)
     .map((part) => part.replace(/^[-*]\s+/gm, '').trim())
@@ -17996,6 +19341,8 @@ function authorityRequestFromReport(report = {}) {
     []
   );
   const googleIncludeGroups = googleIncludeGroupsFromAuthorityRequest(candidate);
+  const requiredRepositorySelection = Boolean(candidate.requiredRepositorySelection || candidate.required_repository_selection || candidate.requireRepositorySelection || candidate.require_repository_selection);
+  const requiredChannelSelection = Boolean(candidate.requiredChannelSelection || candidate.required_channel_selection || candidate.requireChannelSelection || candidate.require_channel_selection);
   const reason = String(
     candidate.reason
       || candidate.message
@@ -18004,7 +19351,7 @@ function authorityRequestFromReport(report = {}) {
       || report?.next_action
       || 'Additional connector access is required before execution can continue.'
   ).trim();
-  if (!reason && !missingConnectors.length && !missingConnectorCapabilities.length && !googleIncludeGroups.length) return null;
+  if (!reason && !missingConnectors.length && !missingConnectorCapabilities.length && !googleIncludeGroups.length && !requiredRepositorySelection && !requiredChannelSelection) return null;
   return {
     reason,
     missingConnectors,
@@ -18013,11 +19360,34 @@ function authorityRequestFromReport(report = {}) {
     source: String(candidate.source || candidate.kind || 'leader_request').trim(),
     ownerLabel: String(candidate.ownerLabel || candidate.owner_label || candidate.requestedBy || candidate.requested_by || candidate.agentName || candidate.agent_name || '').trim(),
     requestedAt: new Date().toISOString(),
-    requiredRepositorySelection: Boolean(candidate.requiredRepositorySelection || candidate.required_repository_selection || candidate.requireRepositorySelection || candidate.require_repository_selection),
+    requiredRepositorySelection,
     repoCandidates: normalizeClientList(candidate.repoCandidates || candidate.repo_candidates || candidate.repositories, []),
-    requiredChannelSelection: Boolean(candidate.requiredChannelSelection || candidate.required_channel_selection || candidate.requireChannelSelection || candidate.require_channel_selection),
+    requiredChannelSelection,
     channelCandidates: normalizeClientList(candidate.channelCandidates || candidate.channel_candidates || candidate.channels, [])
   };
+}
+
+function authorityRequestRequiresClientApproval(authority = null) {
+  if (!authority || typeof authority !== 'object') return false;
+  const missingConnectors = normalizeClientList(authority.missingConnectors || authority.missing_connectors || authority.connectors, []);
+  const missingConnectorCapabilities = normalizeClientConnectorCapabilityList(authority.missingConnectorCapabilities || authority.missing_connector_capabilities || authority.capabilities, []);
+  const googleIncludeGroups = normalizeClientList(authority.googleIncludeGroups || authority.requiredGoogleSources || authority.required_google_sources, []);
+  const selectionRequired = Boolean(
+    authority.requiredRepositorySelection
+    || authority.required_repository_selection
+    || authority.requiredChannelSelection
+    || authority.required_channel_selection
+    || authority.requiredAccountSelection
+    || authority.required_account_selection
+  );
+  const reason = String(authority.reason || authority.message || authority.summary || '').trim();
+  return Boolean(
+    missingConnectors.length
+    || missingConnectorCapabilities.length
+    || googleIncludeGroups.length
+    || selectionRequired
+    || /(oauth|approval|approve|authority|connector|required|missing|connect|confirm|publish|send|post|承認|接続|未接続|確認|権限|投稿|送信|必要)/i.test(reason)
+  );
 }
 
 function agentForRun(run = null) {
@@ -18570,6 +19940,9 @@ async function executeGenericDeliverableViaApi(run = null, deliverable = null, d
   if (!isDeliveryExecutionActionSupported(normalizedActionKind)) {
     throw new Error(`Unsupported delivery execution action: ${normalizedActionKind || 'unknown'}`);
   }
+  const approvalPayload = normalizedActionKind === 'x_post'
+    ? xApprovalPayloadForClient(String(draft.postText || ''))
+    : {};
   try {
     return await api('/api/deliveries/execute', {
       method: 'POST',
@@ -18577,7 +19950,8 @@ async function executeGenericDeliverableViaApi(run = null, deliverable = null, d
         job_id: String(run?.id || ''),
         action_kind: normalizedActionKind,
         confirm_execute: true,
-        draft,
+        ...approvalPayload,
+        draft: { ...draft, ...approvalPayload },
         deliverable: {
           title: String(deliverable?.title || ''),
           fileName: String(deliverable?.fileName || ''),
@@ -18605,13 +19979,17 @@ async function scheduleGenericDeliverableViaApi(run = null, deliverable = null, 
   if (!isDeliveryScheduleActionSupported(normalizedActionKind)) {
     throw new Error(`Unsupported delivery schedule action: ${normalizedActionKind || 'unknown'}`);
   }
+  const approvalPayload = normalizedActionKind === 'x_post'
+    ? xApprovalPayloadForClient(String(draft.postText || ''))
+    : {};
   return api('/api/deliveries/schedule', {
     method: 'POST',
     body: JSON.stringify({
       job_id: String(run?.id || ''),
       action_kind: normalizedActionKind,
       confirm_schedule: true,
-      draft,
+      ...approvalPayload,
+      draft: { ...draft, ...approvalPayload },
       deliverable: {
         title: String(deliverable?.title || '')
       },
@@ -18704,11 +20082,15 @@ async function performLocalDeliveryExecutionAction(run = null, deliverable = nul
 
 function deliveryActionPresentationOptions(draft = {}, action = {}) {
   const channel = String(draft.channel || '').trim();
+  const xIdentity = xConnectorIdentityForClient();
   return {
     repoFullName: normalizeRepoFullName(draft.repoFullName || preferredGithubRepoFullName()),
     targetLabel: deliveryActionTargetLabel(draft, action),
     scheduleLabel: genericDeliverableScheduleLabel(draft.scheduledAt || ''),
     postText: String(draft.postText || '').trim(),
+    xAccountLabel: xIdentity.label,
+    xUsername: xIdentity.username,
+    xUserId: xIdentity.userId,
     recipientEmail: String(draft.recipientEmail || '').trim(),
     emailSubject: String(draft.emailSubject || '').trim(),
     nextStep: String(draft.nextStep || '').trim(),
@@ -18976,7 +20358,10 @@ async function postExactTextToX(text = '', options = {}) {
     flash(`X post is ${exactText.length} characters. Shorten it to 280 or less before posting.`, 'warn');
     return;
   }
-  const prompt = deliveryExecutionPromptPresentation('x_post', { postText: exactText });
+  const prompt = deliveryExecutionPromptPresentation('x_post', {
+    postText: exactText,
+    xAccountLabel: xConnectorIdentityForClient().label
+  });
   const confirmed = window.confirm(prompt.confirm);
   if (!confirmed) {
     if (options.jobId) {
@@ -18991,6 +20376,7 @@ async function postExactTextToX(text = '', options = {}) {
     body: JSON.stringify({
       text: exactText,
       confirm_post: true,
+      ...xApprovalPayloadForClient(exactText),
       source: options.source || 'delivery_card'
     })
   });
@@ -19179,6 +20565,27 @@ function renderGenericDeliverablePrimaryActionButtons(run = null, descriptors = 
       ? `<button class="mini-btn" data-schedule-generic-deliverable="${escapeHtml(String(descriptor.dataAction || ''))}">${escapeHtml(String(descriptor.label || 'RUN'))}</button>`
       : `<button class="mini-btn" data-execute-generic-deliverable="${escapeHtml(String(descriptor.dataAction || ''))}">${escapeHtml(String(descriptor.label || 'RUN'))}</button>`)
     .join('');
+}
+
+function renderGenericDeliverableApprovalPreview(context = {}) {
+  const draft = context.draft && typeof context.draft === 'object' ? context.draft : {};
+  const isXPost = context.deliverable?.type === 'social_post_pack'
+    && String(draft.channel || '').trim() === 'x'
+    && ['post_ready', 'schedule_ready'].includes(String(draft.actionMode || '').trim());
+  if (!isXPost) return '';
+  const identity = xConnectorIdentityForClient();
+  const postText = String(draft.postText || '').trim();
+  const accountLine = context.connectReady && identity.handle
+    ? `OAuth account: ${identity.handle}${identity.displayName ? ` (${identity.displayName})` : ''}`
+    : 'OAuth account: not connected yet';
+  return `
+    <div class="detail-box compact-card ${context.connectReady ? 'info' : 'warn'}">
+      <strong>X POST APPROVAL PREVIEW</strong>
+      <div class="row-muted">${escapeHtml(accountLine)}</div>
+      <div class="row-muted">${escapeHtml('CAIt posts only after this account and the exact text are approved.')}</div>
+      ${postText ? `<pre class="delivery-preview-text">${escapeHtml(postText)}</pre>` : `<div class="row-muted">${escapeHtml('No exact post text yet.')}</div>`}
+    </div>
+  `;
 }
 
 function renderGenericDeliverableAuxiliaryButtons(run = null, deliverable = null, authority = null, options = {}) {
@@ -19455,6 +20862,9 @@ function bindDeliveryCommonActionButtons(root = null, options = {}) {
   bindClickAction(root, 'data-copy-delivery-summary', () => {
     copyTextToClipboard(String(options.summaryText || ''), 'Summary copied.');
   });
+  bindClickAction(root, 'data-download-delivery-summary', () => {
+    downloadDeliverySummaryFile(options.run || null, String(options.summaryText || ''));
+  });
   bindClickAction(root, 'data-chat-action', (button) => {
     void handleChatActionButton(button.dataset.chatAction || '', {});
   });
@@ -19471,6 +20881,9 @@ function bindDeliveryCommonActionButtons(root = null, options = {}) {
   bindClickAction(root, 'data-download-delivery-file', (button) => {
     const file = (options.renderedFiles || [])[Number(button.dataset.downloadDeliveryFile)];
     downloadDeliveryFile(file);
+  });
+  bindClickAction(root, 'data-download-delivery-zip', () => {
+    downloadDeliveryZip(options.renderedFiles || [], options.run || null);
   });
 }
 
@@ -19573,20 +20986,13 @@ function bindDeliveryPublishControls(root = null, run = null, article = null, va
 }
 
 function renderRunDeliverySections(run = null, options = {}) {
-  const sections = [];
-  sections.push(renderDeliveryActionToolbar(run, {
-    summaryText: options.summaryText,
-    fileCount: options.fileCount,
-    files: options.files,
-    workflowParent: options.workflowParent
-  }));
-  if (options.article) sections.push(renderDeliveryPublishCard(run, options.article));
-  if (options.genericDeliverable) sections.push(renderGenericDeliverableCard(run, options.genericDeliverable));
-  sections.push(run?.jobKind === 'workflow'
-    ? renderWorkflowTeamSummary(options.workflowChildren || [])
-    : renderWorkflowChildNote(options.workflowParent));
-  sections.push(renderDeliveryFileList(options.files || []));
-  return sections.filter(Boolean).join('');
+  return [
+    renderWorkflowChildNote(options.workflowParent),
+    run?.jobKind === 'workflow' ? renderWorkflowTeamSummary(options.workflowChildren || []) : '',
+    renderDeliveryPublishCard(run, options.article),
+    renderGenericDeliverableCard(run, options.genericDeliverable),
+    renderDeliveryFilesPanel(options.files || [], { run })
+  ].filter(Boolean).join('');
 }
 
 function bindRunDeliveryInteractions(root = null, value = null, options = {}) {
@@ -19595,6 +21001,7 @@ function bindRunDeliveryInteractions(root = null, value = null, options = {}) {
   bindGenericDeliverableControlFields(root, options.run, options.genericDeliverable, value);
   bindGenericDeliverableActionButtons(root, options.run, options.genericDeliverable, value);
   bindDeliveryCommonActionButtons(root, {
+    run: options.run,
     workflowParent: options.workflowParent,
     renderedFiles: options.files || [],
     summaryText: options.summaryText
@@ -19912,6 +21319,7 @@ function genericDeliverableExecutionContext(run = null, deliverable = null, draf
   }
 
 function renderGenericDeliverableActionRow(context = {}) {
+  const approvalPreview = renderGenericDeliverableApprovalPreview(context);
   const primaryActionButtons = renderGenericDeliverablePrimaryActionButtons(context.run, context.primaryActionDescriptors, {
     executionStopped: context.executionStopped,
     authorityBlocked: context.authorityBlocked,
@@ -19927,6 +21335,7 @@ function renderGenericDeliverableActionRow(context = {}) {
     target: String(context.draft?.target || '')
   });
   return [
+    approvalPreview,
     `<div class="helper-row"><button class="mini-btn" data-copy-generic-deliverable="${escapeHtml(context.run?.id)}">${escapeHtml(context.meta?.copyLabel || 'COPY')}</button><button class="mini-btn" data-prepare-generic-deliverable="${escapeHtml(context.run?.id)}">${escapeHtml(context.meta?.prepareLabel || 'DRAFT NEXT ORDER')}</button>${primaryActionButtons}${auxiliaryButtons}</div>`,
     '<div class="row-muted">Draft buttons only load the next order into Work Chat. Execution starts only after SEND ORDER.</div>'
   ].join('');
@@ -19974,31 +21383,34 @@ function renderGenericDeliverableActionRow(context = {}) {
 function deliveryCardBodyLines(run = null, report = {}, options = {}) {
   const summaryText = String(options.summaryText || '').trim();
   const workflowChildren = Array.isArray(options.workflowChildren) ? options.workflowChildren : [];
-  const actualBilling = options.actualBilling && typeof options.actualBilling === 'object' ? options.actualBilling : null;
-  const costTelemetry = options.costTelemetry && typeof options.costTelemetry === 'object' ? options.costTelemetry : null;
-  const deliveryQuality = options.deliveryQuality && typeof options.deliveryQuality === 'object' ? options.deliveryQuality : null;
-  const fundingLines = Array.isArray(options.fundingLines) ? options.fundingLines : [];
-  const inputSources = options.inputSources && typeof options.inputSources === 'object'
-    ? options.inputSources
-    : { urls: [], files: [] };
   const fileCount = Number(options.fileCount || 0);
-  const targets = String(options.targets || 'chat, api');
-  return [
-    run?.jobKind === 'workflow' ? 'TEAM DELIVERY READY' : 'DELIVERY READY',
+  const authority = authorityRequestFromReport(report || {});
+  const status = normalizeOrderProgressStatus(run?.status || '');
+  const workflowApprovalBlocked = status === 'blocked' || (run?.jobKind === 'workflow' && authorityRequestRequiresClientApproval(authority));
+  const heading = workflowApprovalBlocked
+    ? 'TEAM ACTION WAITING FOR APPROVAL'
+    : (run?.jobKind === 'workflow' ? 'TEAM DELIVERY SUMMARY' : 'DELIVERY SUMMARY');
+  const lines = [
+    heading,
     '',
     summaryText || (run?.jobKind === 'workflow'
       ? 'The integrated report merged the supporting work products into one delivery.'
-      : 'Structured delivery received.'),
-    '',
-    ...(run?.jobKind === 'workflow' && workflowChildren.length ? [`Supporting work items: ${workflowChildren.length}`] : []),
-    ...(actualBilling ? [`Actual billing: ${yen(actualBilling.total)}`] : []),
-    ...(costTelemetry ? [`Cost basis: ${String(costTelemetry.confidence || costTelemetry.source || 'tracked').replace(/_/g, ' ')}`] : []),
-    ...(deliveryQuality ? [`Delivery quality: ${Number(deliveryQuality.score || 0)}/100`] : []),
-    ...fundingLines,
-    ...(actualBilling || deliveryQuality || fundingLines.length ? [''] : []),
-    `Input sources: urls=${inputSources.urls.length} files=${inputSources.files.length}`,
-    `Files: ${fileCount}`,
-    `Return targets: ${targets}`
+      : 'Structured delivery received.')
+  ];
+  if (workflowApprovalBlocked) {
+    lines.push('');
+    lines.push(`Action status: approval or connector setup required before external posting/sending.`);
+    if (authority?.reason) lines.push(`Reason: ${authority.reason}`);
+    lines.push(`Required: ${describeAuthorityNeed(authority?.missingConnectorCapabilities || [], authority?.missingConnectors || [])}.`);
+  }
+  lines.push('');
+  lines.push(`Status: ${String(status || 'unknown').toUpperCase()}`);
+  if (run?.id) lines.push(`Order ID: ${run.id}`);
+  if (run?.jobKind === 'workflow' && workflowChildren.length) lines.push(`Supporting work items: ${workflowChildren.length}`);
+  lines.push(`Delivery files: ${fileCount}`);
+  lines.push('Re-ordering or adding context: continue in Work Chat.');
+  return [
+    ...lines
   ];
 }
 
@@ -20006,6 +21418,13 @@ function renderDeliveryActionToolbar(run = null, options = {}) {
   const actions = [];
   if (options.summaryText) {
     actions.push('<button class="mini-btn" data-copy-delivery-summary="1">COPY SUMMARY</button>');
+    actions.push('<button class="mini-btn" data-download-delivery-summary="1">DOWNLOAD SUMMARY</button>');
+  }
+  const downloadableFiles = Array.isArray(options.files)
+    ? options.files.filter((file) => String(file?.content || '').trim())
+    : [];
+  if (downloadableFiles.length) {
+    actions.push('<button class="mini-btn" data-download-delivery-zip="1">DOWNLOAD ZIP</button>');
   }
   if (Number(options.fileCount || 0) === 1 && options.files?.[0]?.content) {
     actions.push('<button class="mini-btn" data-copy-delivery-file="0">COPY FILE</button>');
@@ -20015,6 +21434,28 @@ function renderDeliveryActionToolbar(run = null, options = {}) {
     actions.push('<button class="mini-btn" data-open-workflow-parent="1">OPEN TEAM SUMMARY</button>');
   }
   return actions.length ? `<div class="helper-row">${actions.join('')}</div>` : '';
+}
+
+function deliverySummaryTone(run = null, report = {}) {
+  const status = normalizeOrderProgressStatus(run?.status || '');
+  if (status === 'failed' || status === 'timed_out') return 'error';
+  if (status === 'blocked' || authorityRequestRequiresClientApproval(authorityRequestFromReport(report || {}))) return 'warn';
+  if (status === 'completed') return 'ok';
+  return 'info';
+}
+
+function renderDeliverySummaryCard(run = null, report = {}, options = {}) {
+  const summaryText = String(options.summaryText || '').trim();
+  const actions = [];
+  if (summaryText) {
+    actions.push('<button class="mini-btn" data-copy-delivery-summary="1">COPY SUMMARY</button>');
+    actions.push('<button class="mini-btn" data-download-delivery-summary="1">DOWNLOAD SUMMARY</button>');
+  }
+  actions.push('<button class="mini-btn" data-chat-action="open_work_tab">ADD CONTEXT IN CHAT</button>');
+  return [
+    `<div class="delivery-summary-text">${escapeHtml(summaryText || 'No summary returned yet.')}</div>`,
+    `<div class="helper-row delivery-summary-actions">${actions.join('')}</div>`
+  ].join('');
 }
 
 function renderWorkflowTeamSummary(workflowChildren = []) {
@@ -20100,6 +21541,37 @@ function renderDeliveryFileList(files = []) {
         </div>
       </div>
     `).join('');
+}
+
+function renderDeliveryFilesPanel(files = [], options = {}) {
+  const safeFiles = Array.isArray(files) ? files : [];
+  const downloadableFiles = safeFiles.filter((file) => String(file?.content || '').trim());
+  if (!safeFiles.length) {
+    return `
+      <div class="detail-box action-card info compact-card delivery-files-panel">
+        <div class="delivery-files-head">
+          <div>
+            <strong>DELIVERY FILES</strong>
+            <div class="row-muted">No delivery files were returned for this order.</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  return `
+      <div class="detail-box action-card info compact-card delivery-files-panel">
+        <div class="delivery-files-head">
+          <div>
+            <strong>DELIVERY FILES</strong>
+            <div class="row-muted">${safeFiles.length} file${safeFiles.length === 1 ? '' : 's'} · summary and full artifacts stay separate</div>
+          </div>
+          <div class="helper-row">
+            ${downloadableFiles.length ? '<button class="mini-btn" data-download-delivery-zip="1">DOWNLOAD ZIP</button>' : ''}
+          </div>
+        </div>
+        ${renderDeliveryFileList(safeFiles)}
+      </div>
+    `;
 }
 
 function deliveryEmptyStatePresentation(run = null, delivery = null, report = null, files = []) {
@@ -20271,7 +21743,7 @@ async function sendFollowupToAgentFromDelivery() {
     }
     throw error;
   }
-  if (created?.needs_input || created?.status === 'needs_input') {
+  if (chatEngineIsNeedsInputResponse(created)) {
     handleNeedsInputResponse(created, draft);
     return;
   }
@@ -20375,13 +21847,7 @@ function renderRunDelivery(value) {
     workflowParent,
     summaryText,
     genericDeliverable,
-    actualBilling,
-    costTelemetry,
-    deliveryQuality,
-    fundingLines,
-    inputSources,
-    fileCount,
-    targets
+    fileCount
   } = context;
   els.runDeliveryFiles.innerHTML = '';
   hideDeliveryFollowupPanel();
@@ -20396,21 +21862,17 @@ function renderRunDelivery(value) {
   const candidates = { article: context.article, genericDeliverable };
   maybeClassifyDeliveryCandidates(run, report || {}, files, candidates);
   const article = candidates.article;
-  els.runDeliveryCard.textContent = deliveryCardBodyLines(run, report || {}, {
+  const summaryDownloadText = deliveryCardBodyLines(run, report || {}, {
     summaryText,
     workflowChildren,
-    actualBilling,
-    costTelemetry,
-    deliveryQuality,
-    fundingLines,
-    inputSources,
-    fileCount,
-    targets
+    fileCount
   }).join('\n');
-  els.runDeliveryCard.className = 'detail-box action-card ok compact-card';
-  renderDeliveryFollowupPanel(run, report || {});
+  els.runDeliveryCard.innerHTML = renderDeliverySummaryCard(run, report || {}, {
+    summaryText: summaryDownloadText
+  });
+  els.runDeliveryCard.className = `detail-box action-card ${deliverySummaryTone(run, report || {})} compact-card`;
   els.runDeliveryFiles.innerHTML = renderRunDeliverySections(run, {
-    summaryText,
+    summaryText: summaryDownloadText,
     fileCount,
     files,
     workflowParent,
@@ -20418,13 +21880,19 @@ function renderRunDelivery(value) {
     genericDeliverable,
     workflowChildren
   });
+  bindDeliveryCommonActionButtons(els.runDeliveryCard, {
+    run,
+    workflowParent,
+    renderedFiles: files,
+    summaryText: summaryDownloadText
+  });
   bindRunDeliveryInteractions(els.runDeliveryFiles, value, {
     run,
     article,
     genericDeliverable,
     workflowParent,
     files,
-    summaryText
+    summaryText: summaryDownloadText
   });
 }
 
@@ -20521,6 +21989,7 @@ function setAgentDetail(agent) {
   }
   const health = agentHealth(agent);
   const verification = agentVerification(agent);
+  const trust = agentTrustProfile(agent);
   const onboarding = currentAgentOnboarding(agent.id)?.onboarding || null;
   const fit = agentTaskFit(agent);
   const verifyAction = agentVerifyAction(agent);
@@ -20554,6 +22023,12 @@ function setAgentDetail(agent) {
     `Agent: ${agent.name}`,
     `Product type: ${productKind === 'composite_agent' ? 'Composite Agent Product' : (productKind === 'agent_group' ? 'Agent Group' : 'Single Agent')}`,
     `Status: ${health.label} / ${health.verifyLabel} / ${agent.online ? 'online' : 'offline'}`,
+    `Trust: ${trust.label} (${trust.score}/100) · ${trust.level}${trust.executionLayer ? ` · layer ${trust.executionLayer}` : ''}`,
+    `Trust basis: ${trust.summary}`,
+    ...(trust.sourcePolicy ? [`Trust source gate: ${trust.sourcePolicy}`] : []),
+    ...(trust.actionPolicy ? [`Trust action gate: ${trust.actionPolicy}`] : []),
+    `Trust QA checks: ${trust.qualityChecks.slice(0, 4).join(' / ') || '-'}`,
+    `Trust evidence needs: ${trust.evidenceRequirements.slice(0, 4).join(' / ') || '-'}`,
     `Review: ${health.reviewLabel}`,
     `Tasks: ${(agent.taskTypes || []).join(', ') || '-'}`,
     `Tags: ${tags.length ? tags.join(', ') : '-'}`,
@@ -21475,7 +22950,7 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
     }
   } else if (state.pendingIntake && !state.intakeConfirmed) {
     title = 'Answer clarification questions first.';
-    body = `${PRODUCT_SHORT_NAME} detected missing order details. Answer the questions below before billing or dispatch, or choose USE CURRENT REQUEST.`;
+    body = `${PRODUCT_SHORT_NAME} detected missing order details. Answer the questions below before billing or dispatch.`;
     tone = 'warn';
     buttonText = uiLabels.answerFirst;
   } else if (isOpenChatClarifyMode()) {
@@ -21641,7 +23116,7 @@ function renderRunEstimateCard() {
       return;
     }
     const total = planned.picks.reduce((acc, item) => {
-      const estimate = estimateWindowOfAgent(item.agent, item.taskType);
+      const estimate = estimateWindowOfAgent(item.agent, item.taskType, { prompt });
       acc.min += Number(estimate?.estimateMinTotal || 0);
       acc.max += Number(estimate?.estimateMaxTotal || 0);
       acc.durationMin += Number(estimate?.durationMinSec || 0);
@@ -21664,7 +23139,7 @@ function renderRunEstimateCard() {
     els.runEstimateCard.className = 'detail-box action-card warn compact-card';
     return;
   }
-  const estimate = estimateWindowOfAgent(agent, taskType);
+  const estimate = estimateWindowOfAgent(agent, taskType, { prompt, input: orderInputFromComposer() });
   const why = [
     `${agent.name}`,
     `task=${taskType}`,
@@ -21675,6 +23150,7 @@ function renderRunEstimateCard() {
     `Estimated time: ${formatSecRange(estimate.durationMinSec, estimate.durationMaxSec)}`,
     `Based on ${why}`,
     `Max end-user reserve before dispatch: ${yen(estimate.estimateMaxTotal)}`,
+    estimate.listCreatorPlan ? `List size: ${estimate.listCreatorPlan.requestedCount} companies · ${estimate.listCreatorPlan.batchCount} batch${estimate.listCreatorPlan.batchCount === 1 ? '' : 'es'} · public contact only` : null,
     estimate.providerMonthlyUsd > 0 ? `Provider monthly fee: ${usdFormatter.format(estimate.providerMonthlyUsd)} · CAIt bills 10% of that monthly fee to the provider, not the end user.` : null,
     estimate.pricingNote || null,
     'Completed orders settle on actual usage. Failed or cancelled orders release unused reserve.'
@@ -21978,6 +23454,7 @@ function renderAgents(agents = []) {
     const nextAction = agentNextAction(agent);
     const verification = agentVerification(agent);
     const fit = agentTaskFit(agent);
+    const trust = agentTrustProfile(agent);
     const providerMarkupLabel = pricingModelLabel(agent);
     const builtInLabel = agent?.metadata?.builtIn ? ' <span class="highlight">[BUILT-IN]</span>' : '';
     const roleLabel = agentRole(agent) === 'leader'
@@ -21992,6 +23469,7 @@ function renderAgents(agents = []) {
     const compositionLabel = agentCompositionSummary(agent);
     const requirementLabel = agentRequirementSummary(agent);
     const safeHealthTone = safeCssToken(health.tone, 'info');
+    const safeTrustTone = safeCssToken(trust.tone, 'info');
     const safeNextTone = safeCssToken(nextAction.tone, 'info');
     const rowActions = [
       health.ready
@@ -22008,6 +23486,7 @@ function renderAgents(agents = []) {
     <div class="table-row agents-grid ${state.selectedAgentId === agent.id ? 'selected-row' : ''} ${agent.online ? 'agent-row-online' : 'agent-row-offline'}" data-agent-id="${escapeHtml(agent.id)}">
       <div>${escapeHtml(agent.name)}${builtInLabel}${roleLabel}${productLabel}${ownerLabel}<div class="row-muted">${escapeHtml(agent.owner || '-')}</div><div class="row-muted">${escapeHtml(clipText(agent.description || 'No description provided.', 92))}</div></div>
       <div>${escapeHtml((agent.taskTypes || []).join(', ') || 'no declared capability')}<div class="row-muted">${escapeHtml(tagLabel)}</div><div class="row-muted">${escapeHtml(providerMarkupLabel)} · platform 10%</div>${compositionLabel ? `<div class="row-muted">${escapeHtml(compositionLabel)}</div>` : ''}${requirementLabel ? `<div class="row-muted">${escapeHtml(requirementLabel)}</div>` : ''}<div class="row-muted">${escapeHtml(shortUrl(health.endpoint) || 'no job endpoint')}</div><div class="row-muted">${escapeHtml(clipText(health.reason, 92))}</div></div>
+      <div><span class="status-pill ${safeTrustTone}">${escapeHtml(`TRUST ${trust.score}/100`)}</span><div class="row-muted">${escapeHtml(trust.label)}</div><div class="row-muted">${escapeHtml(clipText(trust.summary, 104))}</div></div>
       <div><span class="status-pill ${safeHealthTone}">${escapeHtml(health.label)}</span><div class="row-muted">${escapeHtml(`${health.verifyLabel} · ${agent.online ? 'online' : 'offline'}`)}</div><div class="row-muted">${escapeHtml(`${verification.code || 'no verify code'} · success ${formatPercent(agent.successRate)} · ${agent.avgLatencySec || '-'}s avg`)}</div></div>
       <div><span class="status-pill ${safeNextTone}">${escapeHtml(nextAction.title.replace('ACTION: ', ''))}</span><div class="row-muted">${escapeHtml(fit.label)}</div><div class="row-muted">${escapeHtml(clipText(nextAction.body, 96))}</div><div class="helper-row">${rowActions}</div></div>
     </div>`;
@@ -22024,7 +23503,7 @@ function renderAgents(agents = []) {
         <span class="status-pill info">${escapeHtml(`${list.length} shown`)}</span>
       </div>
       ${list.length
-        ? `<div class="table-header agents-grid"><div>AGENT</div><div>CAPABILITY</div><div>STATUS</div><div>NEXT STEP</div></div>${list.map(renderAgentRow).join('')}`
+        ? `<div class="table-header agents-grid"><div>AGENT</div><div>CAPABILITY</div><div>TRUST</div><div>STATUS</div><div>NEXT STEP</div></div>${list.map(renderAgentRow).join('')}`
         : `<div class="agent-role-empty">${escapeHtml(emptyText)}</div>`}
     </section>
   `;
@@ -23543,8 +25022,7 @@ async function createAndOptionallyRunJob() {
         ...draft,
         prompt: accepted.prompt,
         task_type: accepted.taskType,
-        agent_id: '',
-        skip_intake: true
+        agent_id: ''
       };
     } else {
       flash('Write a request first.', 'info');
@@ -23574,8 +25052,7 @@ async function createAndOptionallyRunJob() {
       ...draft,
       prompt: confirmed.prompt,
       task_type: confirmed.taskType,
-      agent_id: '',
-      skip_intake: true
+      agent_id: ''
     };
     state.openChatPreparedBrief = confirmed.prompt;
     markOpenChatDecisionSuppressedForBrief(confirmed.prompt);
@@ -23587,14 +25064,35 @@ async function createAndOptionallyRunJob() {
     if (els.jobPrompt) els.jobPrompt.value = '';
     structuredDispatchPrompt = true;
   }
-  if (!structuredDispatchPrompt && !openChatHasActiveLocalFollowupState(originalChatPrompt)) {
+  if (!structuredDispatchPrompt && !isNonOrderConversationIntentText(originalChatPrompt) && !openChatHasActiveLocalFollowupState(originalChatPrompt)) {
     const resolvedIntent = await resolveWorkIntentViaApi(originalChatPrompt);
     if (resolvedIntent?.kind === 'order') {
       applyServerResolvedIntent(resolvedIntent, originalChatPrompt);
       const preparedOrder = await prepareWorkOrderViaApi(originalChatPrompt, requestedOrderStrategy());
+      if (chatEngineIsNeedsInputResponse(preparedOrder)) {
+        handleNeedsInputResponse(preparedOrder, {
+          ...draft,
+          prompt: originalChatPrompt,
+          task_type: preparedOrder.inferred_task_type || preparedOrder.taskType || draft.task_type
+        });
+        appendOrderChatExchange(originalChatPrompt, {
+          kind: 'clarify',
+          tone: 'warn',
+          body: [
+            preparedOrder.message || 'I need a few more details before preparing or dispatching this order.',
+            '',
+            ...(Array.isArray(preparedOrder.questions) ? preparedOrder.questions.map((question, index) => `${index + 1}. ${question}`) : []),
+            '',
+            'Nothing has run and nothing has been billed yet.'
+          ].filter(Boolean).join('\n'),
+          status: 'More information is required before SEND ORDER.'
+        }, { transcriptId: submittedTranscriptId, tone: 'warn' });
+        void trackConversionEvent('intake_questions_shown', { ...analyticsDraft, status: 'prepare_needs_input' });
+        return;
+      }
       applyServerPreparedOrder(preparedOrder, originalChatPrompt);
       draft = currentOrderDraft();
-    } else if (resolvedIntent?.kind === 'command') {
+    } else if (resolvedIntent?.kind === 'command' || resolvedIntent?.kind === 'chat') {
       applyServerResolvedIntent(null);
       applyServerPreparedOrder(null);
     }
@@ -23674,7 +25172,7 @@ async function createAndOptionallyRunJob() {
       quickAnswer = buildOpenChatLlmFallbackUnavailableAnswer(draft.prompt, llmFallbackReason);
     }
   }
-  const directDispatchBrief = explicitDispatchRequested && quickAnswer && chatAnswerKind(quickAnswer) === 'assist'
+  const directDispatchBrief = explicitDispatchRequested && openChatCanDirectDispatchAssistAnswer(originalChatPrompt, quickAnswer)
     ? String(quickAnswer.nextPrompt || lastOpenChatPreparedBrief() || '').trim()
     : '';
   if (directDispatchBrief && isStructuredOrderBrief(directDispatchBrief)) {
@@ -23689,8 +25187,7 @@ async function createAndOptionallyRunJob() {
       ...draft,
       prompt: finalDirectDispatchBrief,
       task_type: directTaskType,
-      agent_id: '',
-      skip_intake: true
+      agent_id: ''
     };
     structuredDispatchPrompt = true;
     quickAnswer = null;
@@ -23742,7 +25239,8 @@ async function createAndOptionallyRunJob() {
   updateWorkChatStatusCard(dispatchCheckTitle, dispatchCheckBody, 'info');
   upsertOpenChatPendingDispatchMessage(`${dispatchCheckTitle}\n\n${dispatchCheckBody}`, {
     tone: 'info',
-    ja: dispatchCheckJa
+    ja: dispatchCheckJa,
+    progressMeta: orderAcceptanceProgressMeta(0, { ja: dispatchCheckJa })
   });
   flash(dispatchCheckJa ? 'SEND ORDERを受け付けました。実行前チェック中です。' : 'SEND ORDER received. Running checks...', 'info');
   try {
@@ -23765,46 +25263,78 @@ async function createAndOptionallyRunJob() {
     throw error;
   }
   let stopAcceptanceProgress = () => {};
-  const dispatchSessionId = ensureCurrentOpenChatSessionId({ force: true });
-  const payload = {
-    ...apiPayloadFromOrderDraftWithChatSession(draft, dispatchSessionId),
-    agent_id: draft.agent_id || undefined,
-    prompt: draft.prompt || fallbackPromptFromOrderInput(draft.input),
-    visitor_id: visitorId(),
-    async_dispatch: true
-  };
-  const dispatchInFlightKey = compactChatText([
-    payload.session_id || payload.sessionId || '',
-    payload.parent_agent_id || '',
-    payload.task_type || '',
-    payload.order_strategy || '',
-    payload.prompt || ''
-  ].join('|'), 1200);
-  if (state.openChatDispatchInFlightKey && state.openChatDispatchInFlightKey === dispatchInFlightKey) {
+  let payload;
+  let dispatchInFlightKey = '';
+  try {
+    const dispatchSessionId = ensureCurrentOpenChatSessionId({ force: true });
+    payload = {
+      ...apiPayloadFromOrderDraftWithChatSession(draft, dispatchSessionId),
+      agent_id: draft.agent_id || undefined,
+      prompt: draft.prompt || fallbackPromptFromOrderInput(draft.input),
+      visitor_id: visitorId(),
+      async_dispatch: true
+    };
+    dispatchInFlightKey = compactChatText([
+      payload.session_id || payload.sessionId || '',
+      payload.parent_agent_id || '',
+      payload.task_type || '',
+      payload.order_strategy || '',
+      payload.prompt || ''
+    ].join('|'), 1200);
+  } catch (error) {
+    clearOpenChatPendingDispatchMessage();
+    const failedStatus = String(error?.message || 'Order request could not be prepared.').slice(0, 240);
+    void trackChatTranscript(draft.prompt, {
+      kind: 'error',
+      body: failedStatus,
+      status: failedStatus
+    }, { ...analyticsDraft, status: 'client_prepare_error', transcriptId: submittedTranscriptId });
+    updateWorkChatStatusCard('Order request could not be prepared.', failedStatus, 'error');
+    flash(failedStatus, 'error');
+    throw error;
+  }
+  const existingInFlightAgeMs = Date.now() - Number(state.openChatDispatchInFlightAt || 0);
+  if (
+    state.openChatDispatchInFlightKey
+    && state.openChatDispatchInFlightKey === dispatchInFlightKey
+    && existingInFlightAgeMs >= 0
+    && existingInFlightAgeMs < OPEN_CHAT_DISPATCH_IN_FLIGHT_TTL_MS
+  ) {
+    upsertOpenChatPendingDispatchMessage(orderAcceptanceProgressBody(payload.prompt, Date.now(), { ja: looksJapanese(payload.prompt) }), {
+      tone: 'info',
+      ja: looksJapanese(payload.prompt),
+      progressMeta: orderAcceptanceProgressMeta(0, { ja: looksJapanese(payload.prompt) })
+    });
     flash(looksJapanese(payload.prompt) ? '同じ発注を送信中です。再送せず進捗表示を待っています。' : 'This order is already being sent. Waiting for the progress message instead of resubmitting.', 'info');
     return;
   }
-  state.openChatDispatchInFlightKey = dispatchInFlightKey;
-  const sendingJa = looksJapanese(payload.prompt);
-  const sendingTitle = sendingJa ? '発注を送信しています。' : 'Sending order...';
-  const sendingBody = sendingJa
-    ? '受付が完了したら、Order ID と進捗をこのチャットに表示します。'
-    : 'When accepted, CAIt will post the Order ID and progress in this chat.';
-  state.openChatLastStatus = `${sendingTitle}\n\n${sendingBody}`;
-  state.openChatLastStatusTone = 'info';
-  updateWorkChatStatusCard(sendingTitle, sendingBody, 'info');
-  if (els.runCreateStatus) {
-    els.runCreateStatus.textContent = `${sendingTitle}\n\n${sendingBody}`;
-    els.runCreateStatus.className = 'detail-box action-card info compact-card';
+  if (state.openChatDispatchInFlightKey === dispatchInFlightKey) {
+    state.openChatDispatchInFlightKey = '';
+    state.openChatDispatchInFlightAt = 0;
   }
-  upsertOpenChatPendingDispatchMessage(`${sendingTitle}\n\n${sendingBody}`, {
-    tone: 'info',
-    ja: sendingJa
-  });
-  stopAcceptanceProgress = startOpenChatAcceptanceProgress(payload.prompt, { ja: sendingJa });
-  flash(sendingJa ? '発注を送信中です。' : 'Sending order request...', 'info');
+  state.openChatDispatchInFlightKey = dispatchInFlightKey;
+  state.openChatDispatchInFlightAt = Date.now();
+  const sendingJa = looksJapanese(payload.prompt);
   let created;
   try {
+    const sendingTitle = sendingJa ? '発注を送信しています。' : 'Sending order...';
+    const sendingBody = sendingJa
+      ? '受付が完了したら、Order ID と進捗をこのチャットに表示します。'
+      : 'When accepted, CAIt will post the Order ID and progress in this chat.';
+    state.openChatLastStatus = `${sendingTitle}\n\n${sendingBody}`;
+    state.openChatLastStatusTone = 'info';
+    updateWorkChatStatusCard(sendingTitle, sendingBody, 'info');
+    if (els.runCreateStatus) {
+      els.runCreateStatus.textContent = `${sendingTitle}\n\n${sendingBody}`;
+      els.runCreateStatus.className = 'detail-box action-card info compact-card';
+    }
+    upsertOpenChatPendingDispatchMessage(`${sendingTitle}\n\n${sendingBody}`, {
+      tone: 'info',
+      ja: sendingJa,
+      progressMeta: orderAcceptanceProgressMeta(0, { ja: sendingJa })
+    });
+    stopAcceptanceProgress = startOpenChatAcceptanceProgress(payload.prompt, { ja: sendingJa });
+    flash(sendingJa ? '発注を送信中です。' : 'Sending order request...', 'info');
     created = await api('/api/jobs', { method: 'POST', body: JSON.stringify(payload) });
   } catch (error) {
     stopAcceptanceProgress();
@@ -23819,7 +25349,10 @@ async function createAndOptionallyRunJob() {
       );
     } else {
       clearOpenChatPendingDispatchMessage();
-      if (state.openChatDispatchInFlightKey === dispatchInFlightKey) state.openChatDispatchInFlightKey = '';
+      if (state.openChatDispatchInFlightKey === dispatchInFlightKey) {
+        state.openChatDispatchInFlightKey = '';
+        state.openChatDispatchInFlightAt = 0;
+      }
       const failedStatus = String(error?.message || 'Order request failed before dispatch.').slice(0, 240);
       void trackChatTranscript(payload.prompt, {
         kind: 'error',
@@ -23835,7 +25368,10 @@ async function createAndOptionallyRunJob() {
       throw error;
     }
   } finally {
-    if (state.openChatDispatchInFlightKey === dispatchInFlightKey) state.openChatDispatchInFlightKey = '';
+    if (state.openChatDispatchInFlightKey === dispatchInFlightKey) {
+      state.openChatDispatchInFlightKey = '';
+      state.openChatDispatchInFlightAt = 0;
+    }
   }
   if (!created) {
     stopAcceptanceProgress();
@@ -23844,7 +25380,7 @@ async function createAndOptionallyRunJob() {
   }
   stopAcceptanceProgress();
   clearOpenChatPendingDispatchMessage();
-  if (created?.needs_input || created?.status === 'needs_input') {
+  if (chatEngineIsNeedsInputResponse(created)) {
     void trackConversionEvent('intake_questions_shown', { ...analyticsDraft, status: 'needs_input' });
     void trackChatTranscript(payload.prompt, {
       kind: 'clarify',
@@ -24899,9 +26435,6 @@ document.querySelectorAll('[data-open-chat-hub-command]').forEach((btn) => {
 });
 if (els.applyIntakeAnswerBtn) els.applyIntakeAnswerBtn.onclick = () => runAction(els.applyIntakeAnswerBtn, async () => {
   applyIntakeAnswers();
-});
-if (els.runIntakeAnywayBtn) els.runIntakeAnywayBtn.onclick = () => runAction(els.runIntakeAnywayBtn, async () => {
-  applyIntakeAnswers({ runAnyway: true });
 });
 if (els.clearIntakeBtn) els.clearIntakeBtn.onclick = () => {
   clearIntakeContext();

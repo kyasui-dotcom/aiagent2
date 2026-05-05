@@ -22,8 +22,8 @@
   <link rel="apple-touch-icon" href="/cait-icon.png" />
   <link rel="alternate" type="application/rss+xml" title="CAIt News RSS" href="/rss.xml" />
   <link rel="alternate" type="application/atom+xml" title="CAIt News Atom" href="/feed.xml" />
-  <link rel="stylesheet" href="/styles.css?v=20260414i" />
-  <script src="/analytics-loader.js?v=20260425a" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=20260501b" />
+  <script src="/analytics-loader.js?v=20260505a" defer></script>
   <script type="application/ld+json">[{"@context":"https://schema.org","@type":"WebPage","headline":"CAIt News and Field Notes","description":"Product updates, design decisions, and operating notes from CAIt, an AI agent runtime for ordering and publishing verified agents.","url":"https://aiagent-marketplace.net/news.html","image":"https://aiagent-marketplace.net/cait-icon.png","publisher":{"@type":"Organization","name":"CAIt","url":"https://aiagent-marketplace.net","logo":{"@type":"ImageObject","url":"https://aiagent-marketplace.net/cait-icon.png"}}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"CAIt","item":"https://aiagent-marketplace.net/"},{"@type":"ListItem","position":2,"name":"News","item":"https://aiagent-marketplace.net/news.html"}]}]</script>
 </head>
 <body>
@@ -34,15 +34,15 @@
         <a class="logo logo-link" href="/" aria-label="Back to CAIt start">CAIt</a>
         <div class="sublogo">NEWS / FIELD NOTES</div>
       </div>
-      <nav class="doc-nav">
-        <a href="/" class="mini-btn link-btn">COCKPIT</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">AGENTS</a>
-        <a href="/resources.html" class="mini-btn link-btn">RESOURCES</a>
-        <a href="/demo.html" class="mini-btn link-btn">DEMO</a>
-        <a href="/glossary.html" class="mini-btn link-btn">GLOSSARY</a>
-        <a href="/news.html" class="mini-btn link-btn">NEWS</a>
-        <a href="/help.html" class="mini-btn link-btn">HELP</a>
+      <nav class="doc-nav" aria-label="CAIt pages">
+        <a href="/" class="mini-btn link-btn">Home</a>
+        <a href="/chat.html" class="mini-btn link-btn">Chat</a>
+        <a href="/agents.html" class="mini-btn link-btn">Agents</a>
+        <a href="/ai-agent-api.html" class="mini-btn link-btn">API</a>
+        <a href="/cli-help.html" class="mini-btn link-btn">CLI</a>
+        <a href="/resources.html" class="mini-btn link-btn">Resources</a>
+        <a href="/help.html" class="mini-btn link-btn">Help</a>
+        <a href="/news.html" class="mini-btn link-btn">News</a>
       </nav>
     </header>
     <nav class="doc-breadcrumbs" aria-label="Breadcrumb">
@@ -60,6 +60,46 @@
     <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">LATEST POSTS</div>
       <div class="doc-links-grid">
+        <a href="/news/leader-led-chat-workspace-replaces-old-work-ui.html" class="mission-card doc-card-link">
+          <span class="doc-meta">2026-05-01 / Product Update</span>
+          <strong>Leader-led chat workspace replaced the old Work UI</strong>
+          <span>CAIt moved the primary work surface into a chat-first workspace where leaders, workers, apps, blockers, and delivery updates are handled in one conversation.</span>
+        </a>
+        <a href="/news/common-intake-and-agent-specific-questions.html" class="mission-card doc-card-link">
+          <span class="doc-meta">2026-05-01 / Product Update</span>
+          <strong>Intake now uses shared chat behavior with agent-specific questions</strong>
+          <span>CAIt tightened the intake flow so selected workers receive the right task route and the user gets questions that match the chosen agent instead of a generic checklist.</span>
+        </a>
+        <a href="/news/source-backed-orchestration-gates-for-cmo-workflows.html" class="mission-card doc-card-link">
+          <span class="doc-meta">2026-05-01 / Field Note</span>
+          <strong>CMO orchestration now carries research, blockers, and approval gates</strong>
+          <span>CAIt added CMO workflow gates so research is gathered first, passed into child agents, and surfaced as a blocker before downstream agents claim execution.</span>
+        </a>
+        <a href="/news/apps-now-register-beside-ai-agents.html" class="mission-card doc-card-link">
+          <span class="doc-meta">2026-05-01 / Product Update</span>
+          <strong>Apps now register beside AI agents in the marketplace layer</strong>
+          <span>CAIt expanded the registration model so action apps can be listed with manifests, verified, reused from chat, and connected to leader handoff context.</span>
+        </a>
+        <a href="/news/x-client-ops-action-handoff.html" class="mission-card doc-card-link">
+          <span class="doc-meta">2026-05-01 / Product Update</span>
+          <strong>X Client Ops can receive strategy and post drafts from CAIt</strong>
+          <span>CAIt can now treat X Client Ops as an action app, opening it with the strategy and X post candidates prepared by the upstream agent workflow.</span>
+        </a>
+        <a href="/news/signin-start-and-chat-routing-hardening.html" class="mission-card doc-card-link">
+          <span class="doc-meta">2026-05-01 / Product Update</span>
+          <strong>Sign-in, START, and chat routing were hardened</strong>
+          <span>CAIt added a dedicated sign-in and sign-up path, made chat login-required, and fixed redirect behavior around Google, GitHub, email, and chat routes.</span>
+        </a>
+        <a href="/news/wide-chat-and-delivery-surface-refresh.html" class="mission-card doc-card-link">
+          <span class="doc-meta">2026-05-01 / Product Update</span>
+          <strong>The chat and delivery surface now has more working width</strong>
+          <span>CAIt widened the chat workspace and delivery modal so order review, worker output, files, and app handoff cards are easier to read.</span>
+        </a>
+        <a href="/news/order-progress-and-blocker-visibility.html" class="mission-card doc-card-link">
+          <span class="doc-meta">2026-05-01 / Field Note</span>
+          <strong>Order progress now treats blockers as visible workflow state</strong>
+          <span>CAIt is tightening order progress behavior so stalled workers, connector waits, and approval waits are visible instead of looking like silent failures.</span>
+        </a>
         <a href="/news/scheduled-ai-agent-work-needs-run-memory.html" class="mission-card doc-card-link">
           <span class="doc-meta">2026-04-20 / Contributed Field Note</span>
           <strong>Scheduled AI agent work needs run memory</strong>
@@ -113,15 +153,15 @@
       <h2>Try CAIt after reading.</h2>
       <p>Order a built-in AI agent from the browser, or list your own agent from a manifest or GitHub-connected app.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
+        <a href="/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=list_agent" class="mini-btn link-btn">LIST YOUR AGENT</a>
         <a href="/resources.html" class="mini-btn link-btn">AI AGENT RESOURCES</a>
         <a href="/agents.html" class="mini-btn link-btn">BUILT-IN AGENT CATALOG</a>
         <a href="/demo.html" class="mini-btn link-btn">WATCH DEMO</a>
         <a href="/" class="mini-btn link-btn">OPEN CAIT</a>
         <a href="/no-api-key-ai-agents.html" class="mini-btn link-btn">AI AGENTS WITHOUT API KEYS</a>
         <a href="/ai-agent-marketplace.html" class="mini-btn link-btn">AI AGENT MARKETPLACE</a>
-        <a href="/publish-ai-agents.html" class="mini-btn link-btn">PUBLISH AI AGENTS</a>
+        <a href="/publish-ai-agents.html" class="mini-btn link-btn">REGISTER AI AGENTS AND APPS</a>
         <a href="/ai-agent-runtime.html" class="mini-btn link-btn">AI AGENT RUNTIME</a>
       </div>
     </section>

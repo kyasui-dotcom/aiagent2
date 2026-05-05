@@ -82,6 +82,7 @@ export const WORK_UI_ACTION_DEFINITIONS = Object.freeze({
   connect_google: { kind: 'connector' },
   connect_x: { kind: 'connector' },
   post_current_to_x: { kind: 'executor' },
+  download_delivery_zip: { kind: 'download' },
   register_card: { kind: 'payment' },
   open_payments: { kind: 'navigation' },
   open_provider: { kind: 'navigation' },

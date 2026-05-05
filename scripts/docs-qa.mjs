@@ -22,6 +22,7 @@ const newsHtml = read('public/news.html');
 const termsHtml = read('public/terms.html');
 const privacyHtml = read('public/privacy.html');
 const manifestDoc = read('MANIFEST.md');
+const listAgentAuthHref = '/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=list_agent';
 
 for (const [name, html] of [
   ['help', helpHtml],
@@ -40,13 +41,18 @@ for (const [name, html] of [
   assert.ok(html.includes(`<a class="logo logo-link" href="/" aria-label="Back to ${SITE_NAME} start">${SITE_NAME}</a>`), `${name} logo should link back to start`);
 }
 
-for (const href of ['/help.html', '/resources.html', '/site-map.html', '/llms.txt', '/rss.xml', '/feed.xml', '/glossary.html', '/contribute.html', '/guide.html', '/cli-help.html', '/qa.html', '/news.html', '/terms.html', '/privacy.html', '/no-api-key-ai-agents.html', '/ai-agent-marketplace.html', '/publish-ai-agents.html', '/ai-agent-runtime.html', '/ai-agent-monetization.html', '/order-ai-agents.html', '/ai-agent-api.html', '/ai-agent-cli.html', '/ai-agent-verification.html', '/ai-agent-manifest.html', '/github-ai-agent-integration.html', '/ai-agent-payouts.html', '/verifiable-ai-agent-delivery.html', '/agents.html', '/agents/prompt-brushup-ai-agent.html', '/agents/seo-gap-ai-agent.html']) {
+assert.ok(indexHtml.includes('<main class="home-shell" aria-label="CAIt landing page">'), 'index should be the public landing page');
+assert.ok(indexHtml.includes('Anyone can create high-quality AI agent output'), 'index should explain the anyone-can-create-high-quality-output positioning');
+assert.ok(indexHtml.includes('/login?next=%2Fchat&amp;source=start'), 'index START should send visitors to the dedicated login path for chat');
+for (const href of ['/login?next=%2Fchat', '/resources.html', '/rss.xml', '/feed.xml', '/publish-ai-agents.html', '/ai-agent-api.html', '/agents.html', '/cli-help.html', '/help.html', '/news.html']) {
   assert.ok(indexHtml.includes(href), `index should link ${href}`);
 }
+assert.ok(!indexHtml.includes('/?tab=work'), 'index should not link retired work tab route');
+assert.ok(!indexHtml.includes('/?tab=agents'), 'index should not link retired agents tab route');
 
 assert.ok(helpHtml.includes('HELP CENTER'));
 assert.ok(helpHtml.includes('START HERE'));
-assert.ok(helpHtml.includes('Work Chat Lifecycle') || helpHtml.includes('WORK CHAT LIFECYCLE'));
+assert.ok(helpHtml.includes('QUALITY WORKFLOW'));
 assert.ok(helpHtml.includes('BUYER GUIDE'));
 assert.ok(helpHtml.includes('PUBLISHER GUIDE'));
 assert.ok(helpHtml.includes('SECURITY AND PERMISSIONS'));
@@ -76,8 +82,8 @@ assert.ok(glossaryHtml.includes('Vector Database'));
 assert.ok(glossaryHtml.includes('Tool Calling'));
 assert.ok(glossaryHtml.includes('ORDER AN AI AGENT'));
 assert.ok(glossaryHtml.includes('LIST YOUR AGENT'));
-assert.ok(glossaryHtml.includes('/?tab=work'));
-assert.ok(glossaryHtml.includes('/?tab=agents'));
+assert.ok(glossaryHtml.includes('href="/"'));
+assert.ok(glossaryHtml.includes('/agents.html'));
 
 assert.ok(contributeHtml.includes('Contribute AI Agent Field Notes'));
 assert.ok(contributeHtml.includes('OPEN GITHUB ISSUES'));
@@ -93,12 +99,27 @@ assert.ok(resourcesHtml.includes('/feed.xml'));
 assert.ok(resourcesHtml.includes('/agents/prompt-brushup-ai-agent.html'));
 assert.ok(resourcesHtml.includes('/glossary/ai-agent.html'));
 
-assert.ok(agentsHtml.includes('CORE SPECIALIST AGENTS'));
-assert.ok(agentsHtml.includes('LEADER AGENTS'));
-assert.ok(agentsHtml.includes('CHANNEL AND DATA SPECIALISTS'));
+assert.ok(agentsHtml.includes('QUALITY FLOW'));
+assert.ok(agentsHtml.includes('1. LEADER LAYER'));
+assert.ok(agentsHtml.includes('2. RESEARCH LAYER'));
+assert.ok(agentsHtml.includes('3. PLANNING AND PREPARATION LAYER'));
+assert.ok(agentsHtml.includes('4. ACTION AND APP HANDOFF LAYER'));
+assert.ok(agentsHtml.includes('JOIN THE MARKETPLACE'));
+assert.ok(agentsHtml.includes('Plug your agent or app into the quality loop.'));
+assert.ok(agentsHtml.includes('REGISTER YOUR APP'));
+assert.ok(agentsHtml.includes('READ MANIFEST GUIDE'));
+assert.ok(agentsHtml.includes('Manifest:'));
+assert.ok(agentsHtml.includes('Routing:'));
 assert.ok(agentsHtml.includes('/help.html#agent-briefing'));
-assert.ok(agentsHtml.indexOf('CORE SPECIALIST AGENTS') < agentsHtml.indexOf('LEADER AGENTS'));
-assert.ok(agentsHtml.indexOf('LEADER AGENTS') < agentsHtml.indexOf('CHANNEL AND DATA SPECIALISTS'));
+assert.ok(agentsHtml.includes(listAgentAuthHref), 'agent catalog LIST YOUR AGENT CTA should start GitHub OAuth/link flow');
+assert.ok(agentsHtml.includes('login_source=register_app'), 'agent catalog REGISTER YOUR APP CTA should start GitHub OAuth/link flow');
+assert.ok(!agentsHtml.includes('href="/agents.html" class="mini-btn link-btn">LIST YOUR AGENT</a>'), 'agent catalog LIST YOUR AGENT CTA should not loop back to the catalog');
+assert.ok(agentsHtml.indexOf('QUALITY FLOW') < agentsHtml.indexOf('1. LEADER LAYER'));
+assert.ok(agentsHtml.indexOf('QUALITY FLOW') < agentsHtml.indexOf('JOIN THE MARKETPLACE'));
+assert.ok(agentsHtml.indexOf('JOIN THE MARKETPLACE') < agentsHtml.indexOf('1. LEADER LAYER'));
+assert.ok(agentsHtml.indexOf('1. LEADER LAYER') < agentsHtml.indexOf('2. RESEARCH LAYER'));
+assert.ok(agentsHtml.indexOf('2. RESEARCH LAYER') < agentsHtml.indexOf('3. PLANNING AND PREPARATION LAYER'));
+assert.ok(agentsHtml.indexOf('3. PLANNING AND PREPARATION LAYER') < agentsHtml.indexOf('4. ACTION AND APP HANDOFF LAYER'));
 
 assert.ok(siteMapHtml.includes('HTML SITE MAP'));
 assert.ok(siteMapHtml.includes('AI Agent Guides'));
@@ -111,33 +132,28 @@ assert.ok(siteMapHtml.includes('/news/demo-video-provider-flow.html'));
 assert.ok(siteMapHtml.includes('/glossary/ai-agent.html'));
 
 assert.ok(guideHtml.includes('FIRST RUN GUIDE'));
-assert.ok(guideHtml.includes('npm run dev'));
-assert.ok(guideHtml.includes('127.0.0.1:4323'));
-assert.ok(guideHtml.includes('/api/jobs'));
+assert.ok(guideHtml.includes('first high-quality AI agent order'));
+assert.ok(guideHtml.includes('app context'));
+assert.ok(guideHtml.includes('delivery history'));
 
-assert.ok(cliHtml.includes('CLI HELP'));
+assert.ok(cliHtml.includes('API AND CLI GUIDE'));
 assert.ok(cliHtml.includes('curl.exe'));
-assert.ok(cliHtml.includes('npx wrangler dev'));
-assert.ok(cliHtml.includes('npm run qa:all'));
-assert.ok(cliHtml.includes('PUBLIC CAIt API KEY'));
+assert.ok(cliHtml.includes('QUALITY WORKFLOW CHECKLIST'));
+assert.ok(cliHtml.includes('delivery history'));
+assert.ok(cliHtml.includes('ONE USER-SCOPED KEY'));
 assert.ok(cliHtml.includes('AGENT REGISTRATION WITH CAIt API KEY'));
-assert.ok(cliHtml.includes('ONE CAIt API KEY'));
 assert.ok(cliHtml.includes('npm run cait:key -- create --label codex-desktop'));
-assert.ok(cliHtml.includes('CAIT_ADMIN_API_TOKEN'));
 assert.ok(cliHtml.includes('https://aiagent-marketplace.net/api/jobs'));
 assert.ok(cliHtml.includes('needs_input'));
 assert.ok(cliHtml.includes('skip_intake'));
 assert.ok(cliHtml.includes('https://aiagent-marketplace.net/api/agents/import-manifest'));
 assert.ok(cliHtml.includes('Authorization: Bearer'));
-assert.ok(cliHtml.includes('/api/settings/api-keys'));
-assert.ok(cliHtml.includes('/api/admin/api-keys'));
-assert.ok(cliHtml.includes('/api/agents/<agent_id>/verify') || cliHtml.includes('/api/agents/&lt;agent_id&gt;/verify'));
-assert.ok(cliHtml.includes('Each key requires an explicit title'));
-assert.ok(cliHtml.includes('saved-card month-end billing and plan rules'));
+assert.ok(cliHtml.includes('APP CONTEXT HANDOFF'));
+assert.ok(cliHtml.includes('CONTEXT-FIRST ORDERING'));
 
 assert.ok(qaHtml.includes('Q&A'));
-assert.ok(qaHtml.includes('cost basis + creator fee 10% + marketplace fee 10%'));
-assert.ok(qaHtml.includes('GitHub App'));
+assert.ok(qaHtml.includes('agent leaders, simple chat, and SaaS-style apps'));
+assert.ok(qaHtml.includes('WHAT DATA IS STORED?'));
 
 assert.ok(newsHtml.includes('NEWS / FIELD NOTES'));
 assert.ok(newsHtml.includes('Product updates, design decisions, and operating notes'));

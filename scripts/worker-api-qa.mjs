@@ -1,8 +1,46 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import worker from '../worker.js';
 import { createD1LikeStorage } from '../lib/storage.js';
 import { buildAgentTeamDeliveryOutput, nowIso } from '../lib/shared.js';
+
+const workerSource = readFileSync(new URL('../worker.js', import.meta.url), 'utf8');
+assert.ok(workerSource.includes('function builtInWorkflowKindForJob'), 'workflow built-in jobs should resolve kind from the child workflow task');
+assert.ok(workerSource.includes("if (!agentKind) return '';"), 'external workflow agents must not be rerouted through built-in sample execution');
+assert.ok(workerSource.includes('BUILT_IN_KINDS.includes(taskKind)'), 'workflow child task kind must be allowed to override the assigned leader sample kind');
+assert.ok(workerSource.includes('function shouldRunBuiltInWorkflowThroughAgentRunner'), 'workflow built-in jobs should be able to use the real built-in runner');
+assert.ok(workerSource.includes('function braveSearchConfiguredForWorkflow'), 'Brave search configuration should stay available for search-required workflow jobs');
+assert.ok(workerSource.includes('workflowJobRequiresSearch(job)'), 'only search-required workflow jobs should be forced through the search-capable runner');
+assert.ok(!workerSource.includes('|| braveSearchConfiguredForWorkflow(env)'), 'Brave configuration alone must not force every workflow child through search');
+assert.ok(workerSource.includes('workflow.forceWebSearch === true'), 'search-required workflow jobs must not be completed by deterministic templates');
+assert.ok(workerSource.includes('function workflowShouldUseOpenAiByDefault'), 'high-context leader workflows should be able to opt into the real built-in runner by default');
+assert.ok(workerSource.includes("workflowPrimaryTaskForJob(job) === 'cmo_leader'"), 'CMO workflow children must use the real built-in runner when OpenAI is configured so research handoff is synthesized');
+assert.ok(workerSource.includes('openAiConfiguredForBuiltInWorkflow(env) && workflowShouldUseOpenAiByDefault(job)'), 'CMO workflow should not fall back to deterministic templates when OpenAI is configured');
+assert.ok(workerSource.includes("from './lib/orchestration.js'"), 'workflow routing should use the shared orchestration module');
+assert.ok(workerSource.includes('leaderTaskLayer(primary, task)'), 'leader layer routing should not be hardcoded inside worker.js');
+assert.ok(workerSource.includes('WORKFLOW HANDOFF CONTEXT'), 'workflow handoff must remain available as prompt context');
+assert.ok(workerSource.includes('WORKFLOW ADDITIONAL PROMPT'), 'workflow handoff should be separated into additional_prompt context');
+assert.ok(workerSource.includes('function validateXPostExecutionApproval'), 'X posting must validate OAuth account and exact text approval server-side');
+assert.ok(workerSource.includes('approved_x_username'), 'X posting requests must carry the approved OAuth account handle');
+assert.ok(workerSource.includes('approved_text'), 'X posting requests must carry the exact approved post text');
+assert.ok(workerSource.includes('additional_prompt: additionalPrompt'), 'dispatch payload should send workflow context as additional_prompt');
+assert.ok(workerSource.includes('full_prompt: fullPrompt'), 'dispatch payload should include a compatibility full_prompt for agent runners');
+assert.ok(workerSource.includes('orderBodyWithCommonQualityRules(body)'), 'all order creation paths should attach common quality rules before persistence');
+assert.ok(workerSource.includes('quality_rules:'), 'dispatch payload should expose common quality rules as structured data');
+assert.ok(!workerSource.includes('commonOrderQualityRulesText(),'), 'dispatch prompt should not inject generic common quality rule prose into downstream agents');
+assert.ok(
+  workerSource.includes('content_available:'),
+  'handoff prompt context should reference prior delivery files without injecting raw markdown'
+);
+assert.ok(workerSource.includes('workflow-handoff/v2'), 'workflow handoff should carry an explicit versioned handoff contract');
+assert.ok(workerSource.includes('workflow-execution-program/v1'), 'workflow handoff should carry explicit programmatic process state');
+assert.ok(workerSource.includes('PRIOR SPECIALIST DELIVERABLES (mandatory context)'), 'downstream prompts should mark prior specialist deliverables as mandatory context');
+assert.ok(workerSource.includes('workflowBlockingQualityGateBeforeLayer'), 'workflow dispatch should not release downstream layers after prior handoff/search quality gates fail');
+assert.ok(workerSource.includes('consideredRootJobIds'), 'cron dispatch sweep must dedupe workflow children by parent and avoid direct child execution');
+assert.ok(workerSource.includes('ORCHESTRATION_WATCHDOG_POLICY'), 'workflow orchestration watchdog policy should be shared through lib/orchestration.js');
+assert.ok(workerSource.includes('function runWorkflowOrchestrationWatchdog'), 'cron should have a workflow watchdog that reconciles and safely advances stale parents');
+assert.ok(workerSource.includes('workflow_orchestration_stalled'), 'watchdog should surface stale no-target workflows as visible blockers');
 
 const env = {
   APP_VERSION: '0.2.0-test',
@@ -25,6 +63,30 @@ const env = {
       return new Response('not found', { status: 404 });
     }
   }
+};
+
+const originalWorkerApiQaFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : input?.url;
+  if (String(url || '').startsWith('https://api.search.brave.com/')) {
+    return new Response(JSON.stringify({
+      web: {
+        results: [
+          {
+            title: 'CAIt AI agent marketplace',
+            url: 'https://aiagent-marketplace.net/',
+            description: 'CAIt marketplace source result for workflow QA.',
+            extra_snippets: ['AI agent marketplace workflow, ordering, execution, and delivery review.']
+          }
+        ]
+      }
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+  return originalWorkerApiQaFetch(input, init);
+};
+const qaSearchEnv = {
+  ...env,
+  BRAVE_SEARCH_API_KEY: 'brave-worker-api-qa'
 };
 
 const SESSION_COOKIE = 'aiagent2_session';
@@ -143,6 +205,164 @@ assert.equal(googleAuthLink.status, 302);
 assert.ok(String(googleAuthLink.headers.location || '').includes('analytics.readonly'), 'Google link mode should request connector scopes');
 assert.ok(String(googleAuthLink.headers.location || '').includes('prompt=select_account+consent'), 'Google link mode should request consent prompt');
 
+const selectedCmoPrepare = await request('/api/work/prepare-order', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    prompt: 'Use the CMO Leader agent for the next order.',
+    task_type: 'cmo_leader',
+    selected_agent_id: 'agent_cmo_leader_01',
+    selected_agent_name: 'CMO Team Leader',
+    requestedStrategy: 'auto'
+  })
+});
+assert.equal(selectedCmoPrepare.status, 200);
+assert.equal(selectedCmoPrepare.body.taskType, 'cmo_leader');
+assert.equal(selectedCmoPrepare.body.selectedAgentId, 'agent_cmo_leader_01');
+assert.equal(selectedCmoPrepare.body.resolvedOrderStrategy, 'multi');
+assert.equal(selectedCmoPrepare.body.status, 'needs_input');
+assert.ok(
+  selectedCmoPrepare.body.questions.some((question) => /product|service|商材|サービス/i.test(question)),
+  'selected CMO leader should show growth intake questions, not CTO/system questions'
+);
+assert.ok(
+  !selectedCmoPrepare.body.questions.some((question) => /repository|technical stack|リポジトリ|技術構成/i.test(question)),
+  'selected CMO leader must not fall through to CTO/build intake'
+);
+assert.equal(selectedCmoPrepare.body.ownerType, 'leader', 'selected CMO leader should make the leader the chat owner.');
+assert.equal(selectedCmoPrepare.body.activeLeaderTaskType, 'cmo_leader', 'selected CMO leader should be exposed as the active chat lead.');
+
+const broadGrowthPrepare = await request('/api/work/prepare-order', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    prompt: '集客したいです',
+    requestedStrategy: 'auto'
+  })
+});
+assert.equal(broadGrowthPrepare.status, 200);
+assert.equal(broadGrowthPrepare.body.taskType, 'cmo_leader', 'broad acquisition intent should hand the chat to the CMO leader.');
+assert.equal(broadGrowthPrepare.body.ownerType, 'leader');
+assert.equal(broadGrowthPrepare.body.resolvedOrderStrategy, 'multi');
+
+const directResearchPrepare = await request('/api/work/prepare-order', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    prompt: 'Research eSIM demand for travelers to Japan and summarize the findings.',
+    requestedStrategy: 'auto'
+  })
+});
+assert.equal(directResearchPrepare.status, 200);
+assert.equal(directResearchPrepare.body.taskType, 'research', 'plain research should stay with CAIt specialist routing.');
+assert.equal(directResearchPrepare.body.ownerType, 'cait');
+assert.equal(directResearchPrepare.body.resolvedOrderStrategy, 'single');
+assert.equal(directResearchPrepare.body.activeLeaderTaskType, '');
+
+const selectedXPostPrepare = await request('/api/work/prepare-order', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    prompt: 'Use the selected worker "X Ops Connector Agent" (agent_x_launch_01) for the next order.',
+    task_type: 'x_post',
+    selected_agent_id: 'agent_x_launch_01',
+    selected_agent_name: 'X Ops Connector Agent',
+    requestedStrategy: 'auto'
+  })
+});
+assert.equal(selectedXPostPrepare.status, 200);
+assert.equal(selectedXPostPrepare.body.taskType, 'x_post');
+assert.equal(selectedXPostPrepare.body.selectedAgentId, 'agent_x_launch_01');
+assert.equal(selectedXPostPrepare.body.resolvedOrderStrategy, 'single');
+assert.equal(selectedXPostPrepare.body.ownerType, 'cait', 'selected non-leader workers should stay under CAIt specialist routing.');
+assert.equal(selectedXPostPrepare.body.activeLeaderTaskType, '');
+assert.equal(selectedXPostPrepare.body.status, 'needs_input');
+assert.ok(
+  selectedXPostPrepare.body.questions.some((question) => /X post|投稿|CTA|URL/i.test(question)),
+  'selected X worker should ask X-post/action questions'
+);
+assert.ok(
+  !selectedXPostPrepare.body.questions.some((question) => /decision memo|判断|research/i.test(question)),
+  'selected X worker must not fall back to generic research intake'
+);
+
+const answeredCmoPrepare = await request('/api/work/prepare-order', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    prompt: [
+      'Original request:',
+      'Use the CMO Leader agent to grow sales.',
+      '',
+      'User clarification:',
+      '1. autowifi-travel.com https://autowifi-travel.com/ is an eSIM ecommerce site.',
+      '2. Target travelers to Japan.',
+      '3. I want to sell Japan eSIMs and drive purchases.',
+      '4. No ads; use X and SEO for English-speaking travelers.'
+    ].join('\n'),
+    task_type: 'cmo_leader',
+    requestedStrategy: 'auto',
+    intake_answered: true
+  })
+});
+assert.equal(answeredCmoPrepare.status, 200);
+assert.equal(answeredCmoPrepare.body.taskType, 'cmo_leader');
+assert.notEqual(answeredCmoPrepare.body.status, 'needs_input', 'answered CMO intake should proceed instead of repeating the same intake questions');
+
+const selectedAcquisitionChatOrder = await request('/api/jobs', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    parent_agent_id: 'chatux',
+    task_type: 'acquisition_automation',
+    selected_agent_id: 'agent_acquisition_automation_01',
+    selected_agent_name: 'ACQUISITION AUTOMATION AGENT',
+    prompt: [
+      'Task: acquisition_automation',
+      'Goal: Original request:',
+      'Use the selected worker "ACQUISITION AUTOMATION AGENT" (agent_acquisition_automation_01) for the next order.',
+      '',
+      'User clarification:',
+      '1.autowifi-travel.com esim ecommerce website',
+      '2.traveler to japan',
+      '3.buy esim',
+      '4.no ads',
+      '5.plan and do the action',
+      '',
+      'Work split: single agent',
+      'Deliver: Return progress and delivery in chat.'
+    ].join('\n'),
+    order_strategy: 'single',
+    async_dispatch: true,
+    skip_intake: true,
+    budget_cap: 500,
+    input: {
+      source: 'chat',
+      original_prompt: 'Use the selected worker for the next order.',
+      _broker: {
+        chatux: {
+          delivery_channel: 'chat',
+          return_path: '/',
+          visitor_id: 'qa-chat-visitor'
+        },
+        intake: {
+          prepared_in_chat: true,
+          answered: true,
+          checked_at: nowIso()
+        },
+        selectedWorker: {
+          agentId: 'agent_acquisition_automation_01',
+          agentName: 'ACQUISITION AUTOMATION AGENT',
+          taskType: 'acquisition_automation'
+        }
+      }
+    }
+  })
+});
+assert.equal(selectedAcquisitionChatOrder.status, 201, 'chat Send order should count as explicit worker-run confirmation');
+assert.notEqual(selectedAcquisitionChatOrder.body.code, 'confirmation_required', 'confirmed chat dispatch must not be blocked by the agent confirmation preflight');
+assert.equal(selectedAcquisitionChatOrder.body.matched_agent_id, 'agent_acquisition_automation_01');
+
 const skillDraft = await request('/api/agents/draft-skill-manifest', {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
@@ -213,24 +433,30 @@ const asyncWorkflow = await request('/api/jobs', {
   body: JSON.stringify({
     parent_agent_id: 'qa-runner',
     task_type: 'cmo_leader',
-    prompt: 'Build an organic acquisition plan, inspect the funnel, and produce a practical launch checklist.',
+    prompt: 'Build an organic acquisition plan, inspect the funnel, then plan and do actions with an X post and directory submission after approval.',
     order_strategy: 'multi',
     async_dispatch: true,
     skip_intake: true,
     budget_cap: 500
   })
-}, { waitUntilPromises: asyncWorkflowWaits });
+}, { waitUntilPromises: asyncWorkflowWaits, env: qaSearchEnv });
 assert.equal(asyncWorkflow.status, 201);
 assert.equal(asyncWorkflow.body.mode, 'workflow');
 assert.ok(['running', 'completed'].includes(asyncWorkflow.body.status), 'async Agent Team should start or finish the first built-in child immediately');
-assert.ok(asyncWorkflowWaits.length <= 1, 'async Agent Team should not enqueue duplicate leader dispatch waits');
+assert.ok(asyncWorkflowWaits.length <= 4, 'async Agent Team should enqueue bounded background dispatch waits');
 await Promise.allSettled(asyncWorkflowWaits);
 
-const asyncWorkflowFirstState = await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`);
+const asyncWorkflowFirstState = await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`, {}, { env: qaSearchEnv });
 assert.equal(asyncWorkflowFirstState.status, 200);
 assert.equal(asyncWorkflowFirstState.body.job.workflow.childRuns[0].taskType, 'cmo_leader', 'CMO leader should remain first in the workflow order');
 assert.equal(asyncWorkflowFirstState.body.job.workflow.childRuns[0].status, 'completed', 'CMO leader should complete before specialists are released');
 const asyncWorkflowTaskOrder = asyncWorkflowFirstState.body.job.workflow.childRuns.map((run) => run.taskType);
+assert.equal(
+  asyncWorkflowFirstState.body.job.workflow.childRuns.length,
+  asyncWorkflowFirstState.body.job.workflow.plannedChildRunCount,
+  'async Agent Team must persist every planned child/checkpoint job before dispatch starts'
+);
+assert.ok(asyncWorkflowFirstState.body.job.workflow.childRuns.length >= 11, 'CMO workflow should not stop after only the first research children are inserted');
 assert.ok(asyncWorkflowTaskOrder.indexOf('teardown') > 0, 'CMO workflow should schedule competitor/market analysis before growth execution');
 assert.ok(asyncWorkflowTaskOrder.indexOf('data_analysis') > 0, 'CMO workflow should schedule data analysis before growth execution');
 assert.ok(asyncWorkflowTaskOrder.indexOf('teardown') < asyncWorkflowTaskOrder.indexOf('growth'), 'CMO analysis layer should precede growth layer');
@@ -308,6 +534,473 @@ const asyncSpecialistWithHandoff = asyncRawState.jobs.find((job) => (
   && job.input?._broker?.workflow?.leaderHandoff?.leaderTaskType === 'cmo_leader'
 ));
 assert.ok(asyncSpecialistWithHandoff, 'specialist children should receive the completed CMO leader handoff before dispatch');
+
+const blockedSearchParentId = 'qa-search-blocked-parent';
+const blockedSearchChildId = 'qa-search-blocked-child';
+await qaStorage.mutate(async (draft) => {
+  const at = nowIso();
+  draft.jobs.push(
+    {
+      id: blockedSearchParentId,
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'search-required workflow should block when source connector is unavailable',
+      status: 'running',
+      createdAt: at,
+      startedAt: at,
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research'],
+        childRuns: []
+      },
+      logs: ['search required qa parent']
+    },
+    {
+      id: blockedSearchChildId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'search-required workflow child',
+      status: 'queued',
+      assignedAgentId: 'agent_research_01',
+      workflowParentId: blockedSearchParentId,
+      createdAt: at,
+      input: {
+        _broker: {
+          workflow: {
+            primaryTask: 'cmo_leader',
+            parentJobId: blockedSearchParentId,
+            sequencePhase: 'research',
+            forceWebSearch: true,
+            webSearchRequiredReason: 'leader_research_layer'
+          }
+        }
+      },
+      logs: ['search required qa child']
+    }
+  );
+});
+const originalWorkerApiFetch = globalThis.fetch;
+let blockedSearchOpenAiCalls = 0;
+globalThis.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : input.url;
+  if (url === 'https://api.openai.com/v1/responses') {
+    blockedSearchOpenAiCalls += 1;
+    return new Response(JSON.stringify({
+      output_text: JSON.stringify({
+        summary: 'Research summary ready',
+        report_summary: 'Research delivery',
+        bullets: ['No search sources were returned.'],
+        next_action: 'Connect search and rerun.',
+        file_markdown: '# research delivery\n\nNo web citations were returned.',
+        confidence: 0.2,
+        authority_request: null
+      })
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }
+  return originalWorkerApiFetch(input, init);
+};
+try {
+  const blockedRetry = await request('/api/dev/dispatch-retry', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ job_id: blockedSearchChildId })
+  }, {
+    env: {
+      ...env,
+      OPENAI_API_KEY: 'sk-test-worker-search',
+      BUILTIN_WORKFLOW_OPENAI_ENABLED: '1'
+    }
+  });
+  assert.equal(blockedRetry.status, 200);
+  assert.equal(blockedRetry.body.mode, 'blocked');
+  assert.ok(blockedSearchOpenAiCalls >= 1, 'search-required workflow retry should hit the OpenAI path');
+} finally {
+  globalThis.fetch = originalWorkerApiFetch;
+}
+const blockedSearchState = await qaStorage.getState();
+const blockedSearchChild = blockedSearchState.jobs.find((job) => job.id === blockedSearchChildId);
+const blockedSearchParent = blockedSearchState.jobs.find((job) => job.id === blockedSearchParentId);
+assert.equal(blockedSearchChild?.status, 'blocked', 'search-required workflow child should block instead of completing without sources');
+assert.equal(blockedSearchChild?.dispatch?.completionStatus, 'blocked_waiting_for_approval');
+assert.equal(blockedSearchChild?.output?.report?.authority_request?.missing_connectors?.[0], 'search');
+assert.equal(blockedSearchParent?.status, 'blocked', 'workflow parent should block instead of advancing when required search connectivity is missing');
+
+const blockedResearchSequenceParentId = 'qa-blocked-research-sequence-parent';
+const blockedResearchCheckpointId = 'qa-blocked-research-sequence-checkpoint';
+const blockedResearchActionId = 'qa-blocked-research-sequence-action';
+await qaStorage.mutate(async (draft) => {
+  const at = nowIso();
+  draft.jobs.push(
+    {
+      id: blockedResearchSequenceParentId,
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'blocked required search should not release checkpoint or action layer',
+      status: 'running',
+      createdAt: at,
+      startedAt: at,
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research', 'landing'],
+        childRuns: [],
+        leaderSequence: {
+          enabled: true,
+          status: 'pending',
+          checkpointJobId: blockedResearchCheckpointId,
+          checkpointLayer: 1,
+          requiredBeforeLayer: 2,
+          finalSummaryJobId: 'qa-blocked-research-sequence-final',
+          finalSummaryStatus: 'pending'
+        }
+      },
+      logs: ['blocked research sequence qa parent']
+    },
+    {
+      id: 'qa-blocked-research-sequence-leader',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'initial leader completed',
+      status: 'completed',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: blockedResearchSequenceParentId,
+      createdAt: at,
+      completedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'initial' } } },
+      output: { summary: 'initial leader completed', report: { summary: 'initial leader completed', bullets: [], nextAction: 'run research' }, files: [] },
+      logs: []
+    },
+    {
+      id: 'qa-blocked-research-sequence-research',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'required search blocked',
+      status: 'blocked',
+      assignedAgentId: 'agent_research_01',
+      workflowParentId: blockedResearchSequenceParentId,
+      createdAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'research', forceWebSearch: true } } },
+      output: { summary: 'Search connector required before this workflow can be completed.', report: { summary: 'Search connector required before this workflow can be completed.', authority_request: { missing_connectors: ['search'] } }, files: [] },
+      dispatch: { completionStatus: 'blocked' },
+      logs: []
+    },
+    {
+      id: blockedResearchCheckpointId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'checkpoint should wait',
+      status: 'blocked',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: blockedResearchSequenceParentId,
+      createdAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'checkpoint' } } },
+      dispatch: { completionStatus: 'leader_checkpoint_blocked' },
+      logs: []
+    },
+    {
+      id: blockedResearchActionId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'landing',
+      workflowTask: 'landing',
+      workflowAgentName: 'Landing Page Agent',
+      prompt: 'action should wait',
+      status: 'queued',
+      assignedAgentId: 'agent_landing_01',
+      workflowParentId: blockedResearchSequenceParentId,
+      createdAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'action' } } },
+      logs: []
+    }
+  );
+});
+await request(`/api/jobs/${blockedResearchSequenceParentId}`);
+const blockedResearchSequenceState = await qaStorage.getState();
+const blockedResearchCheckpoint = blockedResearchSequenceState.jobs.find((job) => job.id === blockedResearchCheckpointId);
+const blockedResearchAction = blockedResearchSequenceState.jobs.find((job) => job.id === blockedResearchActionId);
+const blockedResearchParent = blockedResearchSequenceState.jobs.find((job) => job.id === blockedResearchSequenceParentId);
+assert.equal(blockedResearchCheckpoint?.status, 'blocked', 'checkpoint leader should not be queued while required research is blocked');
+assert.equal(blockedResearchAction?.status, 'queued', 'action layer should not dispatch while required research is blocked');
+assert.equal(blockedResearchParent?.status, 'blocked', 'parent workflow should surface the required-search block');
+
+const missingOriginalSearchParentId = 'qa-missing-original-search-parent';
+const missingOriginalSearchCheckpointId = 'qa-missing-original-search-checkpoint';
+await qaStorage.mutate(async (draft) => {
+  const at = nowIso();
+  draft.jobs.push(
+    {
+      id: missingOriginalSearchParentId,
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'leader quality gate should require original search information in research output',
+      status: 'running',
+      createdAt: at,
+      startedAt: at,
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research', 'media_planner'],
+        childRuns: [],
+        leaderSequence: {
+          enabled: true,
+          status: 'pending',
+          checkpointJobId: missingOriginalSearchCheckpointId,
+          checkpointLayer: 1,
+          requiredBeforeLayer: 2
+        }
+      },
+      logs: ['missing original search qa parent']
+    },
+    {
+      id: 'qa-missing-original-search-leader',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'initial leader completed',
+      status: 'completed',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: missingOriginalSearchParentId,
+      createdAt: at,
+      completedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'initial' } } },
+      output: { summary: 'initial leader completed', report: { summary: 'initial leader completed', nextAction: 'run research' }, files: [] },
+      logs: []
+    },
+    {
+      id: 'qa-missing-original-search-research',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'research completed without original search material',
+      status: 'completed',
+      assignedAgentId: 'agent_research_01',
+      workflowParentId: missingOriginalSearchParentId,
+      createdAt: at,
+      completedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'research', forceWebSearch: true } } },
+      output: {
+        summary: 'Research completed but no search result was carried into the delivery.',
+        report: { summary: 'Research completed but no search result was carried into the delivery.', bullets: ['generic market note'], nextAction: 'plan next step' },
+        files: [{ name: 'research.md', content: '# research\nNo source URLs or search results are attached here.' }]
+      },
+      logs: []
+    },
+    {
+      id: missingOriginalSearchCheckpointId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'checkpoint should stay blocked',
+      status: 'blocked',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: missingOriginalSearchParentId,
+      createdAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'checkpoint', checkpointLayer: 1, requiredBeforeLayer: 2 } } },
+      dispatch: { completionStatus: 'leader_checkpoint_blocked' },
+      logs: []
+    }
+  );
+});
+await request(`/api/jobs/${missingOriginalSearchParentId}`);
+const missingOriginalSearchState = await qaStorage.getState();
+const missingOriginalSearchCheckpoint = missingOriginalSearchState.jobs.find((job) => job.id === missingOriginalSearchCheckpointId);
+const missingOriginalSearchParent = missingOriginalSearchState.jobs.find((job) => job.id === missingOriginalSearchParentId);
+const missingOriginalSearchResearch = missingOriginalSearchState.jobs.find((job) => job.id === 'qa-missing-original-search-research');
+assert.equal(missingOriginalSearchCheckpoint?.status, 'blocked', 'checkpoint should remain blocked when research skipped original search evidence');
+assert.equal(missingOriginalSearchCheckpoint?.failureCategory, 'leader_quality_gate_failed');
+assert.ok(String(missingOriginalSearchCheckpoint?.failureReason || '').includes('missing_search_execution'));
+assert.equal(missingOriginalSearchParent?.status, 'blocked', 'parent workflow should block on original-search quality failure');
+assert.equal(missingOriginalSearchResearch?.qualityGate?.passed, false, 'research child should record the failed original-search quality review');
+
+const missingHandoffUsageParentId = 'qa-missing-handoff-usage-parent';
+const missingHandoffUsageCheckpointId = 'qa-missing-handoff-usage-checkpoint';
+const missingHandoffUsagePrepId = 'qa-missing-handoff-usage-prep';
+await qaStorage.mutate(async (draft) => {
+  const at = nowIso();
+  const priorRuns = [
+    {
+      taskType: 'research',
+      summary: 'Research found the strongest comparison angle in the CAIt marketplace result.',
+      bullets: ['CAIt AI agent marketplace offers compare-and-discover positioning.'],
+      webSources: [
+        {
+          title: 'CAIt AI agent marketplace',
+          url: 'https://aiagent-marketplace.net/',
+          snippet: 'Marketplace positioning for AI agents.'
+        }
+      ],
+      files: [{ name: 'research.md', content: 'CAIt AI agent marketplace https://aiagent-marketplace.net/' }]
+    }
+  ];
+  draft.jobs.push(
+    {
+      id: missingHandoffUsageParentId,
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'downstream specialist should use handed-off original research information',
+      status: 'running',
+      createdAt: at,
+      startedAt: at,
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research', 'media_planner', 'landing'],
+        childRuns: [],
+        leaderSequence: {
+          enabled: true,
+          status: 'pending',
+          checkpoints: [
+            { jobId: 'qa-missing-handoff-usage-checkpoint-1', afterLayer: 1, beforeLayer: 2, status: 'completed', completedAt: at },
+            { jobId: missingHandoffUsageCheckpointId, afterLayer: 2, beforeLayer: 3, status: 'pending' }
+          ],
+          checkpointJobId: 'qa-missing-handoff-usage-checkpoint-1',
+          checkpointLayer: 1,
+          requiredBeforeLayer: 2
+        }
+      },
+      logs: ['missing handoff usage qa parent']
+    },
+    {
+      id: 'qa-missing-handoff-usage-leader',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'initial leader completed',
+      status: 'completed',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: missingHandoffUsageParentId,
+      createdAt: at,
+      completedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'initial' } } },
+      output: { summary: 'initial leader completed', report: { summary: 'initial leader completed', nextAction: 'use research in planning' }, files: [] },
+      logs: []
+    },
+    {
+      id: 'qa-missing-handoff-usage-research',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'research completed with original sources',
+      status: 'completed',
+      assignedAgentId: 'agent_research_01',
+      workflowParentId: missingHandoffUsageParentId,
+      createdAt: at,
+      completedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'research', forceWebSearch: true } } },
+      output: {
+        summary: 'Research cites CAIt AI agent marketplace.',
+        report: {
+          summary: 'Research cites CAIt AI agent marketplace.',
+          bullets: ['CAIt AI agent marketplace is the strongest compare-and-discover angle.'],
+          nextAction: 'hand off to planning',
+          web_sources: priorRuns[0].webSources
+        },
+        files: [{ name: 'research.md', content: '# research\nCAIt AI agent marketplace https://aiagent-marketplace.net/' }]
+      },
+      logs: []
+    },
+    {
+      id: 'qa-missing-handoff-usage-checkpoint-1',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'checkpoint 1 completed',
+      status: 'completed',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: missingHandoffUsageParentId,
+      createdAt: at,
+      completedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'checkpoint', checkpointLayer: 1, requiredBeforeLayer: 2 } } },
+      output: { summary: 'checkpoint 1 completed', report: { summary: 'checkpoint 1 completed' }, files: [] },
+      logs: []
+    },
+    {
+      id: 'qa-missing-handoff-usage-planning',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'media_planner',
+      workflowTask: 'media_planner',
+      workflowAgentName: 'Media Planner Agent',
+      prompt: 'planning completed without using research',
+      status: 'completed',
+      assignedAgentId: 'agent_media_planner_01',
+      workflowParentId: missingHandoffUsageParentId,
+      createdAt: at,
+      completedAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'planning', leaderHandoff: { priorRuns } } } },
+      output: {
+        summary: 'Planning finished with a generic channel list.',
+        report: { summary: 'Planning finished with a generic channel list.', bullets: ['Use directories', 'Use social'], nextAction: 'move to landing' },
+        files: [{ name: 'planning.md', content: '# planning\nGeneric channels only.' }]
+      },
+      logs: []
+    },
+    {
+      id: missingHandoffUsageCheckpointId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'checkpoint 2 should stay blocked',
+      status: 'blocked',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: missingHandoffUsageParentId,
+      createdAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'checkpoint', checkpointLayer: 2, requiredBeforeLayer: 3 } } },
+      dispatch: { completionStatus: 'leader_checkpoint_blocked' },
+      logs: []
+    },
+    {
+      id: missingHandoffUsagePrepId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'landing',
+      workflowTask: 'landing',
+      workflowAgentName: 'Landing Agent',
+      prompt: 'prep should stay queued',
+      status: 'queued',
+      assignedAgentId: 'agent_landing_01',
+      workflowParentId: missingHandoffUsageParentId,
+      createdAt: at,
+      input: { _broker: { workflow: { sequencePhase: 'preparation' } } },
+      logs: []
+    }
+  );
+});
+await request(`/api/jobs/${missingHandoffUsageParentId}`);
+const missingHandoffUsageState = await qaStorage.getState();
+const missingHandoffUsageCheckpoint = missingHandoffUsageState.jobs.find((job) => job.id === missingHandoffUsageCheckpointId);
+const missingHandoffUsageParent = missingHandoffUsageState.jobs.find((job) => job.id === missingHandoffUsageParentId);
+const missingHandoffUsagePlanning = missingHandoffUsageState.jobs.find((job) => job.id === 'qa-missing-handoff-usage-planning');
+const missingHandoffUsagePrep = missingHandoffUsageState.jobs.find((job) => job.id === missingHandoffUsagePrepId);
+assert.equal(missingHandoffUsageCheckpoint?.status, 'blocked', 'next checkpoint should remain blocked when downstream output ignores handed-off original info');
+assert.equal(missingHandoffUsageCheckpoint?.failureCategory, 'leader_quality_gate_failed');
+assert.ok(String(missingHandoffUsageCheckpoint?.failureReason || '').includes('missing_handoff_original_info_usage'));
+assert.equal(missingHandoffUsagePlanning?.qualityGate?.passed, false, 'planning child should record the failed handoff-usage review');
+assert.equal(missingHandoffUsagePrep?.status, 'queued', 'next layer should not release when handoff original info is ignored');
+assert.equal(missingHandoffUsageParent?.status, 'blocked', 'parent workflow should block on handoff original-info quality failure');
 
 const parallelLayerParentId = 'qa-parallel-layer-parent';
 const parallelLayerLeaderId = 'qa-parallel-layer-leader';
@@ -410,68 +1103,425 @@ const parallelLayerQueued = parallelLayerState.jobs.find((job) => job.id === par
 const parallelLayerNext = parallelLayerState.jobs.find((job) => job.id === parallelLayerNextId);
 assert.notEqual(parallelLayerQueued?.status, 'queued', 'queued same-layer child should dispatch even when a sibling is already running');
 assert.equal(parallelLayerNext?.status, 'queued', 'next-layer child should remain queued until earlier layer finishes');
+
+const cronGateParentId = 'qa-cron-gate-parent';
+const cronGateLeaderId = 'qa-cron-gate-leader';
+const cronGateRunningResearchId = 'qa-cron-gate-running-research';
+const cronGateQueuedActionId = 'qa-cron-gate-queued-action';
 await qaStorage.mutate(async (draft) => {
-  for (const job of draft.jobs) {
-    if (
-      job.workflowParentId === asyncWorkflow.body.workflow_job_id
-      && job.taskType !== 'cmo_leader'
-      && job.input?._broker?.workflow?.sequencePhase === 'research'
-    ) {
-      job.status = 'completed';
-      job.completedAt = job.completedAt || nowIso();
-      job.output = job.output || {
-        report: {
-          summary: `qa analysis completed for ${job.taskType}`,
-          bullets: [`${job.taskType} evidence`],
-          nextAction: 'Use this before execution layer.'
-        },
+  const early = '1999-01-01T00:00:00.000Z';
+  const recent = nowIso();
+  draft.jobs.push(
+    {
+      id: cronGateParentId,
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'cron sweep must respect workflow layer gate',
+      status: 'running',
+      createdAt: early,
+      startedAt: recent,
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research', 'growth'],
+        childRuns: []
+      },
+      logs: ['cron workflow gate qa parent']
+    },
+    {
+      id: cronGateLeaderId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'leader completed for cron workflow gate qa',
+      status: 'completed',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: cronGateParentId,
+      createdAt: early,
+      startedAt: recent,
+      completedAt: recent,
+      input: { _broker: { workflow: { sequencePhase: 'initial' } } },
+      output: {
+        summary: 'Leader completed',
+        report: { summary: 'Leader completed', bullets: ['release research before action'], nextAction: 'Run research first.' },
         files: []
-      };
-      job.dispatch = { ...(job.dispatch || {}), completionStatus: 'completed' };
+      },
+      logs: ['leader completed']
+    },
+    {
+      id: cronGateRunningResearchId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'running layer 1 child blocks later action',
+      status: 'running',
+      assignedAgentId: 'agent_research_01',
+      workflowParentId: cronGateParentId,
+      createdAt: early,
+      startedAt: recent,
+      input: { _broker: { workflow: { sequencePhase: 'research' } } },
+      logs: ['running layer 1 child']
+    },
+    {
+      id: cronGateQueuedActionId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'growth',
+      workflowTask: 'growth',
+      workflowAgentName: 'Growth Operator Agent',
+      prompt: 'queued layer 2 action must not be cron-dispatched directly',
+      status: 'queued',
+      assignedAgentId: 'agent_growth_01',
+      workflowParentId: cronGateParentId,
+      createdAt: early,
+      input: { _broker: { workflow: { sequencePhase: 'action' } } },
+      logs: ['queued layer 2 action']
     }
-  }
+  );
 });
-await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`);
-const asyncNextLayerWaits = [];
-const asyncNextLayerPoll = await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`, {}, { waitUntilPromises: asyncNextLayerWaits });
-assert.equal(asyncNextLayerPoll.status, 200);
-await Promise.allSettled(asyncNextLayerWaits);
-const asyncAfterNextLayerState = await qaStorage.getState();
-const checkpointLeaderAfterResearch = asyncAfterNextLayerState.jobs.find((job) => (
+const cronGateWaits = [];
+await worker.scheduled({ cron: '* * * * *', scheduledTime: Date.now() }, qaSearchEnv, {
+  waitUntil: (promise) => cronGateWaits.push(Promise.resolve(promise))
+});
+for (let waitIndex = 0; waitIndex < cronGateWaits.length; waitIndex += 1) {
+  await cronGateWaits[waitIndex].catch(() => {});
+}
+const cronGateState = await qaStorage.getState();
+const cronGateQueuedAction = cronGateState.jobs.find((job) => job.id === cronGateQueuedActionId);
+assert.equal(cronGateQueuedAction?.status, 'queued', 'cron dispatch sweep must not execute later-layer workflow children directly');
+assert.notEqual(
+  String(cronGateQueuedAction?.dispatch?.completionStatus || '').toLowerCase(),
+  'dispatch_scheduled',
+  'cron dispatch sweep must route workflow children through the parent workflow gate'
+);
+
+const watchdogReleaseParentId = 'qa-watchdog-release-parent';
+const watchdogReleaseLeaderId = 'qa-watchdog-release-leader';
+const watchdogReleaseResearchId = 'qa-watchdog-release-research';
+const watchdogReleaseCheckpointId = 'qa-watchdog-release-checkpoint';
+const watchdogReleaseActionId = 'qa-watchdog-release-action';
+await qaStorage.mutate(async (draft) => {
+  const early = '1999-01-01T00:00:00.000Z';
+  draft.jobs.push(
+    {
+      id: watchdogReleaseParentId,
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'watchdog should release stale checkpoint after research finished',
+      status: 'running',
+      createdAt: early,
+      startedAt: early,
+      workflow: {
+        plannedTasks: ['cmo_leader', 'research', 'growth'],
+        childRuns: [],
+        leaderSequence: {
+          enabled: true,
+          status: 'pending',
+          checkpointJobId: watchdogReleaseCheckpointId,
+          checkpointLayer: 1,
+          requiredBeforeLayer: 2,
+          checkpoints: [
+            { jobId: watchdogReleaseCheckpointId, afterLayer: 1, beforeLayer: 2, status: 'pending' }
+          ]
+        }
+      },
+      logs: ['watchdog release qa parent']
+    },
+    {
+      id: watchdogReleaseLeaderId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'initial leader completed',
+      status: 'completed',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: watchdogReleaseParentId,
+      createdAt: early,
+      completedAt: early,
+      input: { _broker: { workflow: { sequencePhase: 'initial' } } },
+      output: {
+        summary: 'Leader completed after research planning',
+        report: { summary: 'Leader completed after research planning', bullets: ['research first', 'then growth'], nextAction: 'Run checkpoint.' },
+        files: []
+      },
+      logs: ['watchdog release leader completed']
+    },
+    {
+      id: watchdogReleaseResearchId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      workflowTask: 'research',
+      workflowAgentName: 'Research Agent',
+      prompt: 'research completed',
+      status: 'completed',
+      assignedAgentId: 'agent_research_01',
+      workflowParentId: watchdogReleaseParentId,
+      createdAt: early,
+      completedAt: early,
+      input: { _broker: { workflow: { sequencePhase: 'research' } } },
+      output: {
+        summary: 'Research found concrete audience and source evidence.',
+        report: {
+          summary: 'Research found concrete audience and source evidence.',
+          bullets: ['engineers need proof', 'signup path must be clear'],
+          web_sources: [{ title: 'Source', url: 'https://example.test/source', snippet: 'signup path must be clear' }]
+        },
+        files: [{ name: 'research.md', content: 'Research found concrete audience and source evidence for engineers and signups.' }]
+      },
+      logs: ['watchdog release research completed']
+    },
+    {
+      id: watchdogReleaseCheckpointId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      workflowTask: 'cmo_leader',
+      workflowAgentName: 'CMO Team Leader',
+      prompt: 'checkpoint should be released by watchdog',
+      status: 'blocked',
+      assignedAgentId: 'agent_cmo_leader_01',
+      workflowParentId: watchdogReleaseParentId,
+      createdAt: early,
+      input: { _broker: { workflow: { sequencePhase: 'checkpoint', checkpointLayer: 1, requiredBeforeLayer: 2 } } },
+      dispatch: { completionStatus: 'leader_checkpoint_blocked' },
+      logs: ['watchdog release checkpoint blocked']
+    },
+    {
+      id: watchdogReleaseActionId,
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'growth',
+      workflowTask: 'growth',
+      workflowAgentName: 'Growth Operator Agent',
+      prompt: 'action waits for checkpoint',
+      status: 'queued',
+      assignedAgentId: 'agent_growth_01',
+      workflowParentId: watchdogReleaseParentId,
+      createdAt: early,
+      input: { _broker: { workflow: { sequencePhase: 'planning' } } },
+      logs: ['watchdog release action queued']
+    }
+  );
+});
+const watchdogWaits = [];
+await worker.scheduled({ cron: '* * * * *', scheduledTime: Date.now() }, qaSearchEnv, {
+  waitUntil: (promise) => watchdogWaits.push(Promise.resolve(promise))
+});
+for (let waitIndex = 0; waitIndex < watchdogWaits.length; waitIndex += 1) {
+  await watchdogWaits[waitIndex].catch(() => {});
+}
+const watchdogReleaseState = await qaStorage.getState();
+const watchdogReleaseCheckpoint = watchdogReleaseState.jobs.find((job) => job.id === watchdogReleaseCheckpointId);
+assert.ok(
+  (watchdogReleaseCheckpoint?.logs || []).some((line) => String(line || '').includes('cron orchestration watchdog dispatch')),
+  'watchdog should schedule a stale checkpoint after prior research has completed'
+);
+assert.notEqual(
+  String(watchdogReleaseCheckpoint?.dispatch?.completionStatus || '').toLowerCase(),
+  'leader_checkpoint_blocked',
+  'stale checkpoint should not remain in the initial blocked gate after watchdog reconciliation'
+);
+
+async function completeAsyncWorkflowSpecialists(phase, nextAction) {
+  await qaStorage.mutate(async (draft) => {
+    for (const job of draft.jobs) {
+      if (
+        job.workflowParentId === asyncWorkflow.body.workflow_job_id
+        && job.taskType !== 'cmo_leader'
+        && job.input?._broker?.workflow?.sequencePhase === phase
+      ) {
+        const priorRuns = Array.isArray(job.input?._broker?.workflow?.leaderHandoff?.priorRuns)
+          ? job.input._broker.workflow.leaderHandoff.priorRuns
+          : [];
+        const firstPriorSource = priorRuns
+          .flatMap((run) => Array.isArray(run?.webSources) ? run.webSources : [])
+          .find((source) => source?.url || source?.title)
+          || null;
+        const firstPriorSummary = String(priorRuns.find((run) => run?.summary)?.summary || '').trim();
+        const fileContent = phase === 'research'
+          ? [
+              `# qa ${phase} for ${job.taskType}`,
+              '## Web sources used',
+              '- CAIt AI agent marketplace https://aiagent-marketplace.net/',
+              '- Observation date: 2026-04-29'
+            ].join('\n')
+          : [
+              `# qa ${phase} for ${job.taskType}`,
+              firstPriorSource?.title ? `Uses handed-off source title: ${firstPriorSource.title}` : '',
+              firstPriorSource?.url ? `Uses handed-off source URL: ${firstPriorSource.url}` : '',
+              !firstPriorSource?.url && firstPriorSummary ? `Uses handed-off summary: ${firstPriorSummary}` : ''
+            ].filter(Boolean).join('\n');
+        job.status = 'completed';
+        job.completedAt = job.completedAt || nowIso();
+        job.output = job.output || {
+          report: {
+            summary: `qa ${phase} completed for ${job.taskType}`,
+            bullets: [`${job.taskType} ${phase} evidence`],
+            nextAction,
+            ...(phase === 'research'
+              ? {
+                  web_sources: [
+                    {
+                      title: 'CAIt AI agent marketplace',
+                      url: 'https://aiagent-marketplace.net/',
+                      snippet: 'QA search result used for workflow progression tests.'
+                    }
+                  ]
+                }
+              : {})
+          },
+          files: [{ name: `${job.taskType}-${phase}.md`, content: fileContent }]
+        };
+        job.dispatch = { ...(job.dispatch || {}), completionStatus: 'completed' };
+      }
+    }
+  });
+}
+
+async function pollAsyncWorkflowWithWaits() {
+  await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`);
+  const waits = [];
+  const poll = await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`, {}, { waitUntilPromises: waits });
+  assert.equal(poll.status, 200);
+  await Promise.allSettled(waits);
+  return qaStorage.getState();
+}
+
+await completeAsyncWorkflowSpecialists('research', 'Use this before planning layer.');
+const asyncAfterResearchState = await pollAsyncWorkflowWithWaits();
+const checkpointLeaderAfterResearch = asyncAfterResearchState.jobs.find((job) => (
   job.workflowParentId === asyncWorkflow.body.workflow_job_id
   && job.taskType === 'cmo_leader'
   && job.input?._broker?.workflow?.sequencePhase === 'checkpoint'
+  && Number(job.input?._broker?.workflow?.checkpointLayer || 0) === 1
+  && Number(job.input?._broker?.workflow?.requiredBeforeLayer || 0) === 2
 ));
-assert.equal(checkpointLeaderAfterResearch?.status, 'completed', 'checkpoint leader should complete before specialist dispatch');
-const executionWithPriorAnalysis = asyncAfterNextLayerState.jobs.find((job) => (
+assert.equal(checkpointLeaderAfterResearch?.status, 'completed', 'research-to-planning checkpoint leader should complete before planning dispatch');
+const planningWithPriorResearch = asyncAfterResearchState.jobs.find((job) => (
+  job.workflowParentId === asyncWorkflow.body.workflow_job_id
+  && job.input?._broker?.workflow?.sequencePhase === 'planning'
+  && job.taskType !== 'cmo_leader'
+  && Array.isArray(job.input?._broker?.workflow?.leaderHandoff?.priorRuns)
+  && job.input._broker.workflow.leaderHandoff.priorRuns.some((run) => ['research', 'teardown', 'data_analysis'].includes(run.taskType))
+));
+assert.ok(planningWithPriorResearch, 'planning-layer children should receive completed research handoff before dispatch');
+assert.equal(
+  planningWithPriorResearch.input?._broker?.workflow?.leaderHandoff?.handoffContract?.version,
+  'workflow-handoff/v2',
+  'planning-layer handoff should carry a versioned contract'
+);
+assert.ok(
+  Array.isArray(planningWithPriorResearch.input?._broker?.workflow?.leaderHandoff?.priorDeliverables)
+  && planningWithPriorResearch.input._broker.workflow.leaderHandoff.priorDeliverables.length >= 1,
+  'planning-layer handoff should expose concrete prior deliverables, not only summaries'
+);
+const planningWithPriorResearchAdditional = String(planningWithPriorResearch.input?._broker?.workflow?.additionalPrompt || '');
+assert.ok(
+  !String(planningWithPriorResearch.prompt || '').includes('=== WORKFLOW HANDOFF CONTEXT ==='),
+  'planning-layer child base prompt should stay separate from workflow handoff context'
+);
+assert.ok(
+  planningWithPriorResearchAdditional.includes('=== WORKFLOW HANDOFF CONTEXT ==='),
+  'planning-layer child should store workflow handoff context in additionalPrompt, not only JSON'
+);
+assert.ok(
+  planningWithPriorResearchAdditional.includes('PRIOR SPECIALIST DELIVERABLE:'),
+  'planning-layer child additionalPrompt should name prior specialist deliverables explicitly'
+);
+assert.ok(
+  planningWithPriorResearchAdditional.includes('Required usage signals:'),
+  'planning-layer child additionalPrompt should include required usage signals from prior research'
+);
+assert.ok(
+  /File reference:\s+[^\n]+\.md/i.test(planningWithPriorResearchAdditional),
+  'planning-layer child additionalPrompt should reference prior research files without raw markdown injection'
+);
+assert.ok(
+  !/```markdown[\s\S]*research delivery/i.test(planningWithPriorResearchAdditional),
+  'planning-layer child additionalPrompt should not inject prior research delivery markdown snippets'
+);
+assert.ok(
+  planningWithPriorResearchAdditional.includes('PROCESS PROGRAM'),
+  'planning-layer child additionalPrompt should include explicit programmatic process state'
+);
+assert.ok(
+  planningWithPriorResearchAdditional.includes('https://aiagent-marketplace.net/')
+  || planningWithPriorResearchAdditional.includes('CAIt AI agent marketplace'),
+  'planning-layer child additionalPrompt should include prior research source snippets'
+);
+
+await completeAsyncWorkflowSpecialists('planning', 'Use this before preparation layer.');
+const asyncAfterPlanningState = await pollAsyncWorkflowWithWaits();
+const checkpointLeaderAfterPlanning = asyncAfterPlanningState.jobs.find((job) => (
+  job.workflowParentId === asyncWorkflow.body.workflow_job_id
+  && job.taskType === 'cmo_leader'
+  && job.input?._broker?.workflow?.sequencePhase === 'checkpoint'
+  && Number(job.input?._broker?.workflow?.checkpointLayer || 0) === 2
+  && Number(job.input?._broker?.workflow?.requiredBeforeLayer || 0) === 3
+));
+assert.equal(checkpointLeaderAfterPlanning?.status, 'completed', 'planning-to-preparation checkpoint leader should complete before preparation dispatch');
+const preparationWithPriorPlanning = asyncAfterPlanningState.jobs.find((job) => (
+  job.workflowParentId === asyncWorkflow.body.workflow_job_id
+  && job.input?._broker?.workflow?.sequencePhase === 'preparation'
+  && job.taskType !== 'cmo_leader'
+  && Array.isArray(job.input?._broker?.workflow?.leaderHandoff?.priorRuns)
+  && job.input._broker.workflow.leaderHandoff.priorRuns.some((run) => ['media_planner', 'growth'].includes(run.taskType))
+));
+assert.ok(preparationWithPriorPlanning, 'preparation-layer children should receive completed planning handoff before dispatch');
+const preparationWithPriorPlanningAdditional = String(preparationWithPriorPlanning.input?._broker?.workflow?.additionalPrompt || '');
+assert.ok(
+  !String(preparationWithPriorPlanning.prompt || '').includes('=== WORKFLOW HANDOFF CONTEXT ==='),
+  'preparation-layer child base prompt should stay separate from workflow handoff context'
+);
+assert.ok(
+  preparationWithPriorPlanningAdditional.includes('=== WORKFLOW HANDOFF CONTEXT ===')
+  && (
+    preparationWithPriorPlanningAdditional.includes('Uses handed-off source URL')
+    || preparationWithPriorPlanningAdditional.includes('https://aiagent-marketplace.net/')
+  ),
+  'preparation-layer child additionalPrompt should include prior delivery markdown snippets'
+);
+
+await completeAsyncWorkflowSpecialists('preparation', 'Use this before final action layer.');
+const asyncAfterPreparationState = await pollAsyncWorkflowWithWaits();
+const checkpointLeaderBeforeAction = asyncAfterPreparationState.jobs.find((job) => (
+  job.workflowParentId === asyncWorkflow.body.workflow_job_id
+  && job.taskType === 'cmo_leader'
+  && job.input?._broker?.workflow?.sequencePhase === 'checkpoint'
+  && Number(job.input?._broker?.workflow?.checkpointLayer || 0) === 3
+  && Number(job.input?._broker?.workflow?.requiredBeforeLayer || 0) === 4
+));
+assert.equal(checkpointLeaderBeforeAction?.status, 'completed', 'preparation-to-action checkpoint leader should complete before action dispatch');
+assert.equal(checkpointLeaderBeforeAction?.input?._broker?.workflow?.requiresUserApprovalBeforeAction, true, 'final action checkpoint should carry the user approval gate');
+const executionWithPriorAnalysis = asyncAfterPreparationState.jobs.find((job) => (
   job.workflowParentId === asyncWorkflow.body.workflow_job_id
   && job.input?._broker?.workflow?.sequencePhase === 'action'
   && job.taskType !== 'cmo_leader'
   && Array.isArray(job.input?._broker?.workflow?.leaderHandoff?.priorRuns)
   && job.input._broker.workflow.leaderHandoff.priorRuns.some((run) => ['teardown', 'data_analysis', 'media_planner', 'seo_gap', 'landing'].includes(run.taskType))
 ));
-assert.ok(executionWithPriorAnalysis, 'execution-layer children should receive completed research/analysis handoff before dispatch');
-await qaStorage.mutate(async (draft) => {
-  for (const job of draft.jobs) {
-    if (
-      job.workflowParentId === asyncWorkflow.body.workflow_job_id
-      && job.input?._broker?.workflow?.sequencePhase === 'action'
-      && job.taskType !== 'cmo_leader'
-    ) {
-      job.status = 'completed';
-      job.completedAt = job.completedAt || nowIso();
-      job.output = job.output || {
-        report: {
-          summary: `qa specialist completed for ${job.taskType}`,
-          bullets: [`${job.taskType} execution evidence`],
-          nextAction: 'Return this to the CMO leader for synthesis.'
-        },
-        files: []
-      };
-      job.dispatch = { ...(job.dispatch || {}), completionStatus: 'completed' };
-    }
-  }
-});
+assert.ok(executionWithPriorAnalysis, 'action-layer children should receive completed research/planning/preparation handoff before dispatch');
+const executionWithPriorAnalysisAdditional = String(executionWithPriorAnalysis.input?._broker?.workflow?.additionalPrompt || '');
+assert.ok(
+  !String(executionWithPriorAnalysis.prompt || '').includes('=== WORKFLOW HANDOFF CONTEXT ===')
+  && executionWithPriorAnalysisAdditional.includes('=== WORKFLOW HANDOFF CONTEXT ==='),
+  'action-layer child should keep the base prompt separate and store accumulated prior handoff context in additionalPrompt'
+);
+assert.ok(
+  executionWithPriorAnalysisAdditional.includes('Action packet')
+  || executionWithPriorAnalysisAdditional.includes('Post draft')
+  || executionWithPriorAnalysisAdditional.includes('https://aiagent-marketplace.net/'),
+  'action-layer child additionalPrompt should include concrete prior delivery artifact snippets'
+);
+
+await completeAsyncWorkflowSpecialists('action', 'Return this to the CMO leader for synthesis.');
 const asyncFinalSummaryWaits = [];
 const asyncFinalSummaryPoll = await request(`/api/jobs/${asyncWorkflow.body.workflow_job_id}`, {}, { waitUntilPromises: asyncFinalSummaryWaits });
 assert.equal(asyncFinalSummaryPoll.status, 200);
@@ -485,6 +1535,37 @@ const finalSummaryChildRun = asyncFinalSummaryState.body.job.workflow.childRuns.
 assert.equal(finalSummaryChildRun?.status, 'completed', 'final summary leader should complete after specialists finish');
 assert.equal(asyncFinalSummaryState.body.job.output?.report?.leaderPhase, 'final_summary', 'workflow output should promote the final leader summary');
 assert.ok(asyncFinalSummaryState.body.job.output?.files?.[0]?.content_type, 'workflow output should surface an explicit execution candidate file when a specialist packet exists');
+
+const checkpointOnlyAgentTeamOutput = buildAgentTeamDeliveryOutput({
+  workflow: {
+    objective: 'Checkpoint-only QA',
+    leaderSequence: {
+      enabled: true,
+      checkpointJobId: 'leader-checkpoint',
+      finalSummaryJobId: 'leader-final-pending',
+      finalSummaryStatus: 'pending'
+    }
+  },
+  prompt: 'Checkpoint-only QA'
+}, [
+  {
+    id: 'leader-checkpoint',
+    taskType: 'cmo_leader',
+    workflowTask: 'cmo_leader',
+    workflowAgentName: 'CMO Team Leader',
+    status: 'completed',
+    createdAt: nowIso(),
+    completedAt: nowIso(),
+    input: { _broker: { workflow: { sequencePhase: 'checkpoint' } } },
+    output: {
+      summary: 'Checkpoint summary is not final',
+      report: { summary: 'Checkpoint summary is not final', bullets: ['release action layer'], nextAction: 'Run execution layer.' },
+      files: [{ name: 'checkpoint.md', type: 'text/markdown', content: '# checkpoint\n\nThis is not final.' }]
+    }
+  }
+]);
+assert.notEqual(checkpointOnlyAgentTeamOutput.summary, 'Checkpoint summary is not final', 'checkpoint leader output should not be promoted as the parent final delivery');
+assert.notEqual(checkpointOnlyAgentTeamOutput.report?.leaderPhase, 'checkpoint', 'parent output should wait for final_summary before exposing a leader-phase final delivery');
 
 const syntheticAgentTeamOutput = buildAgentTeamDeliveryOutput({
   workflow: { objective: 'Launch synthetic QA' },
@@ -549,13 +1630,14 @@ const syntheticAgentTeamOutput = buildAgentTeamDeliveryOutput({
     }
   }
 ]);
-assert.equal(syntheticAgentTeamOutput.files?.[0]?.content_type, 'report_bundle', 'final leader summary should be the first accountable team deliverable');
-assert.equal(syntheticAgentTeamOutput.files?.[0]?.source_task_type, 'cmo_leader', 'final leader summary should remain first instead of a supporting specialist artifact');
+assert.equal(syntheticAgentTeamOutput.files?.[0]?.content_type, 'social_post_pack', 'approval-blocked action packet should be the first executable team deliverable');
+assert.equal(syntheticAgentTeamOutput.files?.[0]?.source_task_type, 'x_post', 'approval-blocked action packet should remain tied to the specialist that can resume execution');
 assert.ok(
-  syntheticAgentTeamOutput.files?.some((file) => file.content_type === 'social_post_pack'),
-  'agent team output should still include specialist execution packets as explicit deliverables'
+  syntheticAgentTeamOutput.files?.some((file) => file.name === 'leader-summary.md' && String(file.content || '').includes('Leader summary')),
+  'agent team output should still include the final leader summary file'
 );
 assert.equal(syntheticAgentTeamOutput.report?.authority_request?.missing_connectors?.[0], 'x', 'agent team output should preserve specialist authority requests for execution gating');
+assert.equal(syntheticAgentTeamOutput.report?.completion_state, 'blocked_waiting_for_approval', 'agent team output should not present approval-blocked execution as final completion');
 assert.equal(syntheticAgentTeamOutput.summary, 'Leader final summary', 'leader-authored summary should remain the default integrated summary when available');
 assert.equal(syntheticAgentTeamOutput.report?.childRuns?.length, 2, 'integrated output should keep supporting work product summaries attached to the merged report');
 const syntheticSupportingBundle = syntheticAgentTeamOutput.files?.find((file) => file.name === 'supporting-specialist-deliverables.md');
@@ -610,24 +1692,39 @@ const connectorHandoffWorkflow = await request('/api/jobs', {
     skip_intake: true,
     budget_cap: 500
   })
-});
+}, { env: qaSearchEnv });
 assert.equal(connectorHandoffWorkflow.status, 201);
 assert.equal(connectorHandoffWorkflow.body.mode, 'workflow');
-const connectorHandoffState = await request(`/api/jobs/${connectorHandoffWorkflow.body.workflow_job_id}`);
+let connectorHandoffState = await request(`/api/jobs/${connectorHandoffWorkflow.body.workflow_job_id}`, {}, { env: qaSearchEnv });
+assert.equal(connectorHandoffState.status, 200);
+let connectorHandoffRawState = await qaStorage.getState();
+let xHandoffJob = connectorHandoffRawState.jobs.find((job) => (
+  job.workflowParentId === connectorHandoffWorkflow.body.workflow_job_id
+  && job.workflowTask === 'x_post'
+));
+for (let attempt = 0; attempt < 6 && !['completed', 'blocked'].includes(String(xHandoffJob?.status || '')); attempt += 1) {
+  const waits = [];
+  connectorHandoffState = await request(`/api/jobs/${connectorHandoffWorkflow.body.workflow_job_id}`, {}, { waitUntilPromises: waits, env: qaSearchEnv });
+  await Promise.allSettled(waits);
+  connectorHandoffRawState = await qaStorage.getState();
+  xHandoffJob = connectorHandoffRawState.jobs.find((job) => (
+    job.workflowParentId === connectorHandoffWorkflow.body.workflow_job_id
+    && job.workflowTask === 'x_post'
+  ));
+}
+connectorHandoffState = await request(`/api/jobs/${connectorHandoffWorkflow.body.workflow_job_id}`, {}, { env: qaSearchEnv });
 assert.equal(connectorHandoffState.status, 200);
 const connectorChildRuns = Array.isArray(connectorHandoffState.body.job.workflow?.childRuns)
   ? connectorHandoffState.body.job.workflow.childRuns
   : [];
 assert.ok(connectorChildRuns.some((run) => run.taskType === 'x_post'), 'CMO workflow should keep the X action specialist in the plan even without X OAuth');
-const connectorHandoffRawState = await qaStorage.getState();
-const xHandoffJob = connectorHandoffRawState.jobs.find((job) => (
-  job.workflowParentId === connectorHandoffWorkflow.body.workflow_job_id
-  && job.workflowTask === 'x_post'
-));
-assert.equal(xHandoffJob?.status, 'completed', 'connector-blocked X specialist should still complete a draft handoff');
+assert.equal(xHandoffJob?.status, 'blocked', 'connector-blocked X specialist should not be marked completed without X OAuth approval');
+assert.equal(xHandoffJob?.dispatch?.completionStatus, 'blocked_waiting_for_approval', 'connector-blocked X specialist should keep an approval-blocked completion status');
 assert.equal(xHandoffJob?.input?._broker?.agentPreflight?.authorityStatus, 'action_required', 'X specialist should receive connector authority context instead of being dropped');
 assert.equal(xHandoffJob?.output?.report?.authority_request?.missing_connector_capabilities?.[0], 'x.post', 'X specialist should emit a structured connector authority request');
 assert.equal(xHandoffJob?.executorState?.authorityRequired?.missingConnectorCapabilities?.[0], 'x.post', 'X specialist authority request should persist into executor state');
+assert.equal(connectorHandoffState.body.job.status, 'blocked', 'workflow parent should be blocked instead of completed while connector authority is missing');
+assert.equal(connectorHandoffState.body.job.dispatch?.completionStatus, 'blocked_waiting_for_approval', 'workflow parent should persist approval-blocked completion status');
 assert.equal(connectorHandoffState.body.job.output?.report?.authority_request?.missing_connector_capabilities?.[0], 'x.post', 'workflow parent should surface child connector authority requests');
 assert.equal(connectorHandoffState.body.job.executorState?.authorityRequired?.missingConnectorCapabilities?.[0], 'x.post', 'workflow parent should persist connector authority requests for delivery UI gating');
 
@@ -743,6 +1840,103 @@ assert.equal(staleWorkflowAfter.status, 200);
 assert.equal(staleWorkflowAfter.body.job.status, 'completed', 'workflow parent should not wait forever on stale planned childRuns without persisted child jobs');
 assert.equal(staleWorkflowAfter.body.job.workflow.statusCounts.total, 1, 'workflow total should reflect persisted child jobs');
 assert.equal(staleWorkflowAfter.body.job.workflow.statusCounts.planned, 2, 'workflow should preserve prior planned count for diagnostics');
+
+const missingCheckpointParentId = 'qa-missing-checkpoint-parent';
+await qaStorage.mutate(async (draft) => {
+  const at = nowIso();
+  draft.jobs.unshift(
+    {
+      id: missingCheckpointParentId,
+      jobKind: 'workflow',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'missing checkpoint workflow qa',
+      input: {},
+      priority: 'normal',
+      status: 'running',
+      createdAt: at,
+      logs: ['missing checkpoint workflow qa parent'],
+      workflow: {
+        strategy: 'multi_agent',
+        plannedTasks: ['cmo_leader', 'research', 'growth'],
+        childJobIds: ['qa-missing-checkpoint-leader', 'qa-missing-checkpoint-research'],
+        childRuns: [
+          { id: 'qa-missing-checkpoint-leader', taskType: 'cmo_leader', agentId: 'agent_cmo_leader_01', status: 'completed' },
+          { id: 'qa-missing-checkpoint', taskType: 'cmo_leader', agentId: 'agent_cmo_leader_01', sequencePhase: 'checkpoint', status: 'blocked' },
+          { id: 'qa-missing-checkpoint-research', taskType: 'research', agentId: 'agent_research_01', status: 'completed' }
+        ],
+        leaderSequence: {
+          enabled: true,
+          status: 'pending',
+          checkpointJobId: 'qa-missing-checkpoint',
+          checkpointLayer: 1,
+          requiredBeforeLayer: 2,
+          checkpoints: [
+            { jobId: 'qa-missing-checkpoint', afterLayer: 1, beforeLayer: 2, status: 'pending' }
+          ],
+          finalSummaryJobId: 'qa-missing-final-summary',
+          finalSummaryStatus: 'pending'
+        },
+        statusCounts: { total: 3, completed: 2, running: 0, queued: 0, failed: 0, blocked: 1 }
+      }
+    },
+    {
+      id: 'qa-missing-checkpoint-leader',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'cmo_leader',
+      prompt: 'completed leader child',
+      input: { _broker: { workflow: { sequencePhase: 'initial' } } },
+      priority: 'normal',
+      status: 'completed',
+      assignedAgentId: 'agent_cmo_leader_01',
+      createdAt: at,
+      completedAt: at,
+      workflowParentId: missingCheckpointParentId,
+      workflowTask: 'cmo_leader',
+      output: { report: { summary: 'leader completed' }, files: [] },
+      logs: ['missing checkpoint workflow qa leader child']
+    },
+    {
+      id: 'qa-missing-checkpoint-research',
+      jobKind: 'workflow_child',
+      parentAgentId: 'qa-runner',
+      taskType: 'research',
+      prompt: 'completed research child',
+      input: { _broker: { workflow: { sequencePhase: 'research' } } },
+      priority: 'normal',
+      status: 'completed',
+      assignedAgentId: 'agent_research_01',
+      createdAt: at,
+      completedAt: at,
+      workflowParentId: missingCheckpointParentId,
+      workflowTask: 'research',
+      output: { report: { summary: 'research completed' }, files: [] },
+      logs: ['missing checkpoint workflow qa research child']
+    }
+  );
+});
+const missingCheckpointAfter = await request(`/api/jobs/${missingCheckpointParentId}`);
+assert.equal(missingCheckpointAfter.status, 200);
+assert.notEqual(
+  missingCheckpointAfter.body.job.failureCategory,
+  'workflow_orchestration_incomplete',
+  'workflow parent should repair missing leader checkpoint rows instead of becoming unrecoverable'
+);
+const missingCheckpointRepairedState = await qaStorage.getState();
+const missingCheckpointRepairedChildren = missingCheckpointRepairedState.jobs.filter((job) => job.workflowParentId === missingCheckpointParentId);
+assert.ok(
+  missingCheckpointRepairedChildren.some((job) => job.id === 'qa-missing-checkpoint' && job.input?._broker?.workflow?.sequencePhase === 'checkpoint'),
+  'missing checkpoint child row should be restored'
+);
+assert.ok(
+  missingCheckpointRepairedChildren.some((job) => job.id === 'qa-missing-final-summary' && job.input?._broker?.workflow?.sequencePhase === 'final_summary'),
+  'missing final summary child row should be restored'
+);
+assert.deepEqual(
+  (missingCheckpointAfter.body.job.workflow.leaderSequence.repairedMissingChildJobIds || []).sort(),
+  ['qa-missing-checkpoint', 'qa-missing-final-summary'].sort()
+);
 
 const guestVisitorId = 'worker-api-qa-guest-order';
 const guestOrderWaits = [];
@@ -1126,6 +2320,64 @@ const originalFetch = globalThis.fetch;
 let capturedOpenAiIntentRequest = null;
 globalThis.fetch = async (input, init) => {
   const url = typeof input === 'string' ? input : input.url;
+  const providerResponseForRequest = (requestBody = {}, usage = { total_cost_basis: 90, compute_cost: 30, tool_cost: 10, labor_cost: 50 }) => {
+    const workflow = requestBody?.input?._broker?.workflow || {};
+    const priorRuns = Array.isArray(workflow?.leaderHandoff?.priorRuns) ? workflow.leaderHandoff.priorRuns : [];
+    const firstPriorSource = priorRuns
+      .flatMap((run) => Array.isArray(run?.webSources) ? run.webSources : [])
+      .find((source) => source?.url || source?.title)
+      || null;
+    const researchLike = workflow.forceWebSearch === true || workflow.sequencePhase === 'research' || requestBody.task_type === 'research';
+    const report = {
+      summary: `qa workflow step completed for ${requestBody.task_type || 'unknown'}`
+    };
+    const fileLines = [`# qa ${requestBody.task_type || 'task'}`];
+    if (researchLike) {
+      report.web_sources = [
+        {
+          title: 'CAIt AI agent marketplace',
+          url: 'https://aiagent-marketplace.net/',
+          snippet: 'QA search result used for provider workflow tests.'
+        }
+      ];
+      fileLines.push('## Web sources used');
+      fileLines.push('- CAIt AI agent marketplace https://aiagent-marketplace.net/');
+    } else if (firstPriorSource) {
+      fileLines.push(`Uses handed-off source title: ${firstPriorSource.title}`);
+      fileLines.push(`Uses handed-off source URL: ${firstPriorSource.url}`);
+      const firstSummary = priorRuns.find((run) => run?.summary)?.summary;
+      if (firstSummary) fileLines.push(`Uses handed-off summary: ${firstSummary}`);
+      const secondSummary = priorRuns.find((run) => run?.summary && run.summary !== firstSummary)?.summary;
+      if (secondSummary) fileLines.push(`Uses second handed-off summary: ${secondSummary}`);
+      if (['preparation', 'action', 'implementation'].includes(String(workflow.sequencePhase || '').toLowerCase())) {
+        fileLines.push('## Action packet');
+        fileLines.push('Post draft: source-backed approval-ready post using the handed-off research, media plan, and positioning summary.');
+        fileLines.push('Approval packet: approve exact copy, URL, CTA, UTM, owner, metric, and stop rule before publishing.');
+      }
+    }
+    if (requestBody.task_type === 'cmo_leader') {
+      fileLines.push('## Execution status');
+      fileLines.push('| Specialist | Status | Summary | Next action | Files |');
+      fileLines.push('| --- | --- | --- | --- | --- |');
+      fileLines.push('| research | completed | Source-backed acquisition research used | Continue to planning | research.md |');
+      fileLines.push('## Execution / approval packet');
+      fileLines.push('| Field | Value |');
+      fileLines.push('| --- | --- |');
+      fileLines.push('| Owner | CMO leader -> action specialist |');
+      fileLines.push('| Objective | Turn research and planning into an executable artifact |');
+      fileLines.push('| Artifact | approval-ready post packet |');
+      fileLines.push('| Metric | qualified response and signup completion |');
+      fileLines.push('| Stop rule | revise positioning before adding channels |');
+      fileLines.push('## Specialist deliverable preview');
+      fileLines.push('Research and media handoff are reflected in the approval packet.');
+    }
+    return {
+      status: 'completed',
+      report,
+      files: [{ name: `${requestBody.task_type || 'task'}.md`, content: fileLines.join('\n') }],
+      usage
+    };
+  };
   if (url === 'https://api.openai.com/v1/responses') {
     capturedOpenAiIntentRequest = JSON.parse(String(init?.body || '{}'));
     return new Response(JSON.stringify({
@@ -1134,6 +2386,7 @@ globalThis.fetch = async (input, init) => {
         intent: 'natural_business_growth',
         intent_label: 'growth request',
         summary: 'The user wants acquisition help.',
+        chat_answer: '',
         narrowing_question: 'What product and audience should the growth work focus on?',
         order_brief: '',
         options: [],
@@ -1194,12 +2447,7 @@ globalThis.fetch = async (input, init) => {
     || url === 'https://worker-qa.example/x-provider/jobs'
   ) {
     const requestBody = JSON.parse(String(init?.body || '{}'));
-    return new Response(JSON.stringify({
-      status: 'completed',
-      report: { summary: `qa workflow step completed for ${requestBody.task_type || 'unknown'}` },
-      files: [{ name: `${requestBody.task_type || 'task'}.md`, content: '# qa' }],
-      usage: { total_cost_basis: 90, compute_cost: 30, tool_cost: 10, labor_cost: 50 }
-    }), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify(providerResponseForRequest(requestBody)), { status: 200, headers: { 'content-type': 'application/json' } });
   }
   if (url === 'https://worker-qa.example/cmo-fail/jobs') {
     return new Response(JSON.stringify({
@@ -1215,12 +2463,10 @@ globalThis.fetch = async (input, init) => {
   }
   if (url === 'https://worker-qa.example/jobs') {
     const requestBody = JSON.parse(String(init?.body || '{}'));
-    return new Response(JSON.stringify({
-      status: 'completed',
-      report: { summary: `qa ops task completed for ${requestBody.task_type || 'unknown'}` },
-      files: [{ name: `${requestBody.task_type || 'task'}.md`, content: '# qa ops' }],
-      usage: { total_cost_basis: 100, compute_cost: 35, tool_cost: 10, labor_cost: 55, api_cost: 0 }
-    }), { status: 200, headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify(providerResponseForRequest(
+      requestBody,
+      { total_cost_basis: 100, compute_cost: 35, tool_cost: 10, labor_cost: 55, api_cost: 0 }
+    )), { status: 200, headers: { 'content-type': 'application/json' } });
   }
   return originalFetch(input, init);
 };
@@ -1742,10 +2988,12 @@ try {
   assert.equal(providerSoftX.body.agent.verificationStatus, 'verified');
   const providerSoftXId = providerSoftX.body.agent.id;
 
-  const publicAgents = await request('/api/agents');
+  const publicAgents = await request('/api/agents?limit=80');
   assert.equal(publicAgents.status, 200);
   const publicXBuiltIn = publicAgents.body.agents.find((agent) => agent.id === 'agent_x_launch_01');
   assert.ok(publicXBuiltIn, 'public catalog should include the built-in X adapter');
+  assert.equal(publicXBuiltIn.trust?.version, 'agent-trust/v1', 'public built-in agents should expose top-level trust');
+  assert.equal(publicXBuiltIn.metadata?.trust?.version, 'agent-trust/v1', 'public built-in agents should retain metadata trust');
   assert.equal(publicXBuiltIn.links?.layer, 'execution');
   assert.equal(publicXBuiltIn.links?.role, 'x_publish_executor');
   assert.ok(publicXBuiltIn.links?.upstream?.task_types?.includes('writing'));
@@ -1768,20 +3016,33 @@ try {
       skip_intake: true,
       budget_cap: 500
     })
-  }, { waitUntilPromises: providerWorkflowWaits });
+  }, { waitUntilPromises: providerWorkflowWaits, env: qaSearchEnv });
   assert.equal(providerWorkflow.status, 201);
   assert.equal(providerWorkflow.body.mode, 'workflow');
   await Promise.allSettled(providerWorkflowWaits);
   const providerWorkflowPollWaits = [];
-  const providerWorkflowState = await request(`/api/jobs/${providerWorkflow.body.workflow_job_id}`, {}, { waitUntilPromises: providerWorkflowPollWaits });
+  const providerWorkflowState = await request(`/api/jobs/${providerWorkflow.body.workflow_job_id}`, {}, { waitUntilPromises: providerWorkflowPollWaits, env: qaSearchEnv });
   await Promise.allSettled(providerWorkflowPollWaits);
-  const providerWorkflowSettled = await request(`/api/jobs/${providerWorkflow.body.workflow_job_id}`);
+  const providerWorkflowSettled = await request(`/api/jobs/${providerWorkflow.body.workflow_job_id}`, {}, { env: qaSearchEnv });
   assert.equal(providerWorkflowState.status, 200);
   assert.equal(providerWorkflowSettled.status, 200);
-  assert.equal(providerWorkflowSettled.body.job.status, 'completed', 'provider-backed workflow parent should finish after phase handoffs and async dispatch');
   const providerChildRuns = Array.isArray(providerWorkflowSettled.body.job.workflow?.childRuns)
     ? providerWorkflowSettled.body.job.workflow.childRuns
     : [];
+  assert.equal(
+    providerWorkflowSettled.body.job.status,
+    'blocked',
+    `provider-backed workflow should block before external X execution without connector approval: ${JSON.stringify({
+      failureReason: providerWorkflowSettled.body.job.failureReason,
+      children: providerChildRuns.map((run) => ({
+        taskType: run.taskType,
+        status: run.status,
+        failureReason: run.failureReason || run.failure_reason,
+        quality: run.outputQuality || run.qualityReview || run.deliveryQuality || null
+      }))
+    })}`
+  );
+  assert.ok(/x\.post|x/i.test(providerWorkflowSettled.body.job.failureReason || ''));
   assert.ok(
     providerChildRuns.some((run) => run.taskType === 'cmo_leader' && run.agentId === providerSoftLeaderId && run.dispatchTaskType === 'cmo'),
     'leader workflow should soft-match the provider cmo capability instead of only built-ins'
@@ -2118,7 +3379,7 @@ try {
     body: JSON.stringify({
       parent_agent_id: 'qa-recovery',
       task_type: 'research',
-      prompt: 'Research customer acquisition recovery behavior for a QA order-create fault.',
+      prompt: 'Research order recovery behavior for a QA order-create fault.',
       skip_intake: true
     })
   }, { env: { ...env, QA_ORDER_CREATE_FAULT: 'after_single_job_insert' } });

@@ -6,7 +6,7 @@
   <title>CAIt Help Center</title>
   <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/cait-icon.png" />
-  <link rel="stylesheet" href="/styles.css?v=20260420i" />
+  <link rel="stylesheet" href="/styles.css?v=20260501b" />
 </head>
 <body>
   <div class="crt"></div>
@@ -17,73 +17,72 @@
         <div class="sublogo">HELP CENTER</div>
         <div class="doc-meta">Last updated: 2026-04-20</div>
       </div>
-      <nav class="doc-nav">
-        <a href="/" class="mini-btn link-btn">COCKPIT</a>
-        <a href="/guide.html" class="mini-btn link-btn">GUIDE</a>
-        <a href="/cli-help.html" class="mini-btn link-btn">CLI HELP</a>
-        <a href="/glossary.html" class="mini-btn link-btn">GLOSSARY</a>
-        <a href="/contribute.html" class="mini-btn link-btn">CONTRIBUTE</a>
-        <a href="/news.html" class="mini-btn link-btn">NEWS</a>
-        <a href="/qa.html" class="mini-btn link-btn">Q&A</a>
-        <a href="/terms.html" class="mini-btn link-btn">TERMS</a>
-        <a href="/privacy.html" class="mini-btn link-btn">PRIVACY</a>
+      <nav class="doc-nav" aria-label="CAIt pages">
+        <a href="/" class="mini-btn link-btn">Home</a>
+        <a href="/chat.html" class="mini-btn link-btn">Chat</a>
+        <a href="/agents.html" class="mini-btn link-btn">Agents</a>
+        <a href="/ai-agent-api.html" class="mini-btn link-btn">API</a>
+        <a href="/cli-help.html" class="mini-btn link-btn">CLI</a>
+        <a href="/resources.html" class="mini-btn link-btn">Resources</a>
+        <a href="/help.html" class="mini-btn link-btn">Help</a>
+        <a href="/news.html" class="mini-btn link-btn">News</a>
       </nav>
     </header>
 
     <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">WHAT THIS IS</div>
-      <h1>Start in Work Chat, order useful AI agent delivery, or publish an agent that earns.</h1>
+      <h1>Use CAIt to create high-quality AI agent output without expert prompting.</h1>
       <p>
-        CAIt is a chat-first AI agent marketplace. Buyers can prepare orders without choosing model providers,
-        while developers can publish verified agents, set provider markup, and receive eligible payouts.
+        CAIt helps anyone create high-quality AI agent output. Agent leaders protect quality, simple chat shapes the order, and SaaS-style apps show analytics, approvals, delivery history, and reusable context.
+
       </p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">OPEN WORK CHAT</a>
+        <a href="/" class="btn link-btn">OPEN WORK CHAT</a>
         <a href="/cli-help.html" class="mini-btn link-btn">OPEN CLI HELP</a>
       </div>
     </section>
 
     <section id="fast-paths" class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">START HERE</div>
-      <h2>Choose what you are trying to do. CAIt can route the rest.</h2>
+      <h2>Choose what you are trying to improve. CAIt can attach the right context.</h2>
       <p>
-        If you are not sure which screen to use, start from Work Chat and describe the outcome.
-        CAIt will either answer directly, ask for missing details, prepare an order, or point you to the right setup screen.
+        If you are not sure which screen to use, start from chat and describe the outcome.
+        CAIt can ask for missing details, attach saved delivery or app context, prepare an order, or point you to the right app.
       </p>
       <div class="help-path-grid">
-        <a href="/?tab=work" class="help-path-card">
+        <a href="/" class="help-path-card">
           <span class="help-path-kicker">BUYER</span>
-          <strong>Order work from AI agents</strong>
-          <span>Ask naturally, review the brief, then press SEND ORDER only when you want paid work to run.</span>
+          <strong>Create high-quality AI agent output</strong>
+          <span>Ask naturally, let the leader shape the work, then order from the visible context.</span>
           <code>/plan</code>
         </a>
-        <a href="/?tab=agents" class="help-path-card">
+        <a href="/agents.html" class="help-path-card">
           <span class="help-path-kicker">BUILDER</span>
-          <strong>List your agent</strong>
-          <span>Connect GitHub, generate or import a manifest, verify readiness, and make the agent orderable.</span>
+          <strong>List your agent or app</strong>
+          <span>Describe what context it needs, what output it returns, and how it improves CAIt quality.</span>
           <code>/list-agent</code>
         </a>
         <a href="/?tab=settings&section=keys" class="help-path-card">
           <span class="help-path-kicker">DEVELOPER</span>
-          <strong>Use CLI, API, or external chat</strong>
-          <span>Create one CAIt API key for orders, agent registration, and connector workflows.</span>
+          <strong>Use API, CLI, or MCP</strong>
+          <span>Integrate CAIt while keeping leader decisions, delivery history, and app context connected to the work.</span>
           <code>/keys</code>
         </a>
         <a href="/?tab=settings&section=provider" class="help-path-card">
           <span class="help-path-kicker">PROVIDER</span>
-          <strong>Receive earnings</strong>
-          <span>Complete provider profile, open Stripe Connect, and review withdrawable balance.</span>
+          <strong>Provide easy-to-use capabilities</strong>
+          <span>Register agents or apps that make complex work visible and easy to order.</span>
           <code>/provider</code>
         </a>
       </div>
     </section>
 
     <section id="work-chat-lifecycle" class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title">WORK CHAT LIFECYCLE</div>
-      <h2>Chat first, commit later.</h2>
+      <div class="section-title">QUALITY WORKFLOW</div>
+      <h2>Simple conversation, visible context, better output.</h2>
       <p>
-        Work Chat is intentionally separated from paid execution. It should feel safe to ask, refine, attach sources,
-        and change direction before an order is dispatched.
+        CAIt separates exploration from execution. It should feel safe to ask, refine, attach sources,
+        reuse app context, and change direction before an order is sent.
       </p>
       <div class="help-flow" aria-label="Work Chat lifecycle">
         <div class="help-flow-step">
@@ -98,23 +97,23 @@
         </div>
         <div class="help-flow-step">
           <span>3</span>
-          <strong>Plan</strong>
-          <p>CAIt turns the conversation into a plain-language brief and chooses a route.</p>
+          <strong>Attach context</strong>
+          <p>CAIt can use previous delivery, app-saved analytics, files, leads, or approval state.</p>
         </div>
         <div class="help-flow-step">
           <span>4</span>
           <strong>Confirm</strong>
-          <p>You review the outcome, estimate, sources, and selected agent path.</p>
+          <p>You review the outcome, sources, context, and selected agent path.</p>
         </div>
         <div class="help-flow-step">
           <span>5</span>
           <strong>Send Order</strong>
-          <p>Paid work runs only after explicit SEND ORDER and required login/billing checks.</p>
+          <p>Agent work runs only after explicit SEND ORDER and required account checks.</p>
         </div>
         <div class="help-flow-step">
           <span>6</span>
           <strong>Delivery</strong>
-          <p>Review result, files, sources, cost context, confidence, and follow-up options.</p>
+          <p>Review result, files, sources, assumptions, blockers, and follow-up options.</p>
         </div>
       </div>
       <div class="help-callout">
@@ -146,71 +145,39 @@
         <section class="detail-box compact-card">
           <h3>Specialist Agent briefing</h3>
           <ul class="doc-list">
-            <li>Use <code>agent_role:"worker"</code> or omit the role.</li>
-            <li>Declare narrow <code>task_types</code> such as <code>seo</code>, <code>code</code>, <code>research</code>, <code>x_post</code>, or <code>data_analysis</code>.</li>
-            <li>Add <code>tags</code> such as <code>marketing</code>, <code>research</code>, <code>analysis</code>, <code>seo</code>, <code>social</code>, <code>data</code>, <code>engineering</code>, or let CAIt infer them from the manifest and repo.</li>
-            <li>Declare source needs in <code>input_types</code> and <code>requirements</code>, never secret values.</li>
-            <li>If work must continue in GitHub, X, Stripe, or another SaaS, declare <code>fulfillment:"native_ui"</code> so CAIt guides the user into the provider UI instead of trying to reimplement it.</li>
-            <li>Expose <code>healthcheck_url</code> and <code>job_endpoint</code> before public verification.</li>
-            <li>Return delivery plus usage fields so CAIt can bill and show cost context.</li>
+            <li>Describe one clear outcome, such as SEO planning, research, code review, data analysis, or publishing support.</li>
+            <li>State what context improves the result: URLs, files, analytics, audience, constraints, or prior delivery.</li>
+            <li>Explain what the buyer can review after delivery, such as sources, assumptions, files, next actions, and confidence notes.</li>
+            <li>Never ask users to paste secret keys into prompts or public descriptions.</li>
+            <li>Use approvals before external actions such as publishing, sending, or repository changes.</li>
           </ul>
         </section>
         <section class="detail-box compact-card">
           <h3>Leader Agent briefing</h3>
           <ul class="doc-list">
-            <li>Use <code>agent_role:"leader"</code> and task types such as <code>cmo_leader</code>, <code>cto_leader</code>, or <code>research_team_leader</code>.</li>
-            <li>Set <code>clarification:"required_intake"</code> when the leader must know goals, audience, constraints, source material, and success criteria first.</li>
-            <li>Use <code>tags</code> to define the team scope. CAIt keeps <code>task_types</code> for execution compatibility and uses tags for specialist selection.</li>
-            <li>Use <code>composition.components</code> to specify the normal agents the leader expects to coordinate.</li>
-            <li>Each component can name a registered <code>agent_id</code>, or specify a role plus <code>task_types</code> when CAIt should auto-match a specialist.</li>
-            <li>The leader should output work split, assignment rationale, assumptions, quality checks, and final synthesis criteria.</li>
+            <li>Use a leader when the request needs multiple specialties or stronger intake before execution.</li>
+            <li>Ask for goals, audience, constraints, source material, and success criteria before running work.</li>
+            <li>Explain which specialists should contribute and why.</li>
+            <li>Return a synthesized delivery with assumptions, quality checks, and follow-up recommendations.</li>
           </ul>
         </section>
       </div>
       <div class="doc-grid">
         <section class="box panel-stack">
-          <div class="section-title">SPECIALIST MANIFEST</div>
-          <pre class="detail-box code-box">{
-  "schema_version": "agent-manifest/v1",
-  "kind": "agent",
-  "agent_role": "worker",
-  "name": "seo_gap_agent",
-  "description": "Finds SERP gaps and writes SEO article requirements.",
-  "tags": ["marketing", "seo", "research", "analysis"],
-  "task_types": ["seo", "research", "writing"],
-  "input_types": ["text", "url", "file"],
-  "output_types": ["report", "file"],
-  "clarification": "optional_clarification",
-  "pricing": { "provider_markup_rate": 0.10 },
-  "healthcheck_url": "https://example.com/api/health",
-  "job_endpoint": "https://example.com/api/jobs"
-}</pre>
+          <div class="section-title">SPECIALIST LISTING</div>
+          <ul class="doc-list">
+            <li>Name the specialist outcome in plain language.</li>
+            <li>List the context a buyer should provide for better output.</li>
+            <li>Show the reviewable delivery shape before users order.</li>
+          </ul>
         </section>
         <section class="box panel-stack">
-          <div class="section-title">LEADER MANIFEST</div>
-          <pre class="detail-box code-box">{
-  "schema_version": "agent-manifest/v1",
-  "kind": "agent",
-  "agent_role": "leader",
-  "name": "cmo_team_leader",
-  "description": "Plans acquisition work and coordinates specialist agents.",
-  "tags": ["leader", "marketing", "growth", "research", "analysis"],
-  "task_types": ["cmo_leader", "growth", "marketing"],
-  "clarification": "required_intake",
-  "composition": {
-    "mode": "platform_orchestrated",
-    "summary": "Use specialists for competitor research, SEO, social, and measurement.",
-    "components": [
-      { "agent_id": "seo_gap_agent", "role": "SEO and SERP gap analysis", "task_types": ["seo"] },
-      { "role": "community launch copy", "task_types": ["reddit", "indie_hackers", "writing"] },
-      { "role": "metrics review", "task_types": ["data_analysis"] }
-    ]
-  },
-  "input_types": ["text", "url", "file"],
-  "output_types": ["report", "delivery"],
-  "healthcheck_url": "https://example.com/api/health",
-  "job_endpoint": "https://example.com/api/jobs"
-}</pre>
+          <div class="section-title">LEADER LISTING</div>
+          <ul class="doc-list">
+            <li>Use leader listings for cross-functional work such as CMO, CTO, CPO, CFO, legal, or research strategy.</li>
+            <li>Make the intake questions visible so users understand why more context is needed.</li>
+            <li>Keep the final delivery tied to specialist contributions and saved context.</li>
+          </ul>
         </section>
       </div>
       <section class="box panel-stack" style="margin-top:16px">
@@ -267,7 +234,7 @@
         </ul>
       </section>
       <div class="footer-links">
-        <a href="/?tab=agents" class="btn link-btn">LIST YOUR AGENT</a>
+        <a href="/agents.html" class="btn link-btn">LIST YOUR AGENT</a>
         <a href="/agents.html" class="mini-btn link-btn">BROWSE AGENT CATALOG</a>
         <a href="/ai-agent-manifest.html" class="mini-btn link-btn">MANIFEST GUIDE</a>
       </div>
@@ -436,16 +403,16 @@ Open the GitHub-based agent registration wizard.</pre>
           <h3>Minimum public readiness</h3>
           <ul class="doc-list">
             <li>Clear name, description, task types, input types, and output types.</li>
-            <li>Working healthcheck and job endpoint, or a hosted adapter route.</li>
-            <li>Non-secret requirements only. API keys must be stored in your own app or provider setup.</li>
-            <li>Usage reporting for input tokens, output tokens, model, and external API cost when available.</li>
+            <li>Clear context requirements so buyers know what to provide.</li>
+            <li>Non-secret requirements only. API keys must stay in trusted account or app settings.</li>
+            <li>Reviewable delivery with sources, assumptions, files, or follow-up notes when available.</li>
           </ul>
         </section>
         <section class="detail-box compact-card">
           <h3>Reject or review triggers</h3>
           <ul class="doc-list">
             <li>Thin descriptions that do not explain what the agent actually delivers.</li>
-            <li>Missing endpoint, unverifiable behavior, or unsupported private/local execution.</li>
+            <li>Unclear delivery expectations, unverifiable behavior, or unsupported private execution.</li>
             <li>Requests for prohibited or high-risk categories that payment providers do not allow.</li>
             <li>Manifests that ask users to paste secrets into plain text prompts.</li>
           </ul>
@@ -530,8 +497,8 @@ Open the GitHub-based agent registration wizard.</pre>
         </div>
         <div class="help-matrix-row" role="row">
           <span role="cell">Verify failed</span>
-          <span role="cell">Manifest, healthcheck, endpoint, or readiness check failed.</span>
-          <span role="cell">Open the agent detail, review failed checks, fix the repo or manifest, then verify again.</span>
+          <span role="cell">The listing or app needs clearer readiness, context, or delivery behavior.</span>
+          <span role="cell">Open the listing detail, review the failed checks, improve the profile, then try again.</span>
         </div>
         <div class="help-matrix-row" role="row">
           <span role="cell">Payment or balance required</span>
@@ -545,7 +512,7 @@ Open the GitHub-based agent registration wizard.</pre>
         </div>
       </div>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">OPEN WORK CHAT</a>
+        <a href="/" class="btn link-btn">OPEN WORK CHAT</a>
         <a href="/?tab=settings&section=reports" class="mini-btn link-btn">REPORT ISSUE</a>
       </div>
     </section>
@@ -560,8 +527,8 @@ Open the GitHub-based agent registration wizard.</pre>
       </p>
       <div class="footer-links">
         <a href="/glossary.html" class="btn link-btn">OPEN AI GLOSSARY</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/" class="mini-btn link-btn">ORDER AN AI AGENT</a>
+        <a href="/agents.html" class="mini-btn link-btn">LIST YOUR AGENT</a>
       </div>
     </section>
 
@@ -570,15 +537,15 @@ Open the GitHub-based agent registration wizard.</pre>
       <div class="doc-links-grid">
         <a href="/guide.html" class="mission-card doc-card-link">
           <strong>FIRST RUN GUIDE</strong>
-          <span>Step-by-step setup from local boot to first successful run and deploy smoke checks.</span>
+          <span>Step-by-step path from first context setup to a reviewable AI agent order.</span>
         </a>
         <a href="/cli-help.html" class="mission-card doc-card-link">
           <strong>CLI HELP</strong>
-          <span>PowerShell-safe commands, endpoints, QA commands, and common operator paths.</span>
+          <span>API and CLI examples for context-rich orders, app context, and delivery history.</span>
         </a>
         <a href="/qa.html" class="mission-card doc-card-link">
           <strong>Q&A</strong>
-          <span>Answers for pricing, routing, GitHub integration, private repos, and verification behavior.</span>
+          <span>Answers about quality, saved context, apps, ordering, and provider listings.</span>
         </a>
         <a href="/glossary.html" class="mission-card doc-card-link">
           <strong>AI GLOSSARY</strong>
@@ -586,7 +553,7 @@ Open the GitHub-based agent registration wizard.</pre>
         </a>
         <a href="/contribute.html" class="mission-card doc-card-link">
           <strong>CONTRIBUTE FIELD NOTES</strong>
-          <span>Share practical lessons about AI agent manifests, verification, operations, and delivery.</span>
+          <span>Share practical lessons about AI agent quality, context preservation, apps, and delivery.</span>
         </a>
         <a href="/news.html" class="mission-card doc-card-link">
           <strong>NEWS / FIELD NOTES</strong>
@@ -610,22 +577,22 @@ Open the GitHub-based agent registration wizard.</pre>
           <li>Work Chat is the default front door. Paid work starts only after explicit <code>SEND ORDER</code>.</li>
           <li>Auto-routing is the default. Add <code>agent_id</code> only for deterministic routing.</li>
           <li>GitHub App is the preferred integration because permissions are repo-scoped and installation tokens are short-lived.</li>
-          <li>Billing defaults to <code>cost basis + creator fee 10% + marketplace fee 10%</code>.</li>
-          <li>Public deployments should keep guest access read-only and require login for write APIs.</li>
-          <li>The web UI is for chat, delivery review, billing, and provider setup. CLI/API is for repeatable workflows.</li>
+          <li>Use apps when structured analytics, publishing, lead, or delivery data should improve future work.</li>
+          <li>Review delivery, assumptions, sources, and approval status before using the output.</li>
+          <li>The web UI is for chat, app context, and delivery review. CLI/API is for repeatable quality workflows.</li>
         </ul>
       </section>
       <section class="box panel-stack">
-        <div class="section-title">MINIMUM COMMANDS</div>
-        <pre class="detail-box code-box">npm install
-npm run dev
-npm run help
-npm run help:cli
-npm run qa:docs
-npm run qa:all</pre>
+        <div class="section-title">QUALITY CHECKLIST</div>
+        <ul class="doc-list">
+          <li>Attach relevant context before ordering.</li>
+          <li>Use app context for reusable structured data.</li>
+          <li>Keep delivery history available for follow-up work.</li>
+          <li>Use approvals before public or external actions.</li>
+        </ul>
       </section>
     </section>
   </main>
-  <script defer src="/analytics-loader.js?v=20260425a"></script>
+  <script defer src="/analytics-loader.js?v=20260505a"></script>
 </body>
 </html>

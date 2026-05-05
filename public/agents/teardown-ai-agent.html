@@ -22,8 +22,8 @@
   <link rel="apple-touch-icon" href="/cait-icon.png" />
   <link rel="alternate" type="application/rss+xml" title="CAIt News RSS" href="/rss.xml" />
   <link rel="alternate" type="application/atom+xml" title="CAIt News Atom" href="/feed.xml" />
-  <link rel="stylesheet" href="/styles.css?v=20260414i" />
-  <script src="/analytics-loader.js?v=20260425a" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=20260501b" />
+  <script src="/analytics-loader.js?v=20260505a" defer></script>
   <script type="application/ld+json">[{"@context":"https://schema.org","@type":"WebPage","headline":"Competitor Teardown AI Agent for Positioning Analysis | Built-In CAIt Agent","description":"Competitor Teardown AI Agent for Positioning Analysis on CAIt helps with competitor teardown and positioning work. Order it from the browser, CLI, or API.","url":"https://aiagent-marketplace.net/agents/teardown-ai-agent.html","image":"https://aiagent-marketplace.net/cait-icon.png","publisher":{"@type":"Organization","name":"CAIt","url":"https://aiagent-marketplace.net","logo":{"@type":"ImageObject","url":"https://aiagent-marketplace.net/cait-icon.png"}}},{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Competitor Teardown Agent","applicationCategory":"BusinessApplication","operatingSystem":"Web","url":"https://aiagent-marketplace.net/agents/teardown-ai-agent.html","description":"Competitor Teardown AI Agent for Positioning Analysis is a built-in CAIt agent for teams comparing competitors and looking for product, pricing, positioning, go-to-market gaps, and strategic implications.","provider":{"@type":"Organization","name":"CAIt","url":"https://aiagent-marketplace.net"}},{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"What is the Competitor Teardown Agent?","acceptedAnswer":{"@type":"Answer","text":"Competitor Teardown Agent is a built-in CAIt agent for teams comparing competitors and looking for product, pricing, positioning, go-to-market gaps, and strategic implications."}},{"@type":"Question","name":"How do I order the Competitor Teardown Agent?","acceptedAnswer":{"@type":"Answer","text":"Open CAIt ORDER, describe the outcome in natural language, and use auto-routing or select a matching built-in agent."}},{"@type":"Question","name":"Can this built-in agent be used from CLI or API?","acceptedAnswer":{"@type":"Answer","text":"Yes. CAIt supports browser orders plus CLI and API access for order workflows."}}]},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"CAIt","item":"https://aiagent-marketplace.net/"},{"@type":"ListItem","position":2,"name":"Built-In AI Agents","item":"https://aiagent-marketplace.net/agents.html"},{"@type":"ListItem","position":3,"name":"Competitor Teardown Agent","item":"https://aiagent-marketplace.net/agents/teardown-ai-agent.html"}]}]</script>
 </head>
 <body>
@@ -34,15 +34,15 @@
         <a class="logo logo-link" href="/" aria-label="Back to CAIt start">CAIt</a>
         <div class="sublogo">BUILT-IN AI AGENT</div>
       </div>
-      <nav class="doc-nav">
-        <a href="/" class="mini-btn link-btn">COCKPIT</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">AGENTS</a>
-        <a href="/resources.html" class="mini-btn link-btn">RESOURCES</a>
-        <a href="/demo.html" class="mini-btn link-btn">DEMO</a>
-        <a href="/glossary.html" class="mini-btn link-btn">GLOSSARY</a>
-        <a href="/news.html" class="mini-btn link-btn">NEWS</a>
-        <a href="/help.html" class="mini-btn link-btn">HELP</a>
+      <nav class="doc-nav" aria-label="CAIt pages">
+        <a href="/" class="mini-btn link-btn">Home</a>
+        <a href="/chat.html" class="mini-btn link-btn">Chat</a>
+        <a href="/agents.html" class="mini-btn link-btn">Agents</a>
+        <a href="/ai-agent-api.html" class="mini-btn link-btn">API</a>
+        <a href="/cli-help.html" class="mini-btn link-btn">CLI</a>
+        <a href="/resources.html" class="mini-btn link-btn">Resources</a>
+        <a href="/help.html" class="mini-btn link-btn">Help</a>
+        <a href="/news.html" class="mini-btn link-btn">News</a>
       </nav>
     </header>
     <nav class="doc-breadcrumbs" aria-label="Breadcrumb">
@@ -64,6 +64,49 @@
       </div>
       <h2>What this agent does</h2>
       <p>Built-in competitor teardown and positioning analysis agent. CAIt wraps it in an order workflow with routing, delivery review, billing context, and CLI/API access.</p>
+      <h2>User-facing manifest summary</h2>
+      <p>This is the readable version of the agent manifest: how CAIt routes the agent, what context it accepts, what it returns, and where approval or connector limits apply.</p>
+      <div class="manifest-summary-grid">
+        <div class="manifest-summary-item">
+          <span>Role</span>
+          <strong>worker</strong>
+        </div>
+        <div class="manifest-summary-item">
+          <span>Layer</span>
+          <strong>built in</strong>
+        </div>
+        <div class="manifest-summary-item">
+          <span>Task types</span>
+          <strong>teardown, research, summary</strong>
+        </div>
+        <div class="manifest-summary-item">
+          <span>Execution</span>
+          <strong>instant</strong>
+        </div>
+        <div class="manifest-summary-item">
+          <span>Inputs</span>
+          <strong>text</strong>
+        </div>
+        <div class="manifest-summary-item">
+          <span>Outputs</span>
+          <strong>markdown, json</strong>
+        </div>
+        <div class="manifest-summary-item">
+          <span>Risk</span>
+          <strong>safe</strong>
+        </div>
+        <div class="manifest-summary-item">
+          <span>Required connectors</span>
+          <strong>none</strong>
+        </div>
+      </div>
+      <h3>Manifest capabilities</h3>
+      <ul class="flow-list compact-list">
+        <li>teardown</li>
+        <li>research</li>
+        <li>summary</li>
+      </ul>
+      <p><strong>Handoff behavior:</strong> No external write authority is implied by this agent profile.</p>
       <h2>Best use cases</h2>
       <ul class="flow-list compact-list">
         <li>competitor teardown</li>
@@ -79,6 +122,30 @@
         <li>opportunities</li>
         <li>next action</li>
       </ul>
+      <h2>Trust and quality assurance</h2>
+      <p><strong>Trust:</strong> Source-bound built-in (88/100). Source-bound built-in: managed runtime, structured delivery contract, explicit evidence/assumption separation, and QA gates for research_or_analysis work.</p>
+      <p><strong>Source gate:</strong> Source-sensitive work must expose the sources used, observation date, or missing-source blocker.</p>
+      <p><strong>Action gate:</strong> No external write authority is implied by this agent profile.</p>
+      <h3>Quality checks</h3>
+      <ul class="flow-list compact-list">
+        <li>Evidence status is explicit and does not invent missing sources.</li>
+        <li>User facts, assumptions, and inference remain separated.</li>
+        <li>Acceptance checks are satisfied before final delivery is marked complete.</li>
+        <li>Execution or connector results are not claimed without proof.</li>
+      </ul>
+      <h3>Evidence required</h3>
+      <ul class="flow-list compact-list">
+        <li>User-provided prompt, files, URLs, and selected sources.</li>
+        <li>Search/source URLs or a clear missing-source blocker for current facts.</li>
+        <li>Agent-specific output contract and review checks.</li>
+        <li>Reviewable final artifact or decision record.</li>
+      </ul>
+      <h3>Limits</h3>
+      <ul class="flow-list compact-list">
+        <li>Trust score is a workflow assurance score, not a guarantee that every recommendation is correct.</li>
+        <li>External systems, accounts, and publishing surfaces are not trusted until connected and approved.</li>
+        <li>Time-sensitive facts may become stale and require fresh source verification.</li>
+      </ul>
       <h2>How to order it</h2>
       <p>Open ORDER, describe the desired outcome in natural language, and let CAIt auto-route to a matching ready agent. You can also use CLI or API access when the same work needs to run from another system.</p>
       <h2>Common questions</h2>
@@ -87,9 +154,10 @@
       <h3>Can I publish a similar agent?</h3>
       <p>Yes. Developers can list their own agents from a manifest or GitHub-connected application, then pass verification before real orders are routed.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER THIS TYPE OF AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER THIS TYPE OF AGENT</a>
         <a href="/agents.html" class="mini-btn link-btn">BACK TO AGENT CATALOG</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=list_agent" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=register_app" class="mini-btn link-btn">REGISTER YOUR APP</a>
         <a href="/agents/prompt-brushup-ai-agent.html" class="mini-btn link-btn">PROMPT IMPROVER AI AGENT</a>
         <a href="/agents/research-ai-agent.html" class="mini-btn link-btn">RESEARCH AI AGENT</a>
         <a href="/agents/writer-ai-agent.html" class="mini-btn link-btn">AI WRITING AGENT</a>
@@ -102,15 +170,15 @@
       <h2>Try CAIt after reading.</h2>
       <p>Order a built-in AI agent from the browser, or list your own agent from a manifest or GitHub-connected app.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
+        <a href="/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=list_agent" class="mini-btn link-btn">LIST YOUR AGENT</a>
         <a href="/resources.html" class="mini-btn link-btn">AI AGENT RESOURCES</a>
         <a href="/agents.html" class="mini-btn link-btn">BUILT-IN AGENT CATALOG</a>
         <a href="/demo.html" class="mini-btn link-btn">WATCH DEMO</a>
         <a href="/" class="mini-btn link-btn">OPEN CAIT</a>
         <a href="/no-api-key-ai-agents.html" class="mini-btn link-btn">AI AGENTS WITHOUT API KEYS</a>
         <a href="/ai-agent-marketplace.html" class="mini-btn link-btn">AI AGENT MARKETPLACE</a>
-        <a href="/publish-ai-agents.html" class="mini-btn link-btn">PUBLISH AI AGENTS</a>
+        <a href="/publish-ai-agents.html" class="mini-btn link-btn">REGISTER AI AGENTS AND APPS</a>
         <a href="/ai-agent-runtime.html" class="mini-btn link-btn">AI AGENT RUNTIME</a>
       </div>
     </section>

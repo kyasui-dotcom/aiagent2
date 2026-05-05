@@ -29,14 +29,14 @@ async function request(path, options = {}) {
 
 function createEmailAuthToken({
   email = 'owner@example.com',
-  returnTo = '/?tab=work',
+  returnTo = '/chat.html',
   loginSource = 'login_page',
   visitorId = 'qa-email-success'
 } = {}) {
   const payload = {
     kind: 'email-auth',
     email: String(email || '').trim().toLowerCase(),
-    returnTo: String(returnTo || '/?tab=work').trim() || '/?tab=work',
+    returnTo: String(returnTo || '/chat.html').trim() || '/chat.html',
     loginSource: String(loginSource || 'login_page').trim().toLowerCase() || 'login_page',
     visitorId: String(visitorId || '').trim(),
     exp: Date.now() + 20 * 60 * 1000
@@ -97,7 +97,7 @@ async function main() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         email: 'not-an-email',
-        return_to: '/?tab=work',
+        return_to: '/chat',
         login_source: 'login_page',
         visitor_id: 'qa-email-invalid'
       })
@@ -109,7 +109,7 @@ async function main() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         email: 'owner@example.com',
-        return_to: '/?tab=work',
+        return_to: '/chat.html',
         login_source: 'login_page',
         visitor_id: 'qa-email-valid'
       })
@@ -118,23 +118,23 @@ async function main() {
 
     const missingTokenRes = await request('/auth/email/verify');
     assert.equal(missingTokenRes.status, 302, 'missing verify token should redirect back to login');
-    assert.match(String(missingTokenRes.headers.get('location') || ''), /^\/login\.html\?/);
+    assert.match(String(missingTokenRes.headers.get('location') || ''), /^\/login\?/);
     assert.match(String(missingTokenRes.headers.get('location') || ''), /auth_error=email_link_invalid/);
 
     const invalidTokenRes = await request('/auth/email/verify?token=broken-token');
     assert.equal(invalidTokenRes.status, 302, 'invalid verify token should redirect back to login');
-    assert.match(String(invalidTokenRes.headers.get('location') || ''), /^\/login\.html\?/);
+    assert.match(String(invalidTokenRes.headers.get('location') || ''), /^\/login\?/);
     assert.match(String(invalidTokenRes.headers.get('location') || ''), /auth_error=email_link_invalid/);
 
     const successToken = createEmailAuthToken({
       email: 'owner@example.com',
-      returnTo: '/?tab=work',
+      returnTo: '/chat',
       loginSource: 'gate_work',
       visitorId: 'qa-email-success'
     });
     const verifySuccessRes = await request(`/auth/email/verify?token=${encodeURIComponent(successToken)}`);
     assert.equal(verifySuccessRes.status, 302, 'valid verify token should redirect into the requested route');
-    assert.equal(String(verifySuccessRes.headers.get('location') || ''), '/?tab=work');
+    assert.equal(String(verifySuccessRes.headers.get('location') || ''), '/chat');
     const sessionCookie = cookieHeaderFromSetCookie(verifySuccessRes.headers.get('set-cookie') || '');
     assert.match(sessionCookie, /^aiagent2_session=/, 'email verify should issue a session cookie');
 
@@ -150,13 +150,13 @@ async function main() {
     const csrfToken = String(loggedInStatusRes.body.csrfToken || '').trim();
     assert.ok(csrfToken, 'logged-in auth status should expose a CSRF token for browser writes');
 
-    const loggedInLoginPageRes = await request('/login.html?next=%2F%3Ftab%3Dwork', {
+    const loggedInLoginPageRes = await request('/login?next=%2F%3Ftab%3Dwork', {
       headers: {
         cookie: sessionCookie
       }
     });
     assert.equal(loggedInLoginPageRes.status, 302, 'logged-in users should not receive the login HTML');
-    assert.equal(String(loggedInLoginPageRes.headers.get('location') || ''), '/?tab=work');
+    assert.equal(String(loggedInLoginPageRes.headers.get('location') || ''), '/chat');
     assert.equal(String(loggedInLoginPageRes.headers.get('cache-control') || ''), 'no-store');
 
     const loggedInLoginAliasRes = await request('/login?next=%2F%3Ftab%3Dagents', {

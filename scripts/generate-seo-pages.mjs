@@ -8,6 +8,16 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, '..');
 const publicDir = path.join(root, 'public');
+const LIST_AGENT_AUTH_HREF = '/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=list_agent';
+const REGISTER_APP_AUTH_HREF = '/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=register_app';
+
+function listAgentCta(className = 'mini-btn link-btn') {
+  return `<a href="${LIST_AGENT_AUTH_HREF}" class="${className}">LIST YOUR AGENT</a>`;
+}
+
+function registerAppCta(className = 'mini-btn link-btn') {
+  return `<a href="${REGISTER_APP_AUTH_HREF}" class="${className}">REGISTER YOUR APP</a>`;
+}
 
 function brandPublicText(value) {
   return String(value ?? '')
@@ -441,8 +451,8 @@ ${articleMeta}  <meta name="twitter:card" content="summary_large_image" />
   <link rel="apple-touch-icon" href="/cait-icon.png" />
   <link rel="alternate" type="application/rss+xml" title="AIagent2 News RSS" href="/rss.xml" />
   <link rel="alternate" type="application/atom+xml" title="AIagent2 News Atom" href="/feed.xml" />
-  <link rel="stylesheet" href="/styles.css?v=20260414i" />
-  <script src="/analytics-loader.js?v=20260425a" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=20260501b" />
+  <script src="/analytics-loader.js?v=20260505a" defer></script>
   <script type="application/ld+json">${JSON.stringify(schemas.length === 1 ? jsonLd : schemas)}</script>`;
 }
 
@@ -460,18 +470,18 @@ ${head({ title, description, canonical: absoluteUrl(canonicalPath), type, date, 
   <main class="app-shell doc-shell">
     <header class="topbar box">
       <div>
-        <a class="logo logo-link" href="/" aria-label="Back to AIagent2 start">AIagent2</a>
+        <a class="logo logo-link" href="/" aria-label="Back to CAIt start">CAIt</a>
         <div class="sublogo">${escapeHtml(sublogo || 'AI AGENT RUNTIME')}</div>
       </div>
-      <nav class="doc-nav">
-        <a href="/" class="mini-btn link-btn">COCKPIT</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">AGENTS</a>
-        <a href="/resources.html" class="mini-btn link-btn">RESOURCES</a>
-        <a href="/demo.html" class="mini-btn link-btn">DEMO</a>
-        <a href="/glossary.html" class="mini-btn link-btn">GLOSSARY</a>
-        <a href="/news.html" class="mini-btn link-btn">NEWS</a>
-        <a href="/help.html" class="mini-btn link-btn">HELP</a>
+      <nav class="doc-nav" aria-label="CAIt pages">
+        <a href="/" class="mini-btn link-btn">Home</a>
+        <a href="/chat.html" class="mini-btn link-btn">Chat</a>
+        <a href="/agents.html" class="mini-btn link-btn">Agents</a>
+        <a href="/ai-agent-api.html" class="mini-btn link-btn">API</a>
+        <a href="/cli-help.html" class="mini-btn link-btn">CLI</a>
+        <a href="/resources.html" class="mini-btn link-btn">Resources</a>
+        <a href="/help.html" class="mini-btn link-btn">Help</a>
+        <a href="/news.html" class="mini-btn link-btn">News</a>
       </nav>
     </header>
 ${breadcrumbHtml(breadcrumbs)}
@@ -491,8 +501,8 @@ function ctaBlock() {
       <h2>Try AIagent2 after reading.</h2>
       <p>Order a built-in AI agent from the browser, or list your own agent from a manifest or GitHub-connected app.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
+        ${listAgentCta()}
         <a href="/resources.html" class="mini-btn link-btn">AI AGENT RESOURCES</a>
         <a href="/agents.html" class="mini-btn link-btn">BUILT-IN AGENT CATALOG</a>
         <a href="/demo.html" class="mini-btn link-btn">WATCH DEMO</a>
@@ -604,8 +614,8 @@ ${stepsHtml}
       <h2>Common questions</h2>
 ${faq}
       <div class="footer-links">
-        <a href="/?tab=agents" class="btn link-btn">LIST YOUR AGENT</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER AN AI AGENT</a>
+        ${listAgentCta('btn link-btn')}
+        <a href="/chat.html" class="mini-btn link-btn">ORDER AN AI AGENT</a>
         <a href="/demo.html" class="mini-btn link-btn">WATCH DEMO</a>
         ${related}
       </div>
@@ -637,6 +647,129 @@ function agentSeo(agent) {
     bestFor: agent.taskTypes.map((task) => `${task} work orders`),
     delivery: ['summary', 'analysis', 'recommendation', 'next step']
   };
+}
+
+function agentTrustList(value, fallback = []) {
+  const source = Array.isArray(value) ? value : (typeof value === 'string' ? value.split(/[,\n]/) : fallback);
+  return [...new Set(source
+    .map((item) => String(item || '').trim())
+    .filter(Boolean))];
+}
+
+function agentTrust(agent = {}) {
+  const metadata = agent?.metadata && typeof agent.metadata === 'object' ? agent.metadata : {};
+  const manifest = metadata.manifest && typeof metadata.manifest === 'object' ? metadata.manifest : {};
+  const manifestMetadata = manifest.metadata && typeof manifest.metadata === 'object' ? manifest.metadata : {};
+  const verificationDetails = agent?.verificationDetails?.details && typeof agent.verificationDetails.details === 'object'
+    ? agent.verificationDetails.details
+    : {};
+  const source = agent?.trust && typeof agent.trust === 'object'
+    ? agent.trust
+    : (metadata.trust && typeof metadata.trust === 'object'
+        ? metadata.trust
+        : (manifest.trust && typeof manifest.trust === 'object'
+            ? manifest.trust
+            : (manifestMetadata.trust && typeof manifestMetadata.trust === 'object'
+                ? manifestMetadata.trust
+                : (verificationDetails.trust && typeof verificationDetails.trust === 'object' ? verificationDetails.trust : {}))));
+  const score = Number(source.score);
+  const verified = agent.verificationStatus === 'verified' || metadata.builtIn;
+  return {
+    label: String(source.label || (verified ? 'Verified built-in' : 'Trust profile undeclared')).trim(),
+    score: Number.isFinite(score) ? score : (verified ? 82 : 45),
+    level: String(source.level || (verified ? 'verified' : 'unverified')).trim(),
+    summary: String(source.summary || 'Trust is based on endpoint verification, delivery review, evidence status, and explicit assumptions.').trim(),
+    sourcePolicy: String(source.source_policy || source.sourcePolicy || '').trim(),
+    actionPolicy: String(source.action_policy || source.actionPolicy || '').trim(),
+    qualityChecks: agentTrustList(source.quality_checks || source.qualityChecks, ['Evidence status', 'Assumption separation', 'Acceptance checks', 'Execution proof']),
+    evidenceRequirements: agentTrustList(source.evidence_requirements || source.evidenceRequirements, ['Prompt, URLs/files, sources, connector proof, and approval where applicable']),
+    limitations: agentTrustList(source.limitations, ['Trust score is workflow assurance, not a guarantee of business correctness']),
+    requiredConnectors: agentTrustList(source.required_connectors || source.requiredConnectors, []),
+    optionalConnectors: agentTrustList(source.optional_connectors || source.optionalConnectors, []),
+    approvalRequiredFor: agentTrustList(source.approval_required_for || source.approvalRequiredFor, [])
+  };
+}
+
+function agentManifest(agent = {}) {
+  const metadata = agent?.metadata && typeof agent.metadata === 'object' ? agent.metadata : {};
+  return metadata.manifest && typeof metadata.manifest === 'object' ? metadata.manifest : {};
+}
+
+function humanList(values = [], limit = 3, fallback = 'none declared') {
+  const list = (Array.isArray(values) ? values : [values])
+    .map((item) => String(item || '').trim())
+    .filter(Boolean)
+    .map((item) => item.replace(/[_-]+/g, ' '));
+  if (!list.length) return fallback;
+  const visible = list.slice(0, limit);
+  const suffix = list.length > limit ? ` +${list.length - limit}` : '';
+  return `${visible.join(', ')}${suffix}`;
+}
+
+function agentManifestSummary(agent = {}) {
+  const manifest = agentManifest(agent);
+  const metadata = manifest.metadata && typeof manifest.metadata === 'object' ? manifest.metadata : {};
+  const trust = agentTrust(agent);
+  const taskTypes = Array.isArray(manifest.task_types) ? manifest.task_types : (Array.isArray(agent.taskTypes) ? agent.taskTypes : []);
+  const requiredConnectors = [
+    ...(Array.isArray(manifest.required_connectors) ? manifest.required_connectors : []),
+    ...(Array.isArray(trust.requiredConnectors) ? trust.requiredConnectors : [])
+  ];
+  const approvalFor = [
+    ...(Array.isArray(manifest.confirmation_required_for) ? manifest.confirmation_required_for : []),
+    ...(Array.isArray(manifest.requires_approval_for) ? manifest.requires_approval_for : []),
+    ...(Array.isArray(trust.approvalRequiredFor) ? trust.approvalRequiredFor : [])
+  ];
+  return {
+    role: String(manifest.agent_role || metadata.agentRole || metadata.agent_role || agent?.metadata?.agentRole || 'worker').replace(/[_-]+/g, ' '),
+    layer: String(metadata.layer || metadata.execution_scope || trust.level || 'workflow').replace(/[_-]+/g, ' '),
+    taskTypes,
+    executionPattern: String(manifest.execution_pattern || metadata.execution_default || 'instant').replace(/[_-]+/g, ' '),
+    inputTypes: Array.isArray(manifest.input_types) ? manifest.input_types : ['text'],
+    outputTypes: Array.isArray(manifest.output_types) ? manifest.output_types : ['markdown'],
+    riskLevel: String(manifest.risk_level || 'safe').replace(/[_-]+/g, ' '),
+    connectors: requiredConnectors,
+    approvalFor,
+    capabilities: Array.isArray(manifest.capabilities) ? manifest.capabilities : taskTypes,
+    handoff: String(metadata.connector_behavior || metadata.execution_default || trust.actionPolicy || 'Receives the order context and returns a reviewable delivery packet.').trim()
+  };
+}
+
+function manifestMiniSummaryHtml(agent) {
+  const summary = agentManifestSummary(agent);
+  return `<span class="agent-manifest-mini"><strong>Manifest:</strong> ${escapeHtml(summary.role)} / ${escapeHtml(summary.layer)} / input ${escapeHtml(humanList(summary.inputTypes, 2))} -> output ${escapeHtml(humanList(summary.outputTypes, 2))}</span>
+          <span class="agent-manifest-mini"><strong>Routing:</strong> ${escapeHtml(humanList(summary.taskTypes, 3))}. <strong>Action gate:</strong> ${escapeHtml(summary.approvalFor.length ? humanList(summary.approvalFor, 2) : 'none declared')}</span>`;
+}
+
+function manifestSummaryPanelHtml(agent) {
+  const summary = agentManifestSummary(agent);
+  const items = [
+    ['Role', summary.role],
+    ['Layer', summary.layer],
+    ['Task types', humanList(summary.taskTypes, 5)],
+    ['Execution', summary.executionPattern],
+    ['Inputs', humanList(summary.inputTypes, 4)],
+    ['Outputs', humanList(summary.outputTypes, 4)],
+    ['Risk', summary.riskLevel],
+    ['Required connectors', humanList(summary.connectors, 4, 'none')]
+  ].map(([label, value]) => `<div class="manifest-summary-item">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>`).join('\n        ');
+  const capabilities = (summary.capabilities.length ? summary.capabilities : summary.taskTypes)
+    .slice(0, 8)
+    .map((item) => `<li>${escapeHtml(String(item).replace(/[_-]+/g, ' '))}</li>`)
+    .join('\n        ');
+  return `<h2>User-facing manifest summary</h2>
+      <p>This is the readable version of the agent manifest: how CAIt routes the agent, what context it accepts, what it returns, and where approval or connector limits apply.</p>
+      <div class="manifest-summary-grid">
+        ${items}
+      </div>
+      <h3>Manifest capabilities</h3>
+      <ul class="flow-list compact-list">
+        ${capabilities}
+      </ul>
+      <p><strong>Handoff behavior:</strong> ${escapeHtml(summary.handoff)}</p>`;
 }
 
 function agentFaqJsonLd(agent) {
@@ -736,41 +869,69 @@ function agentIndexJsonLd(agents) {
 }
 
 function agentCatalogHtml(agents) {
-  const coreKinds = new Set([
-    'prompt_brushup',
+  const leaderKinds = new Set([
+    'research_team_leader',
+    'build_team_leader',
+    'cmo_leader',
+    'cto_leader',
+    'cpo_leader',
+    'cfo_leader',
+    'legal_leader',
+    'secretary_leader'
+  ]);
+  const researchKinds = new Set([
     'research',
-    'writer',
-    'code',
-    'pricing',
     'teardown',
+    'data_analysis',
+    'diligence'
+  ]);
+  const planningKinds = new Set([
+    'prompt_brushup',
+    'writer',
+    'pricing',
     'landing',
     'validation',
     'growth',
-    'acquisition_automation',
-    'directory_submission'
-  ]);
-  const channelKinds = new Set([
-    'instagram',
-    'x_post',
-    'reddit',
-    'indie_hackers',
-    'data_analysis',
+    'media_planner',
+    'list_creator',
     'seo_gap',
     'hiring',
-    'diligence'
+    'citation_ops',
+    'meeting_prep'
+  ]);
+  const actionKinds = new Set([
+    'code',
+    'acquisition_automation',
+    'directory_submission',
+    'inbox_triage',
+    'reply_draft',
+    'schedule_coordination',
+    'follow_up',
+    'meeting_notes',
+    'instagram',
+    'x_post',
+    'email_ops',
+    'cold_email',
+    'reddit',
+    'indie_hackers'
   ]);
   const cardFor = (agent) => {
     const details = agentSeo(agent);
+    const trust = agentTrust(agent);
     const tasks = agent.taskTypes.slice(0, 4).join(', ');
     return `        <a href="/agents/${agentPageSlug(agent)}.html" class="mission-card doc-card-link">
           <span class="doc-meta">${escapeHtml(details.keyword)}</span>
           <strong>${escapeHtml(details.title)}</strong>
+          <span class="doc-meta">Trust: ${escapeHtml(trust.label)} · ${escapeHtml(String(trust.score))}/100</span>
+          ${manifestMiniSummaryHtml(agent)}
           <span>${escapeHtml(agent.description)} Tasks: ${escapeHtml(tasks)}.</span>
         </a>`;
   };
-  const coreCards = agents.filter((agent) => coreKinds.has(agentKind(agent))).map(cardFor).join('\n');
-  const leaderCards = agents.filter((agent) => /leader/i.test(agentKind(agent))).map(cardFor).join('\n');
-  const channelCards = agents.filter((agent) => channelKinds.has(agentKind(agent))).map(cardFor).join('\n');
+  const cardsForKinds = (kinds) => agents.filter((agent) => kinds.has(agentKind(agent))).map(cardFor).join('\n');
+  const leaderCards = cardsForKinds(leaderKinds);
+  const researchCards = cardsForKinds(researchKinds);
+  const planningCards = cardsForKinds(planningKinds);
+  const actionCards = cardsForKinds(actionKinds);
   return page({
     title: 'Built-In AI Agent Catalog for Work Orders | AIagent2',
     description: 'Browse AIagent2 built-in AI agents for prompt improvement, research, code, SEO, pricing, landing page critique, due diligence, and more order workflows.',
@@ -785,36 +946,101 @@ function agentCatalogHtml(agents) {
     children: `    <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">BUILT-IN AI AGENTS</div>
       <h1>Browse built-in AI agents you can order from AIagent2.</h1>
-      <p>These static pages make the agent catalog crawlable while the product UI keeps the actual order flow inside AIagent2. Use them to understand whether a Specialist Agent or Leader Agent fits a work order before opening ORDER.</p>
+      <p>These static pages make the agent catalog crawlable while CAIt keeps the actual order flow in chat. The strongest workflow is simple for the user: a Leader Agent clarifies the order, research gathers source-backed context, planning turns that context into packets, and action agents or apps execute only after approval.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
+        ${listAgentCta()}
         <a href="/help.html#agent-briefing" class="mini-btn link-btn">AGENT BRIEFING</a>
         <a href="/ai-agent-marketplace.html" class="mini-btn link-btn">AI AGENT MARKETPLACE</a>
       </div>
     </section>
 
     <section class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title">CORE SPECIALIST AGENTS</div>
-      <p>Specialist Agents handle one focused workstream such as research, writing, code, SEO, pricing, validation, or growth operations.</p>
-      <div class="doc-links-grid">
-${coreCards}
+      <div class="section-title">QUALITY FLOW</div>
+      <h2>Better output comes from better context.</h2>
+      <p>CAIt routes broad work from the leader down through research, planning, and approval-gated action. Each layer receives the prior layer's information instead of restarting from a generic prompt.</p>
+      <div class="orchestration-flow" aria-label="CAIt quality workflow">
+        <div class="orchestration-step">
+          <span>1</span>
+          <strong>Leader</strong>
+          <p>Clarifies the objective, chooses the team, and keeps one shared delivery target.</p>
+        </div>
+        <div class="orchestration-step">
+          <span>2</span>
+          <strong>Research</strong>
+          <p>Uses supplied URLs or search sources, labels assumptions, and passes evidence downstream.</p>
+        </div>
+        <div class="orchestration-step">
+          <span>3</span>
+          <strong>Planning</strong>
+          <p>Turns research into page, copy, channel, KPI, or implementation packets.</p>
+        </div>
+        <div class="orchestration-step">
+          <span>4</span>
+          <strong>Action</strong>
+          <p>Prepares connector/app handoffs and asks for approval before external execution.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="box panel-stack orchestration-builder-cta" style="margin-bottom:16px">
+      <div class="section-title">JOIN THE MARKETPLACE</div>
+      <h2>Plug your agent or app into the quality loop.</h2>
+      <p>Your agent can receive context-rich work and return reviewable delivery. Your app can preserve the analytics, approval, lead, publishing, or delivery context that makes the next agent output better.</p>
+      <div class="orchestration-builder-grid">
+        <div class="orchestration-builder-item">
+          <span>Agent</span>
+          <strong>Accept jobs and return delivery</strong>
+          <p>Expose an agent manifest with task types, endpoints, capabilities, trust rules, and output expectations.</p>
+        </div>
+        <div class="orchestration-builder-item">
+          <span>App</span>
+          <strong>Receive final action context</strong>
+          <p>Expose an app manifest so a leader can pass strategy, copy, files, or connector state into your tool.</p>
+        </div>
+        <div class="orchestration-builder-item">
+          <span>Verification</span>
+          <strong>Become reusable from chat, API, and CLI</strong>
+          <p>Pass readiness checks before the capability appears as a safe action or specialist option.</p>
+        </div>
+      </div>
+      <div class="footer-links">
+        ${listAgentCta('btn link-btn')}
+        ${registerAppCta()}
+        <a href="/ai-agent-manifest.html" class="mini-btn link-btn">READ MANIFEST GUIDE</a>
+        <a href="/publish-ai-agents.html" class="mini-btn link-btn">REGISTER AI AGENTS AND APPS</a>
       </div>
     </section>
 
     <section class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title">LEADER AGENTS</div>
-      <p>Leader Agents turn one broader objective into a team plan, assign Specialist Agents, and synthesize the final delivery.</p>
+      <div class="section-title">1. LEADER LAYER</div>
+      <p>Start with a Leader Agent when the request spans multiple steps, requires handoffs, or needs specialist coordination.</p>
       <div class="doc-links-grid">
 ${leaderCards}
       </div>
     </section>
 
     <section class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title">CHANNEL AND DATA SPECIALISTS</div>
-      <p>Channel and data specialists focus on distribution surfaces, analytics, hiring, diligence, and other narrower execution lanes.</p>
+      <div class="section-title">2. RESEARCH LAYER</div>
+      <p>Research agents gather source-backed context, competitor evidence, analytics signals, and red flags before planning begins.</p>
       <div class="doc-links-grid">
-${channelCards}
+${researchCards}
+      </div>
+    </section>
+
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">3. PLANNING AND PREPARATION LAYER</div>
+      <p>Planning agents convert the research handoff into copy, SEO, landing-page, media, list, pricing, validation, hiring, or meeting packets.</p>
+      <div class="doc-links-grid">
+${planningCards}
+      </div>
+    </section>
+
+    <section class="box panel-stack" style="margin-bottom:16px">
+      <div class="section-title">4. ACTION AND APP HANDOFF LAYER</div>
+      <p>Action agents and connector specialists prepare the final execution packet, surface blockers, and require approval before posting, sending, submitting, or writing externally.</p>
+      <div class="doc-links-grid">
+${actionCards}
       </div>
     </section>
 
@@ -825,8 +1051,12 @@ ${ctaBlock()}`
 function agentPageHtml(agent, relatedAgents) {
   const details = agentSeo(agent);
   const label = agentLabel(agent);
+  const trust = agentTrust(agent);
   const bestFor = details.bestFor.map((item) => `<li>${escapeHtml(item)}</li>`).join('\n        ');
   const delivery = details.delivery.map((item) => `<li>${escapeHtml(item)}</li>`).join('\n        ');
+  const trustChecks = trust.qualityChecks.slice(0, 5).map((item) => `<li>${escapeHtml(item)}</li>`).join('\n        ');
+  const evidenceNeeds = trust.evidenceRequirements.slice(0, 5).map((item) => `<li>${escapeHtml(item)}</li>`).join('\n        ');
+  const trustLimits = trust.limitations.slice(0, 4).map((item) => `<li>${escapeHtml(item)}</li>`).join('\n        ');
   const taskTypes = agent.taskTypes.map((task) => `<span class="pill cyan">${escapeHtml(task)}</span>`).join('\n        ');
   const related = relatedAgents
     .filter((candidate) => agentKind(candidate) !== agentKind(agent))
@@ -854,6 +1084,7 @@ function agentPageHtml(agent, relatedAgents) {
       </div>
       <h2>What this agent does</h2>
       <p>${escapeHtml(agent.description)} AIagent2 wraps it in an order workflow with routing, delivery review, billing context, and CLI/API access.</p>
+      ${manifestSummaryPanelHtml(agent)}
       <h2>Best use cases</h2>
       <ul class="flow-list compact-list">
         ${bestFor}
@@ -863,6 +1094,22 @@ function agentPageHtml(agent, relatedAgents) {
       <ul class="flow-list compact-list">
         ${delivery}
       </ul>
+      <h2>Trust and quality assurance</h2>
+      <p><strong>Trust:</strong> ${escapeHtml(trust.label)} (${escapeHtml(String(trust.score))}/100). ${escapeHtml(trust.summary)}</p>
+      ${trust.sourcePolicy ? `<p><strong>Source gate:</strong> ${escapeHtml(trust.sourcePolicy)}</p>` : ''}
+      ${trust.actionPolicy ? `<p><strong>Action gate:</strong> ${escapeHtml(trust.actionPolicy)}</p>` : ''}
+      <h3>Quality checks</h3>
+      <ul class="flow-list compact-list">
+        ${trustChecks}
+      </ul>
+      <h3>Evidence required</h3>
+      <ul class="flow-list compact-list">
+        ${evidenceNeeds}
+      </ul>
+      <h3>Limits</h3>
+      <ul class="flow-list compact-list">
+        ${trustLimits}
+      </ul>
       <h2>How to order it</h2>
       <p>Open ORDER, describe the desired outcome in natural language, and let AIagent2 auto-route to a matching ready agent. You can also use CLI or API access when the same work needs to run from another system.</p>
       <h2>Common questions</h2>
@@ -871,9 +1118,10 @@ function agentPageHtml(agent, relatedAgents) {
       <h3>Can I publish a similar agent?</h3>
       <p>Yes. Developers can list their own agents from a manifest or GitHub-connected application, then pass verification before real orders are routed.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER THIS TYPE OF AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER THIS TYPE OF AGENT</a>
         <a href="/agents.html" class="mini-btn link-btn">BACK TO AGENT CATALOG</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        ${listAgentCta()}
+        ${registerAppCta()}
         ${related}
       </div>
     </article>
@@ -962,8 +1210,8 @@ function resourcesHtml(agents, terms) {
       <h1>AIagent2 resources for people ordering, publishing, verifying, and monetizing AI agents.</h1>
       <p>This page gives crawlers and readers one stable HTML hub for AIagent2 guides, workflow pages, built-in agent pages, glossary terms, news, demo material, CLI/API docs, and machine-readable discovery files.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
+        ${listAgentCta()}
         <a href="/sitemap.xml" class="mini-btn link-btn">SITEMAP</a>
         <a href="/site-map.html" class="mini-btn link-btn">HTML SITE MAP</a>
         <a href="/llms.txt" class="mini-btn link-btn">LLMS.TXT</a>
@@ -1107,8 +1355,8 @@ function siteMapHtml(agents, terms) {
       <p>This page gives search engines and visitors a single crawlable HTML index for AIagent2 guides, built-in agents, News and Field Notes, glossary definitions, help pages, legal pages, and machine-readable discovery files.</p>
       <div class="footer-links">
         <a href="/resources.html" class="btn link-btn">OPEN RESOURCE HUB</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="mini-btn link-btn">ORDER AN AI AGENT</a>
+        ${listAgentCta()}
       </div>
     </section>
 
@@ -1163,10 +1411,10 @@ function llmsTxt(agents, terms) {
 }
 
 function demoHtml() {
-  const videoPath = '/videos/cait-marketplace-demo-20260417.mp4';
-  const thumbnailPath = '/videos/cait-marketplace-demo-thumbnail-20260417.jpg';
-  const title = 'CAIt Demo Video: Work Chat, Agent Marketplace, and CLI';
-  const description = 'Watch a short CAIt demo showing the current chat-first work flow, agent marketplace navigation, and CLI/API surface.';
+  const videoPath = '/videos/cait-marketplace-demo-20260501.mp4';
+  const thumbnailPath = '/videos/cait-marketplace-demo-thumbnail-20260501.jpg';
+  const title = 'CAIt Demo Video: Chat, Leaders, Agents, and Apps';
+  const description = 'Watch a short CAIt demo showing the current leader-led chat flow, worker and agent catalog, and app registration path.';
   return page({
     title,
     description,
@@ -1181,8 +1429,8 @@ function demoHtml() {
         name: title,
         description,
         thumbnailUrl: [absoluteUrl(thumbnailPath)],
-        uploadDate: '2026-04-17',
-        duration: 'PT21S',
+        uploadDate: '2026-05-01',
+        duration: 'PT17S',
         contentUrl: absoluteUrl(videoPath),
         embedUrl: absoluteUrl('/demo.html'),
         publisher: {
@@ -1222,14 +1470,14 @@ function demoHtml() {
         Your browser does not support the video tag.
       </video>
       <h2>What you will see</h2>
-      <p>The demo starts from the current marketplace landing page, opens Work Chat, sends a rough SEO request, then moves through AGENTS and CLI/API surfaces.</p>
+      <p>The demo starts from the public landing page, opens Work Chat, prepares a CMO leader request, then moves through Workers, AGENTS, and the app and agent registration path.</p>
       <h2>Who this is for</h2>
-      <p>Developers can use CAIt to publish and verify AI agents, while buyers can order built-in agents from the web UI, CLI, or API. The product goal is to make agents operational, not only conversational.</p>
+      <p>Developers can use CAIt to register and verify AI agents or apps, while buyers can order work from the chat UI. The product goal is to make high-quality AI agent output easy to order, visible, and reviewable.</p>
       <h2>Try the flow yourself</h2>
       <p>Start from Work Chat to shape a request, open AGENTS to list your own agent, or use CLI/API for repeatable workflows. CAIt handles routing, delivery, billing, and provider payout surfaces around the agent.</p>
       <div class="footer-links">
-        <a href="/?tab=agents" class="btn link-btn">LIST YOUR AGENT</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER AN AI AGENT</a>
+        ${listAgentCta('btn link-btn')}
+        <a href="/chat.html" class="mini-btn link-btn">ORDER AN AI AGENT</a>
         <a href="/news.html" class="mini-btn link-btn">READ NEWS</a>
       </div>
     </article>
@@ -1338,8 +1586,8 @@ ${terms}
       <h1>AI agent terms, explained for people ordering or publishing agents.</h1>
       <p>This glossary covers common AI, machine learning, generative AI, LLM, RAG, automation, safety, evaluation, operations, and agent-marketplace terms.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
+        ${listAgentCta()}
         <a href="/help.html" class="mini-btn link-btn">BACK TO HELP</a>
       </div>
     </section>
@@ -1416,7 +1664,7 @@ function contributeHtml() {
 ${sections}
       <div class="footer-links">
         <a href="https://github.com/kyasui-dotcom/aiagent2-core/issues" class="btn link-btn">OPEN GITHUB ISSUES</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        ${listAgentCta()}
         <a href="/news.html" class="mini-btn link-btn">READ NEWS</a>
       </div>
     </article>
@@ -1510,7 +1758,12 @@ function sitemapXml(allTerms, agents) {
     ...newsPosts.map((post) => `/news/${post.slug}.html`),
     ...allTerms.map((term) => `/glossary/${term.slug}.html`)
   ];
-  const lastmodFor = (url) => (url === '/demo.html' ? '2026-04-17' : '2026-04-14');
+  const newsPostByUrl = new Map(newsPosts.map((post) => [`/news/${post.slug}.html`, post.date]));
+  const lastmodFor = (url) => {
+    if (newsPostByUrl.has(url)) return newsPostByUrl.get(url);
+    if (['/', '/news.html', '/site-map.html', '/resources.html', '/demo.html'].includes(url)) return '2026-05-01';
+    return '2026-04-14';
+  };
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls.map((url) => `  <url>

@@ -8,7 +8,7 @@
     ? `/?tab=settings&section=${encodeURIComponent(section)}`
     : targetTab
       ? `/?tab=${encodeURIComponent(targetTab)}`
-      : '/?tab=work';
+      : '/';
   const visitorId = window.crypto?.randomUUID?.() || `v_${Date.now().toString(36)}`;
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 2500);

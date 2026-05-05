@@ -34,7 +34,7 @@ function visitorId() {
   return runtimeVisitorId;
 }
 
-function normalizeLocalPath(value = '', fallback = '/?tab=work') {
+function normalizeLocalPath(value = '', fallback = '/') {
   const raw = String(value || '').trim();
   if (!raw) return fallback;
   if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
@@ -47,11 +47,14 @@ function normalizeLocalPath(value = '', fallback = '/?tab=work') {
   }
 }
 
-function postLoginPath(value = '', fallback = '/?tab=work') {
+function postLoginPath(value = '', fallback = '/') {
   const next = normalizeLocalPath(value, fallback);
   try {
     const parsed = new URL(next, window.location.origin);
     if (['/login', '/login.html'].includes(parsed.pathname)) return fallback;
+    if (parsed.pathname === '/' && String(parsed.searchParams.get('tab') || '').toLowerCase() === 'work') return '/chat';
+    if (parsed.pathname === '/chat.html') return `/chat${parsed.search}${parsed.hash}`;
+    if (parsed.pathname === '/admin.html') return `/admin${parsed.search}${parsed.hash}`;
     return `${parsed.pathname}${parsed.search}${parsed.hash}` || fallback;
   } catch {
     return fallback;
@@ -62,7 +65,7 @@ function currentRoute() {
   const url = new URL(window.location.href);
   return {
     source: safeString(url.searchParams.get('source') || 'direct', 40).toLowerCase() || 'direct',
-    next: postLoginPath(url.searchParams.get('next') || '', '/?tab=work'),
+    next: postLoginPath(url.searchParams.get('next') || '', '/chat'),
     authError: safeString(url.searchParams.get('auth_error') || '', 120)
   };
 }
@@ -76,7 +79,7 @@ function flash(message = '', kind = 'info') {
     return;
   }
   els.flash.hidden = false;
-  els.flash.className = `box flash ${kind}`;
+  els.flash.className = `auth-flash ${kind}`;
   els.flash.textContent = safe;
 }
 
@@ -178,7 +181,7 @@ async function loadAuthStatus(route = currentRoute()) {
     if (status?.loggedIn && els.status) {
       els.status.textContent = 'You are already signed in. Redirecting now.';
     } else if (els.status) {
-      els.status.textContent = 'Choose one account provider. After login, CAIt opens the requested product area.';
+      els.status.textContent = 'Choose Google, GitHub, or email. After login, CAIt opens the requested chat workspace.';
     }
     if (els.continueBtn) {
       els.continueBtn.hidden = !status?.loggedIn;
@@ -269,7 +272,7 @@ async function init() {
   const route = currentRoute();
   if (els.hint && route.source.startsWith('gate_')) {
     const gatedTab = gatedSourceTabLabel(route.source);
-    els.hint.textContent = `${gatedTab} is private after login. Sign in here, then CAIt opens that area.`;
+    els.hint.textContent = `${gatedTab} is private. Sign in or sign up here, then CAIt opens that area.`;
   }
   if (route.authError) {
     flash(`Sign-in failed: ${route.authError}`, 'error');

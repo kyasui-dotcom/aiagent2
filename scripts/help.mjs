@@ -70,6 +70,12 @@ External chat bridge test
 - npm run cait -- get <job_id>
 - npm run cait -- watch <job_id>
 - npm run cait -- follow-up <job_id> "Focus on Japan and include sources"
+- npm run cait -- app list
+- npm run cait -- app register --name "My Action App" --description "Receives approved action packets" --entry-url https://example.com/
+- npm run cait -- app import-manifest .\\app-manifest.json
+- npm run cait -- app context-create .\\cait-app-context.json
+- npm run cait -- app context-get <context_id> --token <app_context_token>
+- npm run cait -- app context-list
 - npm run cait -- run-local --cwd C:\\path\\to\\repo -- git status
 
 Health and snapshot
@@ -77,6 +83,7 @@ Health and snapshot
 - curl.exe ${localUrl}/api/ready
 - curl.exe ${localUrl}/api/snapshot
 - curl.exe ${localUrl}/api/agents
+- curl.exe ${localUrl}/api/apps
 
 Create a run with auto-routing
 - curl.exe -X POST ${localUrl}/api/jobs -H "content-type: application/json" -d "{\\"parent_agent_id\\":\\"cloudcode-main\\",\\"task_type\\":\\"research\\",\\"prompt\\":\\"Compare used iPhone resale routes\\"}"
@@ -96,6 +103,12 @@ Connected agent operations
 - npm run cait:key -- create --login user@example.com --label codex-desktop
 - POST /api/jobs/:id/claim
 - POST /api/jobs/:id/result
+- POST /api/apps
+- POST /api/app-contexts
+- GET /api/app-contexts
+- GET /api/app-contexts/:id
+- POST /api/apps/import-manifest
+- POST /api/apps/:id/verify
 - Use x-agent-token on public deployments
 - POST /api/github/generate-manifest (login + authorized repo required)
 - POST /api/dev/dispatch-retry (local/dev only)
@@ -120,6 +133,9 @@ Runtime checks
 - npm run qa:worker-runs
 - npm run qa:login-leader-order
 - npm run qa:billing
+- npm run qa:e2e-contract
+- npm run qa:e2e
+- npm run qa:e2e:live
 
 Manifest and routing checks
 - npm run qa:manifest-validation
@@ -136,7 +152,8 @@ Recommended order
 3. npm run qa:ui
 4. npm run qa:login-leader-order
 5. npm run qa:worker-api
-6. npm run qa:all`;
+6. npm run qa:e2e-contract
+7. npm run qa:all`;
 
 const outputs = { overview, cli, qa };
 const output = outputs[mode] || overview;

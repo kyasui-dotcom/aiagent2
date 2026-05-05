@@ -69,6 +69,105 @@ const DELIVERY_UI_TEXT = Object.freeze({
 const DELIVERY_EXECUTION_CONFIRMATION_REQUIREMENT = 'confirm_execute=true';
 const DELIVERY_SCHEDULE_CONFIRMATION_REQUIREMENT = 'confirm_schedule=true';
 
+function normalizeSocialPostCandidate(value = '') {
+  return String(value || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/^\s*(?:[-*]\s+|\d+\.\s+)/, '')
+    .replace(/^["'`]+|["'`]+$/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function isPlaceholderSocialPostCandidate(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return true;
+  return Boolean(
+    /^(?:the exact post text to approve|connected x account|post_tweet|schedule_post|approval owner|operator or cmo leader|owner|metric|stop rule)$/i.test(text)
+    || /^(?:承認対象の本文|接続済みXアカウント名|操作者またはCMO leader|停止条件|指標)$/i.test(text)
+    || /\bTBD\b|\[[^\]\n]{2,80}\]/i.test(text)
+  );
+}
+
+function usableSocialPostCandidate(value = '', options = {}) {
+  const text = normalizeSocialPostCandidate(value);
+  const maxLength = Number(options.maxLength || 0);
+  if (text.length < 8) return '';
+  if (maxLength > 0 && text.length > maxLength) return '';
+  if (/^#+\s/.test(text) || /^\|/.test(text) || /^-{3,}$/.test(text)) return '';
+  if (isPlaceholderSocialPostCandidate(text)) return '';
+  return text;
+}
+
+function addSocialPostCandidate(candidates = [], value = '', options = {}) {
+  const candidate = usableSocialPostCandidate(value, options);
+  if (candidate && !candidates.includes(candidate)) candidates.push(candidate);
+}
+
+function sectionBodyByHeading(content = '', headingPattern = /$^/) {
+  const lines = String(content || '').replace(/\r\n/g, '\n').split('\n');
+  const sections = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] || '';
+    if (!/^#{1,4}\s+/.test(line) || !headingPattern.test(line.replace(/^#{1,4}\s+/, '').trim())) continue;
+    const body = [];
+    for (let cursor = index + 1; cursor < lines.length; cursor += 1) {
+      if (/^#{1,4}\s+/.test(lines[cursor] || '')) break;
+      body.push(lines[cursor]);
+    }
+    sections.push(body.join('\n').trim());
+  }
+  return sections;
+}
+
+function socialPostCandidatesFromJson(content = '', options = {}) {
+  const candidates = [];
+  const fencePattern = /```(?:json)?\s*([\s\S]*?)```/gi;
+  for (const match of String(content || '').matchAll(fencePattern)) {
+    const raw = String(match[1] || '').trim();
+    if (!raw || !/[{[]/.test(raw[0])) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      const values = Array.isArray(parsed) ? parsed : [parsed];
+      for (const value of values) {
+        if (!value || typeof value !== 'object') continue;
+        addSocialPostCandidate(candidates, value.text || value.postText || value.post_text || value.exact_copy || value.exactCopy || value.caption, options);
+      }
+    } catch {}
+  }
+  return candidates;
+}
+
+export function extractSocialPostTextFromDeliveryContent(content = '', options = {}) {
+  const text = String(content || '').replace(/\r\n/g, '\n');
+  const maxLength = Number(options.maxLength || 0);
+  const candidates = [];
+  const candidateOptions = { maxLength };
+  for (const candidate of socialPostCandidatesFromJson(text, candidateOptions)) {
+    addSocialPostCandidate(candidates, candidate, candidateOptions);
+  }
+  const fieldPattern = /(?:^|\n)\s*(?:[-*]\s*)?(?:x\s+post\s+draft|post\s+draft|post\s+text|tweet\s+text|exact[_\s-]*copy|post[_\s-]*text|投稿本文|投稿コピー|投稿ドラフト|本文)\s*[:：]\s*([^\n]+)/gi;
+  for (const match of text.matchAll(fieldPattern)) {
+    addSocialPostCandidate(candidates, match[1], candidateOptions);
+  }
+  for (const line of text.split('\n')) {
+    const cells = line.split('|').map((cell) => cell.trim()).filter(Boolean);
+    if (cells.length < 2) continue;
+    const key = String(cells[0] || '').toLowerCase().replace(/[\s_-]+/g, '_');
+    if (['post_draft', 'post_text', 'exact_copy', 'tweet_text', '投稿本文', '投稿コピー'].includes(key)) {
+      addSocialPostCandidate(candidates, cells.slice(1).join(' | '), candidateOptions);
+    }
+  }
+  const sectionPattern = /^(?:post draft|short posts?|exact post(?: packet)?|x post(?: draft)?|投稿案|投稿ドラフト|投稿本文|実行パケット)$/i;
+  for (const section of sectionBodyByHeading(text, sectionPattern)) {
+    const numbered = section.match(/^\s*\d+\.\s+.+$/gm) || [];
+    for (const item of numbered) addSocialPostCandidate(candidates, item, candidateOptions);
+    const bullets = section.match(/^\s*[-*]\s+.+$/gm) || [];
+    for (const item of bullets) addSocialPostCandidate(candidates, item, candidateOptions);
+    addSocialPostCandidate(candidates, section, candidateOptions);
+  }
+  return candidates[0] || '';
+}
+
 const DELIVERY_API_ACTION_POLICIES = Object.freeze({
   x_post: Object.freeze({
     kind: 'x_post',
@@ -713,8 +812,12 @@ export function deliveryOutcomePresentation(actionKind = '', payload = {}, optio
   if (normalized.actionKind === 'x_post') {
     return {
       flash: normalized.message || `Posted to X: ${entity.url || entity.connector_action_id || ''}`,
-      status: 'X post completed.\n\nThe connected X account was used after confirmation.',
-      body: ['Posted to X after explicit confirmation.', '', entity.url || `Tweet ID: ${entity.connector_action_id || ''}`].filter(Boolean).join('\n')
+      status: `X post completed.\n\nPosted through ${entity.account_handle || 'the connected X account'} after explicit confirmation.`,
+      body: [
+        `Posted to X through ${entity.account_handle || 'the connected X account'} after explicit confirmation.`,
+        '',
+        entity.url || `Tweet ID: ${entity.connector_action_id || ''}`
+      ].filter(Boolean).join('\n')
     };
   }
   if (normalized.actionKind === 'instagram_post') {
@@ -784,6 +887,9 @@ export function deliveryErrorPresentation(actionKind = '', payload = {}, options
     }
     return { flash: message || 'Execution paused until the required connector is connected.', tone: 'warn' };
   }
+  if (errorKind === 'confirmation_required') {
+    return { flash: message || 'Execution paused until the exact account and action are approved.', tone: 'warn' };
+  }
   if (errorKind === 'validation_error') {
     return { flash: message || 'Fill in the required executor fields first.', tone: 'warn' };
   }
@@ -812,8 +918,9 @@ export function deliveryExecutionPromptPresentation(actionKind = '', options = {
     };
   }
   if (normalizedActionKind === 'x_post') {
+    const xAccountLabel = String(options.xAccountLabel || options.x_account_label || 'connected X account').trim();
     return {
-      confirm: `Post this to your connected X account?\n\n${String(options.postText || '').trim()}`,
+      confirm: `Post this exact text to ${xAccountLabel} through the OAuth-connected X account?\n\n${String(options.postText || '').trim()}\n\nCAIt will not post anything else.`,
       stopped: 'X execution stopped for this delivery. Clear the stop state to retry.'
     };
   }
@@ -848,8 +955,11 @@ export function deliverySchedulePromptPresentation(actionKind = '', options = {}
   const scheduleLabel = String(options.scheduleLabel || '').trim();
   if (normalizedActionKind === 'x_post' || normalizedActionKind === 'instagram_post') {
     const channelLabel = String(options.channelLabel || (normalizedActionKind === 'instagram_post' ? 'Instagram post' : 'X post')).trim();
+    const xAccountLabel = String(options.xAccountLabel || options.x_account_label || 'connected X account').trim();
     return {
-      confirm: `Schedule this ${channelLabel} for ${scheduleLabel}?`
+      confirm: normalizedActionKind === 'x_post'
+        ? `Schedule this ${channelLabel} for ${scheduleLabel} on ${xAccountLabel}?\n\n${String(options.postText || '').trim()}`
+        : `Schedule this ${channelLabel} for ${scheduleLabel}?`
     };
   }
   if (normalizedActionKind === 'gmail_send' || normalizedActionKind === 'resend_send') {

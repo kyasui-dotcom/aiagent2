@@ -3,65 +3,96 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CAIt | Login</title>
-  <meta name="description" content="Sign in to CAIt to enter the private AI agent workspace for Work Chat, agent publishing, and account-based delivery." />
+  <title>CAIt | Sign in or sign up</title>
+  <meta name="description" content="Sign in or sign up for CAIt with Google, GitHub, or an email magic link to enter the private chat workspace." />
   <meta name="robots" content="noindex,follow" />
   <link rel="canonical" href="https://aiagent-marketplace.net/login.html" />
   <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/cait-icon.png" />
-  <link rel="stylesheet" href="/styles.css?v=20260424am" />
+  <link rel="stylesheet" href="/home.css?v=20260501d" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-row">
-      <a class="logo logo-link brand-logo" href="/" aria-label="Back to CAIt start"><span class="logo-mark">CAIt</span></a>
-      <div class="helper-row">
-        <a href="/" id="loginBackBtn" class="mini-btn link-btn">BACK TO START</a>
+  <main class="auth-shell" aria-label="CAIt sign in and sign up">
+    <header class="home-nav auth-nav">
+      <a class="logo-link" href="/" aria-label="Back to CAIt start">
+        <img src="/cait-icon.svg" alt="" />
+        <span>CAIt</span>
+      </a>
+      <div class="home-links" aria-label="Public pages">
+        <a href="/">Home</a>
+        <a href="/agents.html">Agents</a>
+        <a href="/ai-agent-api.html">API</a>
+        <a href="/cli-help.html">CLI</a>
+        <a href="/resources.html">Resources</a>
+        <a href="/help.html">Help</a>
+        <a href="/news.html">News</a>
       </div>
-    </div>
-  </header>
+      <a href="/" id="loginBackBtn" class="secondary-action">Back</a>
+    </header>
 
-  <main class="shell">
-    <section id="loginFlash" class="box flash" hidden></section>
+    <section id="loginFlash" class="auth-flash" hidden></section>
 
-    <section id="loginCheckingPanel" class="hero-grid hero-grid-wide start-landing">
-      <section class="box panel-stack hero-copy start-hero">
-        <div class="section-title">SESSION CHECK</div>
+    <section id="loginCheckingPanel" class="auth-layout auth-layout-single">
+      <article class="auth-copy">
+        <span class="auth-kicker">Session Check</span>
         <h1>Checking your CAIt session.</h1>
-        <p id="loginCheckingStatus" class="muted">Checking your session. This should only take a moment; if it times out, login options will appear.</p>
-      </section>
+        <p id="loginCheckingStatus">Checking your session. This should only take a moment; if it times out, login options will appear.</p>
+      </article>
     </section>
 
-    <section id="loginPanel" class="hero-grid hero-grid-wide start-landing" hidden>
-      <section class="box panel-stack hero-copy start-hero">
-        <div class="section-title">LOGIN / SIGN UP</div>
-        <h1>Sign in or create your CAIt account.</h1>
-        <p id="loginHint">WORK, AGENTS, CONNECT, and SETTINGS are private after login. START stays public.</p>
-        <div class="mission-card-grid mission-card-grid-2">
-          <button id="loginGoogleBtn" class="btn" type="button">CONTINUE WITH GOOGLE</button>
-          <button id="loginGithubBtn" class="btn btn-alt" type="button">CONTINUE WITH GITHUB</button>
-        </div>
-        <div class="detail-box action-card info compact-card">
-          <strong>Email sign in or sign up</strong>
-          <span>Enter your email to receive a one-time link. The same flow creates your account if it does not exist yet.</span>
-          <div class="helper-row" style="margin-top:10px">
-            <input id="loginEmailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" />
-            <button id="loginEmailBtn" class="mini-btn" type="button">EMAIL ME A LINK</button>
+    <section id="loginPanel" class="auth-layout" hidden>
+      <article class="auth-copy">
+        <span class="auth-kicker">Private Chat Workspace</span>
+        <h1>Sign in or sign up to continue.</h1>
+        <p id="loginHint">Chat is private. Choose Google, GitHub, or email. First successful sign-in creates your account automatically.</p>
+        <div class="auth-proof-grid" aria-label="What login unlocks">
+          <div>
+            <strong>Chat orders</strong>
+            <span>Prepare requests, approvals, progress, and delivery in one thread.</span>
+          </div>
+          <div>
+            <strong>Leaders and workers</strong>
+            <span>Reuse agents, apps, and past work from your account context.</span>
+          </div>
+          <div>
+            <strong>Action handoffs</strong>
+            <span>Connectors and final actions stay tied to the signed-in user.</span>
           </div>
         </div>
-        <div class="helper-row" style="margin-top:10px">
-          <button id="loginContinueBtn" class="mini-btn" type="button" hidden>CONTINUE TO WORK</button>
+      </article>
+
+      <article class="auth-card" aria-label="Sign in or sign up options">
+        <div class="auth-card-head">
+          <span class="auth-kicker">Sign In / Sign Up</span>
+          <strong>Use one account method</strong>
         </div>
-        <div id="loginStatus" class="muted">Checking your session. The page stays here until you choose what to do.</div>
-        <div class="detail-box action-card info compact-card">
-          New account flow
-          <span>There is no separate signup page. Google, GitHub, and email magic link all create your account on first successful sign-in.</span>
+        <div class="auth-provider-grid">
+          <button id="loginGoogleBtn" class="auth-provider primary" type="button">
+            <span>Google</span>
+            <strong>Continue with Google</strong>
+          </button>
+          <button id="loginGithubBtn" class="auth-provider" type="button">
+            <span>GitHub</span>
+            <strong>Continue with GitHub</strong>
+          </button>
         </div>
-      </section>
+
+        <div class="auth-email-box">
+          <label for="loginEmailInput">Email magic link</label>
+          <p>Enter your email. The link signs you in and creates an account if it is your first time.</p>
+          <div class="auth-email-row">
+            <input id="loginEmailInput" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" />
+            <button id="loginEmailBtn" class="secondary-action" type="button">Email me a link</button>
+          </div>
+        </div>
+
+        <button id="loginContinueBtn" class="primary-action auth-continue" type="button" hidden>Continue to chat</button>
+        <div id="loginStatus" class="auth-status">Checking available sign-in methods.</div>
+      </article>
     </section>
   </main>
 
-  <script type="module" src="/login.js?v=20260427b"></script>
-  <script defer src="/analytics-loader.js?v=20260425a"></script>
+  <script type="module" src="/login.js?v=20260501c"></script>
+  <script defer src="/analytics-loader.js?v=20260505a"></script>
 </body>
 </html>

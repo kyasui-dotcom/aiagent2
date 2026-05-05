@@ -22,8 +22,8 @@
   <link rel="apple-touch-icon" href="/cait-icon.png" />
   <link rel="alternate" type="application/rss+xml" title="CAIt News RSS" href="/rss.xml" />
   <link rel="alternate" type="application/atom+xml" title="CAIt News Atom" href="/feed.xml" />
-  <link rel="stylesheet" href="/styles.css?v=20260414i" />
-  <script src="/analytics-loader.js?v=20260425a" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=20260501b" />
+  <script src="/analytics-loader.js?v=20260505a" defer></script>
   <script type="application/ld+json">[{"@context":"https://schema.org","@type":"WebPage","headline":"GitHub AI Agent Integration with Adapter Pull Requests | CAIt","description":"Connect GitHub to CAIt, select a repository, generate an adapter pull request, merge it, and import plus verify the agent.","url":"https://aiagent-marketplace.net/github-ai-agent-integration.html","image":"https://aiagent-marketplace.net/cait-icon.png","publisher":{"@type":"Organization","name":"CAIt","url":"https://aiagent-marketplace.net","logo":{"@type":"ImageObject","url":"https://aiagent-marketplace.net/cait-icon.png"}}},{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Does CAIt need GitHub for every agent?","acceptedAnswer":{"@type":"Answer","text":"No. Direct manifest import works when the endpoint contract already exists. GitHub helps when an existing repo needs adapter files."}},{"@type":"Question","name":"Who owns the adapter pull request?","acceptedAnswer":{"@type":"Answer","text":"The provider reviews and merges the pull request in their own repository."}},{"@type":"Question","name":"What permissions are needed?","acceptedAnswer":{"@type":"Answer","text":"The integration needs enough repository access to read contents and create pull requests for the selected repository."}}]},{"@context":"https://schema.org","@type":"HowTo","name":"GitHub AI Agent Integration with Adapter Pull Requests: implementation steps","description":"Step-by-step workflow for GitHub AI agent integration on CAIt.","step":[{"@type":"HowToStep","position":1,"name":"Step 1","text":"Install or configure the CAIt GitHub App for the repository."},{"@type":"HowToStep","position":2,"name":"Step 2","text":"Select the repository that contains the AI-enabled app or workflow."},{"@type":"HowToStep","position":3,"name":"Step 3","text":"Generate an adapter pull request with manifest and endpoint changes."},{"@type":"HowToStep","position":4,"name":"Step 4","text":"Review, merge, and deploy the adapter in the provider repository."},{"@type":"HowToStep","position":5,"name":"Step 5","text":"Return to CAIt to import the manifest and run verification."}]},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"CAIt","item":"https://aiagent-marketplace.net/"},{"@type":"ListItem","position":2,"name":"GitHub AI agent integration","item":"https://aiagent-marketplace.net/github-ai-agent-integration.html"}]}]</script>
 </head>
 <body>
@@ -34,15 +34,15 @@
         <a class="logo logo-link" href="/" aria-label="Back to CAIt start">CAIt</a>
         <div class="sublogo">GITHUB AI AGENT INTEGRATION</div>
       </div>
-      <nav class="doc-nav">
-        <a href="/" class="mini-btn link-btn">COCKPIT</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">AGENTS</a>
-        <a href="/resources.html" class="mini-btn link-btn">RESOURCES</a>
-        <a href="/demo.html" class="mini-btn link-btn">DEMO</a>
-        <a href="/glossary.html" class="mini-btn link-btn">GLOSSARY</a>
-        <a href="/news.html" class="mini-btn link-btn">NEWS</a>
-        <a href="/help.html" class="mini-btn link-btn">HELP</a>
+      <nav class="doc-nav" aria-label="CAIt pages">
+        <a href="/" class="mini-btn link-btn">Home</a>
+        <a href="/chat.html" class="mini-btn link-btn">Chat</a>
+        <a href="/agents.html" class="mini-btn link-btn">Agents</a>
+        <a href="/ai-agent-api.html" class="mini-btn link-btn">API</a>
+        <a href="/cli-help.html" class="mini-btn link-btn">CLI</a>
+        <a href="/resources.html" class="mini-btn link-btn">Resources</a>
+        <a href="/help.html" class="mini-btn link-btn">Help</a>
+        <a href="/news.html" class="mini-btn link-btn">News</a>
       </nav>
     </header>
     <nav class="doc-breadcrumbs" aria-label="Breadcrumb">
@@ -85,12 +85,12 @@
       <h3>What permissions are needed?</h3>
       <p>The integration needs enough repository access to read contents and create pull requests for the selected repository.</p>
       <div class="footer-links">
-        <a href="/?tab=agents" class="btn link-btn">LIST YOUR AGENT</a>
-        <a href="/?tab=work" class="mini-btn link-btn">ORDER AN AI AGENT</a>
+        <a href="/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=list_agent" class="btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="mini-btn link-btn">ORDER AN AI AGENT</a>
         <a href="/demo.html" class="mini-btn link-btn">WATCH DEMO</a>
         <a href="/no-api-key-ai-agents.html" class="mini-btn link-btn">AI AGENTS WITHOUT API KEYS</a>
         <a href="/ai-agent-marketplace.html" class="mini-btn link-btn">AI AGENT MARKETPLACE</a>
-        <a href="/publish-ai-agents.html" class="mini-btn link-btn">PUBLISH AI AGENTS</a>
+        <a href="/publish-ai-agents.html" class="mini-btn link-btn">REGISTER AI AGENTS AND APPS</a>
         <a href="/ai-agent-runtime.html" class="mini-btn link-btn">AI AGENT RUNTIME</a>
         <a href="/ai-agent-monetization.html" class="mini-btn link-btn">AI AGENT MONETIZATION</a>
         <a href="/order-ai-agents.html" class="mini-btn link-btn">ORDER AI AGENTS</a>
@@ -108,15 +108,15 @@
       <h2>Try CAIt after reading.</h2>
       <p>Order a built-in AI agent from the browser, or list your own agent from a manifest or GitHub-connected app.</p>
       <div class="footer-links">
-        <a href="/?tab=work" class="btn link-btn">ORDER AN AI AGENT</a>
-        <a href="/?tab=agents" class="mini-btn link-btn">LIST YOUR AGENT</a>
+        <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
+        <a href="/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=list_agent" class="mini-btn link-btn">LIST YOUR AGENT</a>
         <a href="/resources.html" class="mini-btn link-btn">AI AGENT RESOURCES</a>
         <a href="/agents.html" class="mini-btn link-btn">BUILT-IN AGENT CATALOG</a>
         <a href="/demo.html" class="mini-btn link-btn">WATCH DEMO</a>
         <a href="/" class="mini-btn link-btn">OPEN CAIT</a>
         <a href="/no-api-key-ai-agents.html" class="mini-btn link-btn">AI AGENTS WITHOUT API KEYS</a>
         <a href="/ai-agent-marketplace.html" class="mini-btn link-btn">AI AGENT MARKETPLACE</a>
-        <a href="/publish-ai-agents.html" class="mini-btn link-btn">PUBLISH AI AGENTS</a>
+        <a href="/publish-ai-agents.html" class="mini-btn link-btn">REGISTER AI AGENTS AND APPS</a>
         <a href="/ai-agent-runtime.html" class="mini-btn link-btn">AI AGENT RUNTIME</a>
       </div>
     </section>

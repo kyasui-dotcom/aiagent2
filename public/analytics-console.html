@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Analytics Console | CAIt Apps</title>
+  <meta name="description" content="CAIt Analytics Console collects search, acquisition, conversion, country, and post-run measurement context for leader agents." />
+  <meta name="robots" content="noindex,follow" />
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="stylesheet" href="/app-console.css?v=20260505c" />
+  <script type="module" src="/analytics-console.js?v=20260505d"></script>
+</head>
+<body>
+  <main class="app-console-shell" aria-label="CAIt Analytics Console">
+    <section class="app-console-panel">
+      <header class="app-console-header">
+        <a class="app-brand" href="/" aria-label="CAIt"><img src="/cait-icon.svg" alt="" /><span>Analytics Console</span></a>
+        <nav class="app-nav" aria-label="CAIt app navigation">
+          <a href="/chat">Chat</a>
+          <a href="/apps.html">Apps</a>
+          <a href="/publisher-approval.html">Publisher</a>
+          <a href="/lead-ops.html">Lead Ops</a>
+          <a href="/delivery-manager.html">Deliveries</a>
+        </nav>
+        <div class="app-header-actions">
+          <button class="primary-btn" id="sendContextBtn" type="button">Send to CAIt</button>
+        </div>
+      </header>
+      <div class="app-layout">
+        <aside class="side-nav" aria-label="Analytics sections">
+          <button class="active" type="button" data-section="dashboard">Dashboard <span id="analyticsDashboardCount">0</span></button>
+          <button type="button" data-section="queries">Search queries <span id="analyticsQueriesCount">0</span></button>
+          <button type="button" data-section="pages">Landing pages <span id="analyticsPagesCount">0</span></button>
+          <button type="button" data-section="channels">Channels <span id="analyticsChannelsCount">0</span></button>
+          <button type="button" data-section="measurement">Measurement <span id="analyticsMeasurementCount">0</span></button>
+        </aside>
+        <section class="workspace">
+          <div class="workspace-head">
+            <div>
+              <span class="kicker">Old-GA style acquisition view</span>
+              <h1>Turn traffic evidence into leader-ready context.</h1>
+              <p>Find the next SEO or CMO move from real search, landing page, channel, country, and conversion signals.</p>
+            </div>
+            <div class="toolbar">
+              <span class="status-pill pending" id="googleSourceStatus">Google not checked</span>
+              <select id="rangeSelect" aria-label="Date range">
+                <option value="7">Last 7 days</option>
+                <option value="28" selected>Last 28 days</option>
+                <option value="90">Last 90 days</option>
+              </select>
+              <select id="targetSelect" aria-label="Handoff target">
+                <option value="cmo_leader">CMO Leader</option>
+                <option value="seo_gap">SEO Agent</option>
+                <option value="growth">Growth Operator</option>
+              </select>
+            </div>
+          </div>
+
+          <section class="split-main">
+            <article class="panel">
+              <div class="status-row">
+                <h2>Google sources</h2>
+                <div class="inline-actions">
+                  <button class="ghost-btn" id="connectGoogleBtn" type="button">Connect Google</button>
+                  <button class="ghost-btn" id="refreshGoogleSourcesBtn" type="button">Refresh sources</button>
+                  <button class="ghost-btn" id="loadGoogleReportBtn" type="button">Load report</button>
+                </div>
+              </div>
+              <div class="field-grid">
+                <div class="field-row">
+                  <label for="gscSiteSelect">Search Console site</label>
+                  <select id="gscSiteSelect" aria-label="Search Console site">
+                    <option value="">Connect Google and refresh sources</option>
+                  </select>
+                </div>
+                <div class="field-row">
+                  <label for="ga4PropertySelect">GA4 property</label>
+                  <select id="ga4PropertySelect" aria-label="GA4 property">
+                    <option value="">Connect Google and refresh sources</option>
+                  </select>
+                </div>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="status-row">
+                <h2>Next CAIt action</h2>
+                <button class="ghost-btn" id="copyContextBtn" type="button">Copy context</button>
+              </div>
+              <p class="muted" id="googleSourceNote">Use Connect Google to grant GA4 and Search Console read access, then choose the source before sending context to a leader.</p>
+            </article>
+          </section>
+
+          <section class="metric-strip" aria-label="Analytics summary metrics">
+            <article class="metric-card"><span>Sessions</span><strong id="sessionsMetric">-</strong><small id="sessionsDelta">-</small></article>
+            <article class="metric-card"><span>Search clicks</span><strong id="clicksMetric">-</strong><small id="clicksDelta">-</small></article>
+            <article class="metric-card"><span>Conversions</span><strong id="conversionsMetric">-</strong><small id="conversionsDelta">-</small></article>
+            <article class="metric-card"><span>Conversion rate</span><strong id="rateMetric">-</strong><small id="rateDelta">-</small></article>
+          </section>
+
+          <section class="split-main">
+            <article class="panel">
+              <div class="status-row">
+                <h2 id="primaryTableTitle">Top search queries</h2>
+                <span class="status-pill approved">leader-ready</span>
+              </div>
+              <table class="data-table" id="primaryTable" aria-label="Primary analytics table"></table>
+            </article>
+            <article class="panel">
+              <h2>Channel mix</h2>
+              <div class="chart-bars" id="channelChart" aria-label="Channel bar chart"></div>
+            </article>
+          </section>
+
+          <section class="split-main">
+            <article class="panel">
+              <h2>Post-run measurement queue</h2>
+              <table class="data-table" id="measurementTable" aria-label="Post-run measurement table"></table>
+            </article>
+            <article class="panel">
+              <h2>CAIt context preview</h2>
+              <pre class="context-preview" id="contextPreview"></pre>
+            </article>
+          </section>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

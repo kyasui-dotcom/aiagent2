@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lead Ops Console | CAIt Apps</title>
+  <meta name="description" content="CAIt Lead Ops Console manages lead rows, evidence URLs, statuses, next actions, and email drafts before approval." />
+  <meta name="robots" content="noindex,follow" />
+  <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/cait-icon.png" />
+  <link rel="stylesheet" href="/app-console.css?v=20260505c" />
+  <script type="module" src="/lead-ops.js?v=20260505c"></script>
+</head>
+<body>
+  <main class="app-console-shell" aria-label="CAIt Lead Ops Console">
+    <section class="app-console-panel">
+      <header class="app-console-header">
+        <a class="app-brand" href="/" aria-label="CAIt"><img src="/cait-icon.svg" alt="" /><span>Lead Ops</span></a>
+        <nav class="app-nav" aria-label="CAIt app navigation">
+          <a href="/chat">Chat</a>
+          <a href="/apps.html">Apps</a>
+          <a href="/analytics-console.html">Analytics</a>
+          <a href="/publisher-approval.html">Publisher</a>
+          <a href="/delivery-manager.html">Deliveries</a>
+        </nav>
+        <div class="app-header-actions">
+          <button class="primary-btn" id="sendLeadContextBtn" type="button">Send to CAIt</button>
+        </div>
+      </header>
+      <div class="app-layout">
+        <aside class="side-nav" aria-label="Lead sections">
+          <button class="active" type="button" data-status="all">All leads <span id="leadAllNavCount">0</span></button>
+          <button type="button" data-status="review">Needs review <span id="leadReviewNavCount">0</span></button>
+          <button type="button" data-status="draft">Draft ready <span id="leadDraftNavCount">0</span></button>
+          <button type="button" data-status="approved">Approved <span id="leadApprovedNavCount">0</span></button>
+          <button type="button" data-status="blocked">Blocked <span id="leadBlockedNavCount">0</span></button>
+        </aside>
+        <section class="workspace">
+          <div class="workspace-head">
+            <div>
+              <span class="kicker">Lead evidence and email drafts</span>
+              <h1>Keep acquisition rows reviewable before outreach.</h1>
+              <p>Turn sourced leads into reviewed outreach drafts with evidence, owner, status, and next action ready for a growth leader.</p>
+            </div>
+            <div class="toolbar">
+              <select id="leaderSelect" aria-label="Leader target">
+                <option value="cmo_leader">CMO Leader</option>
+                <option value="growth">Growth Operator</option>
+                <option value="list_creator">List Creator</option>
+              </select>
+              <button class="ghost-btn" id="markDraftBtn" type="button">Mark draft ready</button>
+            </div>
+          </div>
+
+          <section class="metric-strip" aria-label="Lead metrics">
+            <article class="metric-card"><span>Total leads</span><strong id="leadTotalMetric">-</strong><small>public-source rows only</small></article>
+            <article class="metric-card"><span>Draft ready</span><strong id="leadDraftMetric">-</strong><small>approval required</small></article>
+            <article class="metric-card"><span>Approved</span><strong id="leadApprovedMetric">-</strong><small>not sent by this app</small></article>
+            <article class="metric-card"><span>Blocked</span><strong id="leadBlockedMetric">-</strong><small>missing evidence or consent</small></article>
+          </section>
+
+          <section class="split-main">
+            <article class="panel">
+              <h2>Lead rows</h2>
+              <table class="data-table" id="leadTable" aria-label="Lead rows"></table>
+            </article>
+            <article class="panel">
+              <div class="status-row">
+                <h2>Email draft</h2>
+                <span class="status-pill pending" id="leadStatusPill">needs review</span>
+              </div>
+              <div class="field-grid">
+                <div class="field-row"><label for="leadNameInput">Lead</label><input id="leadNameInput" /></div>
+                <div class="field-row"><label for="leadSourceInput">Evidence URL</label><input id="leadSourceInput" /></div>
+                <div class="field-row"><label for="emailSubjectInput">Subject</label><input id="emailSubjectInput" /></div>
+                <div class="field-row"><label for="emailBodyInput">Body</label><textarea id="emailBodyInput"></textarea></div>
+              </div>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="status-row">
+              <h2>CAIt context preview</h2>
+              <button class="ghost-btn" id="copyLeadContextBtn" type="button">Copy context</button>
+            </div>
+            <pre class="context-preview" id="leadContextPreview"></pre>
+          </section>
+        </section>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

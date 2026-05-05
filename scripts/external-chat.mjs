@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
 const DEFAULT_BASE_URL = 'https://aiagent-marketplace.net';
@@ -45,6 +46,14 @@ Commands:
   npm run cait -- key create --label codex-desktop
   npm run cait -- key list
   npm run cait -- key revoke <key_id>
+  npm run cait -- app list
+  npm run cait -- app register --name "My App" --description "Action app" --entry-url https://example.com/
+  npm run cait -- app import-manifest .\\app-manifest.json
+  npm run cait -- app import-url https://example.com/aiagent-app.json
+  npm run cait -- app context-create .\\cait-app-context.json
+  npm run cait -- app context-get <context_id> --token <app_context_token>
+  npm run cait -- app context-list
+  npm run cait -- app verify <app_id>
   npm run cait -- send "Compare used iPhone resale routes in Japan"
   npm run cait -- send --watch "Compare used iPhone resale routes in Japan"
   npm run cait -- watch <job_id>
@@ -306,6 +315,230 @@ function printOrderResult(result) {
   });
 }
 
+function parseFlagOptions(args = []) {
+  const flags = {};
+  const positional = [];
+  const tokens = [...args];
+  while (tokens.length) {
+    const token = tokens.shift();
+    if (!String(token || '').startsWith('--')) {
+      positional.push(token);
+      continue;
+    }
+    const [rawName, inlineValue] = String(token).slice(2).split(/=(.*)/s);
+    const name = rawName.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    const value = inlineValue !== undefined
+      ? inlineValue
+      : (tokens[0] && !String(tokens[0]).startsWith('--') ? tokens.shift() : 'true');
+    if (flags[name] == null) flags[name] = value;
+    else if (Array.isArray(flags[name])) flags[name].push(value);
+    else flags[name] = [flags[name], value];
+  }
+  return { flags, positional };
+}
+
+function flagValue(flags = {}, ...names) {
+  for (const name of names) {
+    const camel = String(name).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    if (flags[camel] != null) return Array.isArray(flags[camel]) ? flags[camel][0] : flags[camel];
+  }
+  return '';
+}
+
+function flagList(flags = {}, ...names) {
+  const values = [];
+  for (const name of names) {
+    const camel = String(name).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+    const value = flags[camel];
+    if (Array.isArray(value)) values.push(...value);
+    else if (value != null) values.push(value);
+  }
+  return [...new Set(values.flatMap((value) => String(value || '').split(',')).map((item) => item.trim()).filter(Boolean))];
+}
+
+function summarizeApps(apps = []) {
+  return apps.slice(0, 50).map((app) => ({
+    id: app.id,
+    name: app.name,
+    status: app.status || null,
+    verification_status: app.verificationStatus || app.verification_status || null,
+    entry_url: app.entryUrl || app.entry_url || null,
+    capabilities: app.capabilities || []
+  }));
+}
+
+function readJsonFile(filePath = '') {
+  if (!filePath) return {};
+  return JSON.parse(readFileSync(path.resolve(filePath), 'utf8'));
+}
+
+function buildAppContextPayload(flags = {}, positional = []) {
+  const filePath = positional[0] || '';
+  const raw = readJsonFile(filePath);
+  const rawContext = raw?.context && typeof raw.context === 'object' ? raw.context : raw;
+  const appId = flagValue(flags, 'app-id', 'appId')
+    || raw.app_id
+    || raw.appId
+    || rawContext.app_id
+    || rawContext.appId
+    || rawContext.source_app
+    || rawContext.sourceApp
+    || '';
+  const context = {
+    ...(rawContext && typeof rawContext === 'object' ? rawContext : {}),
+    source_app: flagValue(flags, 'source-app', 'sourceApp') || rawContext.source_app || rawContext.sourceApp || appId,
+    source_app_label: flagValue(flags, 'source-app-label', 'sourceAppLabel') || rawContext.source_app_label || rawContext.sourceAppLabel,
+    title: flagValue(flags, 'title') || rawContext.title,
+    summary: flagValue(flags, 'summary') || rawContext.summary
+  };
+  const facts = flagList(flags, 'fact', 'facts');
+  const nextActions = flagList(flags, 'next-action', 'next-actions', 'recommended-next-action', 'recommended-next-actions');
+  const handoffTargets = flagList(flags, 'handoff-target', 'handoff-targets', 'target', 'targets');
+  if (facts.length) context.facts = [...(Array.isArray(rawContext.facts) ? rawContext.facts : []), ...facts];
+  if (nextActions.length) context.recommended_next_actions = [...(Array.isArray(rawContext.recommended_next_actions) ? rawContext.recommended_next_actions : []), ...nextActions];
+  if (handoffTargets.length) context.handoff_targets = [...(Array.isArray(rawContext.handoff_targets) ? rawContext.handoff_targets : []), ...handoffTargets];
+  if (!filePath && !context.title && !context.summary) {
+    throw new Error('app context-create requires a JSON file or --title/--summary context.');
+  }
+  return {
+    app_id: flagValue(flags, 'app-id', 'appId') || raw.app_id || raw.appId || context.source_app,
+    context,
+    ...(raw.expires_at || raw.expiresAt ? { expires_at: raw.expires_at || raw.expiresAt } : {})
+  };
+}
+
+async function runAppCli(args = []) {
+  const [subCommandRaw = 'help', ...rest] = args;
+  const subCommand = String(subCommandRaw || 'help').toLowerCase();
+  if (subCommand === 'help' || subCommand === '--help' || subCommand === '-h') {
+    process.stdout.write(`CAIt app registry commands
+
+Commands:
+  npm run cait -- app list
+  npm run cait -- app register --name "My App" --description "Action app" --entry-url https://example.com/
+  npm run cait -- app import-manifest .\\app-manifest.json
+  npm run cait -- app import-url https://example.com/aiagent-app.json
+  npm run cait -- app context-create .\\cait-app-context.json
+  npm run cait -- app context-create --app-id analytics-console --title "GSC gap" --summary "Query data is ready" --next-action "Ask SEO leader for next action"
+  npm run cait -- app context-get <context_id> --token <app_context_token>
+  npm run cait -- app context-list
+  npm run cait -- app verify <app_id>
+  npm run cait -- app delete <app_id>
+`);
+    return;
+  }
+  if (subCommand === 'context') {
+    const [nestedRaw = 'help', ...nestedRest] = rest;
+    const nested = String(nestedRaw || 'help').toLowerCase();
+    return runAppCli([`context-${nested}`, ...nestedRest]);
+  }
+  if (subCommand === 'context-help') {
+    process.stdout.write(`CAIt app context commands
+
+Commands:
+  npm run cait -- app context-create .\\cait-app-context.json
+  npm run cait -- app context-create --app-id analytics-console --title "GSC gap" --summary "Query data is ready" --next-action "Ask SEO leader for next action"
+  npm run cait -- app context-get <context_id> --token <app_context_token>
+  npm run cait -- app context-list
+`);
+    return;
+  }
+  if (subCommand === 'list') {
+    const result = await requestJson('/api/apps');
+    const apps = Array.isArray(result.apps) ? result.apps : [];
+    printJson({ count: apps.length, apps: summarizeApps(apps) });
+    return;
+  }
+  if (subCommand === 'register') {
+    const { flags } = parseFlagOptions(rest);
+    const payload = {
+      name: flagValue(flags, 'name'),
+      description: flagValue(flags, 'description', 'desc'),
+      kind: flagValue(flags, 'kind') || 'application',
+      baseUrl: flagValue(flags, 'base-url', 'baseUrl'),
+      entryUrl: flagValue(flags, 'entry-url', 'entryUrl', 'url'),
+      healthcheckUrl: flagValue(flags, 'healthcheck-url', 'healthcheckUrl', 'health-url'),
+      capabilities: flagList(flags, 'capability', 'capabilities'),
+      requiredConnectors: flagList(flags, 'connector', 'required-connector', 'required-connectors'),
+      requiresApprovalFor: flagList(flags, 'approval', 'requires-approval-for'),
+      tags: flagList(flags, 'tag', 'tags')
+    };
+    if (!payload.name || !payload.description || !payload.entryUrl) {
+      throw new Error('app register requires --name, --description, and --entry-url.');
+    }
+    const result = await requestJson('/api/apps', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    printJson(result);
+    return;
+  }
+  if (subCommand === 'context-create' || subCommand === 'context-import') {
+    const { flags, positional } = parseFlagOptions(rest);
+    const payload = buildAppContextPayload(flags, positional);
+    const result = await requestJson('/api/app-contexts', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    printJson(result);
+    return;
+  }
+  if (subCommand === 'context-get') {
+    const { flags, positional } = parseFlagOptions(rest);
+    const contextId = positional[0] || flagValue(flags, 'context-id', 'id');
+    const token = flagValue(flags, 'token', 'app-context-token', 'appContextToken');
+    if (!contextId) throw new Error('context_id is required. Example: npm run cait -- app context-get <context_id> --token <app_context_token>');
+    const query = token ? `?app_context_token=${encodeURIComponent(token)}` : '';
+    printJson(await requestJson(`/api/app-contexts/${encodeURIComponent(contextId)}${query}`));
+    return;
+  }
+  if (subCommand === 'context-list') {
+    const { flags } = parseFlagOptions(rest);
+    const limit = flagValue(flags, 'limit') || '';
+    const query = limit ? `?limit=${encodeURIComponent(limit)}` : '';
+    printJson(await requestJson(`/api/app-contexts${query}`));
+    return;
+  }
+  if (subCommand === 'import-manifest' || subCommand === 'import') {
+    const { positional } = parseFlagOptions(rest);
+    const filePath = positional[0];
+    if (!filePath) throw new Error('manifest file path is required. Example: npm run cait -- app import-manifest .\\app-manifest.json');
+    const manifest = JSON.parse(readFileSync(path.resolve(filePath), 'utf8'));
+    const result = await requestJson('/api/apps/import-manifest', {
+      method: 'POST',
+      body: JSON.stringify({ manifest })
+    });
+    printJson(result);
+    return;
+  }
+  if (subCommand === 'import-url') {
+    const { flags, positional } = parseFlagOptions(rest);
+    const manifestUrl = flagValue(flags, 'manifest-url', 'url') || positional[0];
+    if (!manifestUrl) throw new Error('manifest URL is required. Example: npm run cait -- app import-url https://example.com/aiagent-app.json');
+    const result = await requestJson('/api/apps/import-url', {
+      method: 'POST',
+      body: JSON.stringify({ manifest_url: manifestUrl })
+    });
+    printJson(result);
+    return;
+  }
+  if (subCommand === 'verify') {
+    const { positional } = parseFlagOptions(rest);
+    const appId = positional[0];
+    if (!appId) throw new Error('app_id is required. Example: npm run cait -- app verify app_x');
+    printJson(await requestJson(`/api/apps/${encodeURIComponent(appId)}/verify`, { method: 'POST', body: JSON.stringify({}) }));
+    return;
+  }
+  if (subCommand === 'delete' || subCommand === 'remove') {
+    const { positional } = parseFlagOptions(rest);
+    const appId = positional[0];
+    if (!appId) throw new Error('app_id is required. Example: npm run cait -- app delete app_x');
+    printJson(await requestJson(`/api/apps/${encodeURIComponent(appId)}`, { method: 'DELETE' }));
+    return;
+  }
+  throw new Error(`Unknown app command: ${subCommand}`);
+}
+
 async function fetchJob(jobId = '') {
   const result = await requestJson(`/api/jobs/${encodeURIComponent(jobId)}`);
   const job = unwrapJobPayload(result);
@@ -347,6 +580,10 @@ async function main() {
   if (rawCommand === 'key' || rawCommand === 'keys' || rawCommand === 'api-key' || rawCommand === 'api-keys') {
     const { runApiKeyCli } = await import('./api-key.mjs');
     await runApiKeyCli(rawArgs.slice(1));
+    return;
+  }
+  if (rawCommand === 'app' || rawCommand === 'apps') {
+    await runAppCli(rawArgs.slice(1));
     return;
   }
   const options = parseArgs(rawArgs);

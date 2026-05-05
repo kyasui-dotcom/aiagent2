@@ -8,6 +8,8 @@ import { DEFAULT_AGENT_SEEDS, DEPRECATED_AGENT_SEED_IDS } from '../lib/shared.js
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => readFileSync(path.join(root, file), 'utf8');
 const exists = (file) => statSync(path.join(root, file)).isFile();
+const listAgentAuthHref = '/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=list_agent';
+const registerAppAuthHref = '/auth/github?mode=link&amp;return_to=%2Fpublish-ai-agents.html&amp;login_source=register_app';
 const brandText = (value) => String(value ?? '')
   .replace(/AIAGENT2/g, SITE_NAME.toUpperCase())
   .replace(/AIagent²/g, SITE_SHORT_NAME)
@@ -26,6 +28,7 @@ function assertSeoPage(file, canonicalPath, expectedText) {
   assert.ok(html.includes(`<a class="logo logo-link" href="/" aria-label="Back to ${SITE_NAME} start">${SITE_NAME}</a>`), `${file} should have linked logo`);
   assert.ok(html.includes('ORDER AN AI AGENT'), `${file} should have order CTA`);
   assert.ok(html.includes('LIST YOUR AGENT'), `${file} should have agent CTA`);
+  assert.ok(html.includes(listAgentAuthHref), `${file} LIST YOUR AGENT CTA should start GitHub OAuth/link flow`);
   assert.ok(html.includes(brandText(expectedText)), `${file} should include ${brandText(expectedText)}`);
   return html;
 }
@@ -46,25 +49,25 @@ assert.ok(glossary.includes('/glossary/ai-agent.html'));
 assert.ok(glossary.includes('/glossary/ai-agent-marketplace.html'));
 
 const home = read('public/index.html');
-assert.ok(home.includes(`${SITE_NAME} | Chat-first AI Agent Marketplace`), 'home should have descriptive SEO title');
-assert.ok(home.includes('AI agents without API keys'), 'home should include no API key positioning keyword');
+assert.ok(home.includes(`${SITE_NAME} | High-quality AI agent output for everyone`), 'home should have descriptive SEO title');
+assert.ok(home.includes('Anyone can create high-quality AI agent output'), 'home should describe the current public product positioning');
 assert.ok(home.includes('<meta name="description"'), 'home should have meta description');
 assert.ok(home.includes('<link rel="canonical" href="https://aiagent-marketplace.net/"'), 'home should have canonical');
 assert.ok(home.includes(`<link rel="alternate" type="application/rss+xml" title="${SITE_NAME} News RSS" href="/rss.xml"`), 'home should expose RSS discovery');
 assert.ok(home.includes(`<link rel="alternate" type="application/atom+xml" title="${SITE_NAME} News Atom" href="/feed.xml"`), 'home should expose Atom discovery');
-assert.ok(home.includes('"@type": "SoftwareApplication"'), 'home should have app schema');
-assert.ok(home.includes('"@type": "FAQPage"'), 'home should have FAQ schema');
-assert.ok(home.includes('AI AGENT MARKETPLACE FAQ'), 'home should include crawlable FAQ content');
+assert.ok(home.includes('"@type":"SoftwareApplication"'), 'home should have app schema');
+assert.ok(home.includes('class="home-footer"'), 'home should expose visible navigation');
+assert.ok(home.includes('/login?next=%2Fchat&amp;source=start'), 'home START should send visitors to the dedicated login path for chat');
+assert.ok(home.includes('Register agents and apps'), 'home should promote the builder path');
 assert.ok(home.includes('/resources.html'), 'home should link resources hub');
-assert.ok(home.includes('/llms.txt'), 'home should link llms.txt');
-assert.ok(home.includes('/site-map.html'), 'home should link HTML site map');
-assert.ok(home.includes('/demo.html'), 'home should link to demo page');
 assert.ok(home.includes('/agents.html'), 'home should link to built-in agent catalog');
-assert.ok(home.includes('/agents/prompt-brushup-ai-agent.html'), 'home should link prompt brushup agent page');
-assert.ok(home.includes('/agents/seo-gap-ai-agent.html'), 'home should link SEO gap agent page');
-for (const landingPage of seoLandingPages) {
-  assert.ok(home.includes(`/${landingPage.slug}.html`), `home should link ${landingPage.slug}`);
-}
+assert.ok(home.includes('/publish-ai-agents.html'), 'home should link publish page');
+assert.ok(home.includes('/ai-agent-api.html'), 'home should link API page');
+assert.ok(home.includes('/cli-help.html'), 'home should link CLI help page');
+assert.ok(home.includes('/help.html'), 'home should link help page');
+assert.ok(home.includes('/news.html'), 'home should link news page');
+assert.ok(!home.includes('/chatux/'), 'home should not link retired chatux UI');
+assert.ok(!home.includes('?tab=work'), 'home should not link retired tab routes');
 
 const resources = assertSeoPage('public/resources.html', '/resources.html', `${SITE_NAME} resources`);
 assert.ok(resources.includes('"@type":"CollectionPage"'), 'resources should have CollectionPage schema');
@@ -99,6 +102,22 @@ assert.ok(agentCatalog.includes('"@type":"ItemList"'), 'agent catalog should hav
 assert.ok(agentCatalog.includes('/agents/prompt-brushup-ai-agent.html'), 'agent catalog should link prompt brushup page');
 assert.ok(agentCatalog.includes('/agents/seo-gap-ai-agent.html'), 'agent catalog should link SEO gap page');
 assert.ok(agentCatalog.includes('/agents/landing-ai-agent.html'), 'agent catalog should link landing critique page');
+assert.ok(agentCatalog.includes('Trust:'), 'agent catalog should expose trust summary on agent cards');
+assert.ok(agentCatalog.includes('QUALITY FLOW'), 'agent catalog should explain the quality workflow');
+assert.ok(agentCatalog.includes('Better output comes from better context.'), 'agent catalog should show the quality workflow heading');
+assert.ok(agentCatalog.includes('1. LEADER LAYER'), 'agent catalog should start from the leader layer');
+assert.ok(agentCatalog.includes('2. RESEARCH LAYER'), 'agent catalog should include the research layer');
+assert.ok(agentCatalog.includes('3. PLANNING AND PREPARATION LAYER'), 'agent catalog should include the planning layer');
+assert.ok(agentCatalog.includes('4. ACTION AND APP HANDOFF LAYER'), 'agent catalog should include the action/app handoff layer');
+assert.ok(agentCatalog.includes('JOIN THE MARKETPLACE'), 'agent catalog should invite builders into the marketplace');
+assert.ok(agentCatalog.includes('Plug your agent or app into the quality loop.'), 'agent catalog should explain agent/app marketplace registration');
+assert.ok(agentCatalog.includes(registerAppAuthHref), 'agent catalog should expose a register-app OAuth CTA');
+assert.ok(agentCatalog.includes('READ MANIFEST GUIDE'), 'agent catalog should link the manifest guide');
+assert.ok(agentCatalog.includes('Manifest:'), 'agent cards should expose readable manifest summaries');
+assert.ok(agentCatalog.includes('Routing:'), 'agent cards should expose readable routing summaries');
+assert.ok(agentCatalog.indexOf('1. LEADER LAYER') < agentCatalog.indexOf('2. RESEARCH LAYER'), 'agent catalog should list leader before research');
+assert.ok(agentCatalog.indexOf('2. RESEARCH LAYER') < agentCatalog.indexOf('3. PLANNING AND PREPARATION LAYER'), 'agent catalog should list research before planning');
+assert.ok(agentCatalog.indexOf('3. PLANNING AND PREPARATION LAYER') < agentCatalog.indexOf('4. ACTION AND APP HANDOFF LAYER'), 'agent catalog should list planning before action');
 
 const publicAgentSeeds = DEFAULT_AGENT_SEEDS.filter((agent) => !DEPRECATED_AGENT_SEED_IDS.includes(agent.id));
 
@@ -109,6 +128,12 @@ for (const agent of publicAgentSeeds) {
   assert.ok(html.includes('"@type":"FAQPage"'), `${slug} should have FAQ schema`);
   assert.ok(html.includes('"@type":"BreadcrumbList"'), `${slug} should have breadcrumb schema`);
   assert.ok(html.includes('Expected delivery'), `${slug} should explain delivery`);
+  assert.ok(html.includes('Trust and quality assurance'), `${slug} should explain trust and QA`);
+  assert.ok(html.includes('Evidence required'), `${slug} should explain evidence requirements`);
+  assert.ok(html.includes('User-facing manifest summary'), `${slug} should explain the readable manifest summary`);
+  assert.ok(html.includes('Manifest capabilities'), `${slug} should expose manifest capabilities`);
+  assert.ok(html.includes('Handoff behavior'), `${slug} should expose manifest handoff behavior`);
+  assert.ok(html.includes(registerAppAuthHref), `${slug} should include register-app CTA`);
 }
 
 const news = assertSeoPage('public/news.html', '/news.html', 'NEWS / FIELD NOTES');
@@ -174,10 +199,10 @@ for (const landingPage of seoLandingPages) {
 
 const demo = assertSeoPage('public/demo.html', '/demo.html', `${SITE_NAME.toUpperCase()} DEMO`);
 assert.ok(demo.includes('"@type":"VideoObject"'), 'demo should have VideoObject schema');
-assert.ok(demo.includes('/videos/cait-marketplace-demo-20260417.mp4'), 'demo should include mp4 video');
-assert.ok(demo.includes('/videos/cait-marketplace-demo-thumbnail-20260417.jpg'), 'demo should include thumbnail');
-assert.ok(statSync(path.join(root, 'public/videos/cait-marketplace-demo-20260417.mp4')).size > 100000, 'demo mp4 should exist');
-assert.ok(statSync(path.join(root, 'public/videos/cait-marketplace-demo-thumbnail-20260417.jpg')).size > 10000, 'demo thumbnail should exist');
+assert.ok(demo.includes('/videos/cait-marketplace-demo-20260501.mp4'), 'demo should include current mp4 video');
+assert.ok(demo.includes('/videos/cait-marketplace-demo-thumbnail-20260501.jpg'), 'demo should include current thumbnail');
+assert.ok(statSync(path.join(root, 'public/videos/cait-marketplace-demo-20260501.mp4')).size > 100000, 'demo mp4 should exist');
+assert.ok(statSync(path.join(root, 'public/videos/cait-marketplace-demo-thumbnail-20260501.jpg')).size > 10000, 'demo thumbnail should exist');
 
 const sitemap = read('public/sitemap.xml');
 assert.ok(sitemap.includes(`${SITE_URL}/sitemap.xml`) === false, 'sitemap should contain page URLs, not itself');
