@@ -337,12 +337,14 @@ function renderSelected() {
     els.sendDeliveryContextBtn,
     els.runFollowupBtn,
     els.downloadJsonBtn,
+    els.railJsonBtn
+  ].forEach((button) => { button.disabled = false; });
+  [
     els.downloadSelectedBtn,
     els.copySelectedBtn,
     els.copyPreviewBtn,
     els.railDownloadBtn,
-    els.railCopyBtn,
-    els.railJsonBtn
+    els.railCopyBtn
   ].forEach((button) => { button.disabled = !hasDelivery; });
   els.deliveryTitleInput.value = delivery?.title || 'No delivery selected';
   els.deliverySummaryInput.value = delivery?.summary || 'Refresh server jobs or open Delivery Manager from a CAIt context handoff to review reusable work.';
