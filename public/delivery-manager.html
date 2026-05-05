@@ -9,12 +9,12 @@
   <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/cait-icon.png" />
   <link rel="stylesheet" href="/app-console.css?v=20260505c" />
-  <script type="module" src="/delivery-manager.js?v=20260505b"></script>
+  <script type="module" src="/delivery-manager.js?v=20260505c"></script>
 </head>
 <body>
-  <main class="app-console-shell" aria-label="CAIt Delivery Manager">
-    <section class="app-console-panel">
-      <header class="app-console-header">
+  <main class="app-console-shell delivery-shell" aria-label="CAIt Delivery Manager">
+    <section class="app-console-panel delivery-panel">
+      <header class="app-console-header delivery-header">
         <a class="app-brand" href="/" aria-label="CAIt"><img src="/cait-icon.svg" alt="" /><span>Delivery Manager</span></a>
         <nav class="app-nav" aria-label="CAIt app navigation">
           <a href="/chat">Chat</a>
@@ -27,63 +27,133 @@
           <button class="primary-btn" id="sendDeliveryContextBtn" type="button">Send to CAIt</button>
         </div>
       </header>
-      <div class="app-layout">
-        <aside class="side-nav" aria-label="Delivery sections">
-          <button class="active" type="button" data-filter="all">All deliveries <span id="allCount">-</span></button>
-          <button type="button" data-filter="completed">Completed <span id="completedCount">-</span></button>
-          <button type="button" data-filter="blocked">Waiting <span id="blockedCount">-</span></button>
-          <button type="button" data-filter="files">Files <span id="filesCount">-</span></button>
-          <button type="button" data-filter="reusable">Reusable <span id="reusableCount">-</span></button>
-        </aside>
-        <section class="workspace">
-          <div class="workspace-head">
+
+      <section class="delivery-workbench">
+        <aside class="delivery-inbox side-nav" aria-label="Delivery inbox">
+          <div class="delivery-inbox-head">
             <div>
-              <span class="kicker">Delivery reuse and download</span>
-              <h1>Keep finished work available after chat.</h1>
-              <p>Reuse finished work as the next brief: review delivery packages, download files, copy outputs, and send prior work back to CAIt.</p>
+              <h1>Deliveries</h1>
+              <p id="deliveryInboxMeta">Loading delivery packages.</p>
             </div>
-            <div class="toolbar">
-              <button class="ghost-btn" id="downloadSelectedBtn" type="button">Download selected</button>
-              <button class="ghost-btn" id="copySelectedBtn" type="button">Copy selected</button>
+            <button class="tool-btn icon-btn" id="refreshDeliveriesBtn" type="button" aria-label="Refresh deliveries" title="Refresh deliveries">Refresh</button>
+          </div>
+
+          <div class="delivery-search-row">
+            <label class="sr-only" for="deliverySearchInput">Search deliveries</label>
+            <input id="deliverySearchInput" type="search" placeholder="Search deliveries, agents, files..." autocomplete="off" />
+          </div>
+
+          <div class="delivery-filter-tabs" aria-label="Delivery filters">
+            <button class="active" type="button" data-filter="all">All <span id="allCount">-</span></button>
+            <button type="button" data-filter="completed">Completed <span id="completedCount">-</span></button>
+            <button type="button" data-filter="blocked">Waiting <span id="blockedCount">-</span></button>
+            <button type="button" data-filter="files">Files <span id="filesCount">-</span></button>
+            <button type="button" data-filter="reusable">Reusable <span id="reusableCount">-</span></button>
+          </div>
+
+          <div class="delivery-list-head" aria-hidden="true">
+            <span>Title</span>
+            <span>Status</span>
+            <span>Files</span>
+          </div>
+          <div class="delivery-list" id="deliveryList"></div>
+        </aside>
+
+        <section class="delivery-review" aria-label="Selected delivery review">
+          <div class="delivery-review-head">
+            <div class="field-row delivery-title-field">
+              <label for="deliveryTitleInput">Delivery</label>
+              <input id="deliveryTitleInput" />
+            </div>
+            <div class="delivery-meta-stack">
+              <span class="status-pill approved" id="deliveryStatusPill">reusable</span>
+              <span id="deliveryUpdatedMeta">No timestamp</span>
             </div>
           </div>
 
-          <section class="split-main">
-            <article class="panel">
+          <div class="field-row">
+            <label for="deliverySummaryInput">Summary</label>
+            <textarea id="deliverySummaryInput"></textarea>
+            <div class="delivery-text-count" id="summaryCount">0 / 1000</div>
+          </div>
+
+          <div class="delivery-tabs" aria-label="Delivery detail tabs">
+            <button class="active" type="button" data-tab="overview">Overview</button>
+            <button type="button" data-tab="files">Files</button>
+            <button type="button" data-tab="context">Context</button>
+          </div>
+
+          <section class="delivery-tab-panel active" id="overviewPanel" aria-label="Delivery overview">
+            <div class="delivery-overview-grid">
+              <article>
+                <span>Next action</span>
+                <strong id="nextActionText">No follow-up action loaded.</strong>
+              </article>
+              <article>
+                <span>Package</span>
+                <strong id="packageMetaText">No files</strong>
+              </article>
+              <article>
+                <span>Source</span>
+                <strong id="sourceMetaText">Server jobs</strong>
+              </article>
+            </div>
+            <div class="delivery-preview-card">
               <div class="status-row">
-                <h2>Delivery packages</h2>
-                <button class="ghost-btn" id="refreshDeliveriesBtn" type="button">Refresh</button>
+                <h2 id="previewTitle">Output preview</h2>
+                <button class="ghost-btn" id="copyPreviewBtn" type="button">Copy preview</button>
               </div>
-              <div class="item-list" id="deliveryList"></div>
-            </article>
-            <article class="panel">
-              <div class="status-row">
-                <h2>Selected delivery</h2>
-                <span class="status-pill approved" id="deliveryStatusPill">reusable</span>
-              </div>
-              <div class="field-grid">
-                <div class="field-row"><label for="deliveryTitleInput">Title</label><input id="deliveryTitleInput" /></div>
-                <div class="field-row"><label for="deliverySummaryInput">Summary</label><textarea id="deliverySummaryInput"></textarea></div>
-              </div>
-              <div class="inline-actions" style="margin-top:12px">
-                <button class="primary-btn" id="runFollowupBtn" type="button">Run follow-up</button>
-                <button class="ghost-btn" id="downloadJsonBtn" type="button">Download JSON</button>
-              </div>
-            </article>
+              <pre class="delivery-output-preview" id="outputPreview"></pre>
+            </div>
           </section>
 
-          <section class="split-main">
-            <article class="panel">
-              <h2>Files</h2>
-              <table class="data-table" id="fileTable" aria-label="Delivery files"></table>
-            </article>
-            <article class="panel">
+          <section class="delivery-tab-panel" id="filesPanel" aria-label="Delivery files">
+            <div class="delivery-files-head">
+              <div>
+                <h2>Files</h2>
+                <p id="fileMetaText">No files loaded.</p>
+              </div>
+              <div class="inline-actions">
+                <button class="ghost-btn" id="downloadSelectedBtn" type="button">Download package</button>
+                <button class="ghost-btn" id="copySelectedBtn" type="button">Copy package</button>
+              </div>
+            </div>
+            <table class="data-table delivery-file-table" id="fileTable" aria-label="Delivery files"></table>
+          </section>
+
+          <section class="delivery-tab-panel" id="contextPanel" aria-label="CAIt context preview">
+            <div class="status-row">
               <h2>CAIt context preview</h2>
-              <pre class="context-preview" id="deliveryContextPreview"></pre>
-            </article>
+              <button class="ghost-btn" id="downloadJsonBtn" type="button">Download JSON</button>
+            </div>
+            <pre class="context-preview delivery-context-preview" id="deliveryContextPreview"></pre>
           </section>
         </section>
-      </div>
+
+        <aside class="delivery-action-rail" aria-label="Delivery actions">
+          <section class="delivery-next-step">
+            <h2>Next step</h2>
+            <p id="actionRailSummary">Choose a reusable delivery and send it to CAIt as follow-up context.</p>
+            <button class="primary-btn" id="runFollowupBtn" type="button">Run follow-up</button>
+          </section>
+
+          <section class="delivery-rail-actions" aria-label="Package actions">
+            <button class="ghost-btn" id="railDownloadBtn" type="button">Download package</button>
+            <button class="ghost-btn" id="railCopyBtn" type="button">Copy package</button>
+            <button class="ghost-btn" id="railJsonBtn" type="button">Download JSON</button>
+          </section>
+
+          <section class="delivery-readiness">
+            <div class="status-row">
+              <h2>Context readiness</h2>
+              <strong id="readinessScore">0 / 7</strong>
+            </div>
+            <div class="readiness-meter"><span id="readinessMeter"></span></div>
+            <div class="readiness-list" id="readinessList"></div>
+            <p class="notice" id="readinessNote">Load a delivery to check whether it is ready for high-quality follow-up work.</p>
+          </section>
+        </aside>
+      </section>
     </section>
   </main>
 </body>

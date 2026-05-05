@@ -168,7 +168,10 @@ assert.ok(leadOpsHtml.includes('id="leadAllNavCount"'), 'Lead Ops side navigatio
 assert.ok(deliveryManagerHtml.includes('Delivery Manager'), 'Delivery Manager should be a first-class CAIt feature page.');
 assert.ok(deliveryManagerHtml.includes('href="/apps.html"'), 'Delivery Manager should link back to the apps hub.');
 assert.ok(deliveryManagerHtml.includes('id="downloadSelectedBtn"'), 'Delivery Manager should expose downloadable delivery files.');
-assert.ok(deliveryManagerHtml.includes('/delivery-manager.js?v=20260505b'), 'Delivery Manager should load the app-context receiving controller.');
+assert.ok(deliveryManagerHtml.includes('/delivery-manager.js?v=20260505c'), 'Delivery Manager should load the app-context receiving controller.');
+assert.ok(deliveryManagerHtml.includes('id="deliverySearchInput"'), 'Delivery Manager should expose delivery search.');
+assert.ok(deliveryManagerHtml.includes('data-tab="files"'), 'Delivery Manager should expose file and context tabs.');
+assert.ok(deliveryManagerHtml.includes('id="readinessList"'), 'Delivery Manager should show follow-up context readiness.');
 
 const builtInAppEntries = [
   {

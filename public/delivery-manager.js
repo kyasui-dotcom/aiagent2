@@ -2,16 +2,35 @@ import { buildCaitAppContext, downloadContextJson, fetchCaitAppContextFromUrl, s
 
 let deliveries = [];
 let selectedId = '';
+let selectedFileIndex = 0;
 let filter = 'all';
+let activeTab = 'overview';
+let searchText = '';
 let importedContext = null;
 
 const els = {
   filterButtons: [...document.querySelectorAll('[data-filter]')],
+  tabButtons: [...document.querySelectorAll('[data-tab]')],
+  tabPanels: {
+    overview: document.getElementById('overviewPanel'),
+    files: document.getElementById('filesPanel'),
+    context: document.getElementById('contextPanel')
+  },
+  deliverySearchInput: document.getElementById('deliverySearchInput'),
+  deliveryInboxMeta: document.getElementById('deliveryInboxMeta'),
   deliveryList: document.getElementById('deliveryList'),
   fileTable: document.getElementById('fileTable'),
   deliveryTitleInput: document.getElementById('deliveryTitleInput'),
   deliverySummaryInput: document.getElementById('deliverySummaryInput'),
   deliveryStatusPill: document.getElementById('deliveryStatusPill'),
+  deliveryUpdatedMeta: document.getElementById('deliveryUpdatedMeta'),
+  summaryCount: document.getElementById('summaryCount'),
+  nextActionText: document.getElementById('nextActionText'),
+  packageMetaText: document.getElementById('packageMetaText'),
+  sourceMetaText: document.getElementById('sourceMetaText'),
+  previewTitle: document.getElementById('previewTitle'),
+  outputPreview: document.getElementById('outputPreview'),
+  fileMetaText: document.getElementById('fileMetaText'),
   deliveryContextPreview: document.getElementById('deliveryContextPreview'),
   refreshDeliveriesBtn: document.getElementById('refreshDeliveriesBtn'),
   sendDeliveryContextBtn: document.getElementById('sendDeliveryContextBtn'),
@@ -19,6 +38,15 @@ const els = {
   downloadJsonBtn: document.getElementById('downloadJsonBtn'),
   downloadSelectedBtn: document.getElementById('downloadSelectedBtn'),
   copySelectedBtn: document.getElementById('copySelectedBtn'),
+  copyPreviewBtn: document.getElementById('copyPreviewBtn'),
+  railDownloadBtn: document.getElementById('railDownloadBtn'),
+  railCopyBtn: document.getElementById('railCopyBtn'),
+  railJsonBtn: document.getElementById('railJsonBtn'),
+  actionRailSummary: document.getElementById('actionRailSummary'),
+  readinessScore: document.getElementById('readinessScore'),
+  readinessMeter: document.getElementById('readinessMeter'),
+  readinessList: document.getElementById('readinessList'),
+  readinessNote: document.getElementById('readinessNote'),
   allCount: document.getElementById('allCount'),
   completedCount: document.getElementById('completedCount'),
   blockedCount: document.getElementById('blockedCount'),
@@ -30,18 +58,32 @@ function selectedDelivery() {
   return deliveries.find((delivery) => delivery.id === selectedId) || deliveries[0] || null;
 }
 
-function visibleDeliveries() {
-  if (filter === 'completed') return deliveries.filter((item) => item.status === 'completed');
-  if (filter === 'blocked') return deliveries.filter((item) => item.status === 'blocked');
-  if (filter === 'files') return deliveries.filter((item) => (item.files || []).length);
-  if (filter === 'reusable') return deliveries.filter((item) => item.summary || (item.files || []).length);
-  return deliveries;
+function deliverySearchBlob(delivery = {}) {
+  return [
+    delivery.title,
+    delivery.status,
+    delivery.summary,
+    delivery.agentName,
+    delivery.nextAction,
+    ...(delivery.files || []).map((file) => `${file.name} ${file.type}`)
+  ].join('\n').toLowerCase();
+}
+
+function filteredDeliveries() {
+  let list = deliveries;
+  if (filter === 'completed') list = list.filter((item) => item.status === 'completed');
+  if (filter === 'blocked') list = list.filter((item) => /blocked|failed|timed_out|waiting/i.test(item.status));
+  if (filter === 'files') list = list.filter((item) => (item.files || []).length);
+  if (filter === 'reusable') list = list.filter((item) => item.summary || (item.files || []).length);
+  const query = searchText.trim().toLowerCase();
+  if (query) list = list.filter((item) => deliverySearchBlob(item).includes(query));
+  return list;
 }
 
 function statusClass(value = '') {
   const safe = String(value || '').toLowerCase();
-  if (/completed|ready/.test(safe)) return 'approved';
-  if (/blocked|failed|timeout/.test(safe)) return 'blocked';
+  if (/completed|ready|reusable/.test(safe)) return 'approved';
+  if (/blocked|failed|timeout|waiting/.test(safe)) return 'blocked';
   return 'pending';
 }
 
@@ -52,9 +94,34 @@ function statusLabel(value = '') {
   return String(value || '').trim() || 'unknown';
 }
 
+function compact(value = '', max = 120) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max - 1)}...` : text;
+}
+
+function fileSizeLabel(content = '') {
+  const bytes = new Blob([String(content || '')]).size;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+function normalizedDate(value = '') {
+  const timestamp = Date.parse(value);
+  if (!Number.isFinite(timestamp)) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit'
+  }).format(new Date(timestamp));
+}
+
 function normalizeJobDelivery(job = {}) {
   const output = job.output && typeof job.output === 'object' ? job.output : {};
   const files = Array.isArray(output.files) ? output.files : [];
+  const createdAt = String(job.completedAt || job.updatedAt || job.createdAt || '');
   return {
     id: String(job.id || `job-${Date.now()}`),
     title: String(output.title || output.summary || job.task || `Order ${String(job.id || '').slice(0, 8)}` || 'Delivery'),
@@ -63,9 +130,13 @@ function normalizeJobDelivery(job = {}) {
     files: files.map((file, index) => ({
       name: String(file.name || file.filename || `delivery-${index + 1}.md`),
       type: String(file.type || file.mime || 'text/plain'),
-      content: String(file.content || file.body || '')
+      content: String(file.content || file.body || ''),
+      updatedAt: createdAt
     })),
-    nextAction: String(output.next_action || output.nextAction || 'Use this delivery as context for follow-up work.')
+    nextAction: String(output.next_action || output.nextAction || 'Use this delivery as context for follow-up work.'),
+    agentName: String(job.assignedAgentId || job.agentName || job.taskType || 'CAIt Agent'),
+    updatedAt: createdAt,
+    sourceLabel: 'Server job'
   };
 }
 
@@ -88,9 +159,13 @@ function deliveryFromAppContext(context = {}) {
     files: files.map((file, index) => ({
       name: String(file.name || file.filename || `context-file-${index + 1}.md`),
       type: String(file.type || file.mime || file.content_type || 'text/plain'),
-      content: String(file.content || file.body || '')
+      content: String(file.content || file.body || ''),
+      updatedAt: String(context.updated_at || context.updatedAt || '')
     })),
     nextAction: String((Array.isArray(context.recommended_next_actions) ? context.recommended_next_actions[0] : '') || 'Use this context for a follow-up order.'),
+    agentName: String(context.source_app_label || context.source_app || 'CAIt app'),
+    updatedAt: String(context.updated_at || context.updatedAt || ''),
+    sourceLabel: 'App context',
     sourceContext: context
   };
 }
@@ -101,21 +176,24 @@ function applyInboundContext(context = null) {
   const delivery = deliveryFromAppContext(context);
   deliveries = [delivery];
   selectedId = delivery.id;
+  selectedFileIndex = 0;
   return true;
 }
 
 async function refreshDeliveries() {
   els.refreshDeliveriesBtn.textContent = 'Refreshing';
   try {
-    const response = await fetch('/api/jobs?limit=30', { credentials: 'same-origin' });
+    const response = await fetch('/api/jobs?limit=40', { credentials: 'same-origin' });
     if (!response.ok) throw new Error(`jobs ${response.status}`);
     const data = await response.json();
     const jobs = Array.isArray(data.jobs) ? data.jobs : [];
     deliveries = jobs.map(normalizeJobDelivery).filter((item) => item.id);
     selectedId = deliveries[0]?.id || '';
+    selectedFileIndex = 0;
   } catch {
     deliveries = [];
     selectedId = '';
+    selectedFileIndex = 0;
   } finally {
     els.refreshDeliveriesBtn.textContent = 'Refresh';
     render();
@@ -151,7 +229,8 @@ function buildContext() {
       importedContext ? `Imported context: ${importedContext.title || importedContext.id || 'CAIt app context'}` : '',
       `Delivery id: ${delivery.id}`,
       `Status: ${delivery.status}`,
-      `Files: ${(delivery.files || []).length}`
+      `Files: ${(delivery.files || []).length}`,
+      delivery.updatedAt ? `Updated: ${delivery.updatedAt}` : ''
     ].filter(Boolean),
     assumptions: [
       importedContext ? 'Files and artifacts are loaded from a server-side CAIt app context.' : 'Files are loaded from server-side job output when available.',
@@ -170,44 +249,153 @@ function buildContext() {
   });
 }
 
+function packageText(delivery = selectedDelivery()) {
+  if (!delivery) return '';
+  return [
+    `# ${delivery.title || 'Delivery'}`,
+    delivery.summary || '',
+    delivery.nextAction ? `## Next action\n${delivery.nextAction}` : '',
+    ...(delivery.files || []).map((file) => `\n## ${file.name}\n${file.content || ''}`)
+  ].filter(Boolean).join('\n\n').trim();
+}
+
+function readinessItems(delivery = selectedDelivery()) {
+  if (!delivery) {
+    return [
+      ['Delivery selected', false],
+      ['Summary present', false],
+      ['Status visible', false],
+      ['Files attached', false],
+      ['Next action captured', false],
+      ['Reusable context built', false],
+      ['No empty title', false]
+    ];
+  }
+  const files = delivery?.files || [];
+  const summary = String(delivery?.summary || '').trim();
+  const context = buildContext();
+  return [
+    ['Summary present', Boolean(summary)],
+    ['Delivery selected', Boolean(delivery?.id)],
+    ['Status visible', Boolean(delivery?.status)],
+    ['Files attached', files.length > 0],
+    ['Next action captured', Boolean(String(delivery?.nextAction || '').trim())],
+    ['Reusable context built', Boolean(context?.source_app === 'delivery_manager')],
+    ['No empty title', Boolean(String(delivery?.title || '').trim())]
+  ];
+}
+
 function renderCounts() {
   els.allCount.textContent = deliveries.length;
   els.completedCount.textContent = deliveries.filter((item) => item.status === 'completed').length;
-  els.blockedCount.textContent = deliveries.filter((item) => item.status === 'blocked').length;
+  els.blockedCount.textContent = deliveries.filter((item) => /blocked|failed|timed_out|waiting/i.test(item.status)).length;
   els.filesCount.textContent = deliveries.filter((item) => (item.files || []).length).length;
   els.reusableCount.textContent = deliveries.filter((item) => item.summary || (item.files || []).length).length;
+  const visible = filteredDeliveries().length;
+  els.deliveryInboxMeta.textContent = `${visible} shown from ${deliveries.length} delivery package${deliveries.length === 1 ? '' : 's'}.`;
 }
 
 function renderList() {
-  const list = visibleDeliveries();
-  if (!list.some((item) => item.id === selectedId) && list[0]) selectedId = list[0].id;
+  const list = filteredDeliveries();
+  if (!list.some((item) => item.id === selectedId) && list[0]) {
+    selectedId = list[0].id;
+    selectedFileIndex = 0;
+  }
   els.deliveryList.innerHTML = list.length ? list.map((delivery) => [
-    `<button class="item-row ${delivery.id === selectedId ? 'active' : ''}" type="button" data-delivery="${escapeHtml(delivery.id)}">`,
-    `<strong>${escapeHtml(delivery.title)}</strong>`,
-    `<span>${escapeHtml(delivery.id)} · ${(delivery.files || []).length} files</span>`,
+    `<button class="delivery-row ${delivery.id === selectedId ? 'active' : ''}" type="button" data-delivery="${escapeHtml(delivery.id)}">`,
+    '<span>',
+    `<strong>${escapeHtml(compact(delivery.title, 70))}</strong>`,
+    `<small>${escapeHtml(compact(delivery.agentName || delivery.id, 64))}</small>`,
+    '</span>',
     `<span class="status-pill ${statusClass(delivery.status)}">${escapeHtml(statusLabel(delivery.status))}</span>`,
+    `<span class="delivery-file-count">${(delivery.files || []).length}</span>`,
     '</button>'
-  ].join('')).join('') : '<div class="item-row"><strong>No server delivery loaded</strong><span>Refresh jobs or open this app from a CAIt context handoff.</span></div>';
+  ].join('')).join('') : [
+    '<div class="delivery-empty">',
+    '<strong>No matching delivery</strong>',
+    '<span>Refresh jobs, clear search, or open this app from a CAIt context handoff.</span>',
+    '</div>'
+  ].join('');
+}
+
+function renderTabs() {
+  els.tabButtons.forEach((button) => button.classList.toggle('active', button.dataset.tab === activeTab));
+  Object.entries(els.tabPanels).forEach(([name, panel]) => {
+    panel.classList.toggle('active', name === activeTab);
+  });
 }
 
 function renderSelected() {
   const delivery = selectedDelivery();
-  els.deliveryTitleInput.value = delivery?.title || '';
-  els.deliverySummaryInput.value = delivery?.summary || '';
-  els.deliveryStatusPill.textContent = statusLabel(delivery?.status || '');
-  els.deliveryStatusPill.className = `status-pill ${statusClass(delivery?.status || '')}`;
   const files = delivery?.files || [];
+  if (selectedFileIndex >= files.length) selectedFileIndex = 0;
+  const selectedFile = files[selectedFileIndex] || null;
+  const hasDelivery = Boolean(delivery);
+  els.deliveryTitleInput.disabled = !hasDelivery;
+  els.deliverySummaryInput.disabled = !hasDelivery;
+  [
+    els.sendDeliveryContextBtn,
+    els.runFollowupBtn,
+    els.downloadJsonBtn,
+    els.downloadSelectedBtn,
+    els.copySelectedBtn,
+    els.copyPreviewBtn,
+    els.railDownloadBtn,
+    els.railCopyBtn,
+    els.railJsonBtn
+  ].forEach((button) => { button.disabled = !hasDelivery; });
+  els.deliveryTitleInput.value = delivery?.title || 'No delivery selected';
+  els.deliverySummaryInput.value = delivery?.summary || 'Refresh server jobs or open Delivery Manager from a CAIt context handoff to review reusable work.';
+  els.deliveryStatusPill.textContent = hasDelivery ? statusLabel(delivery?.status || '') : 'waiting';
+  els.deliveryStatusPill.className = `status-pill ${hasDelivery ? statusClass(delivery?.status || '') : 'pending'}`;
+  els.deliveryUpdatedMeta.textContent = delivery?.updatedAt ? `Updated ${normalizedDate(delivery.updatedAt) || delivery.updatedAt}` : 'No timestamp';
+  els.summaryCount.textContent = `${String(delivery?.summary || '').length.toLocaleString('en-US')} / 1000`;
+  els.nextActionText.textContent = delivery?.nextAction || 'Load a delivery package before running follow-up.';
+  els.packageMetaText.textContent = files.length ? `${files.length} file${files.length === 1 ? '' : 's'} ready` : 'No files attached';
+  els.sourceMetaText.textContent = delivery?.sourceLabel || (importedContext ? 'App context' : 'Server jobs');
+  els.previewTitle.textContent = selectedFile ? `Preview: ${selectedFile.name}` : 'Output preview';
+  els.outputPreview.textContent = selectedFile?.content || delivery?.summary || 'No delivery output is available yet. Refresh jobs or return from chat with a completed delivery context.';
+  els.fileMetaText.textContent = files.length ? `${files.length} file${files.length === 1 ? '' : 's'} in this package.` : 'No files loaded.';
   els.fileTable.innerHTML = files.length ? [
-    '<thead><tr><th>File</th><th>Type</th><th>Size</th></tr></thead><tbody>',
-    ...files.map((file) => `<tr><td><strong>${escapeHtml(file.name)}</strong></td><td>${escapeHtml(file.type)}</td><td>${String(file.content || '').length.toLocaleString('en-US')} chars</td></tr>`),
+    '<thead><tr><th>Name</th><th>Type</th><th>Size</th><th>Updated</th></tr></thead><tbody>',
+    ...files.map((file, index) => [
+      `<tr class="${index === selectedFileIndex ? 'active' : ''}" data-file-index="${index}">`,
+      `<td><button class="file-pick-btn" type="button" data-file-index="${index}">${escapeHtml(file.name)}</button></td>`,
+      `<td>${escapeHtml(file.type)}</td>`,
+      `<td>${fileSizeLabel(file.content)}</td>`,
+      `<td>${escapeHtml(normalizedDate(file.updatedAt) || '-')}</td>`,
+      '</tr>'
+    ].join('')),
     '</tbody>'
-  ].join('') : '<tbody><tr><td>No files loaded.</td><td>-</td><td>-</td></tr></tbody>';
+  ].join('') : '<tbody><tr><td>No files loaded.</td><td>-</td><td>-</td><td>-</td></tr></tbody>';
+  els.actionRailSummary.textContent = delivery
+    ? `Send "${compact(delivery.title, 58)}" to CAIt as context for the next order.`
+    : 'No delivery is loaded yet. Refresh jobs or open this app from a completed CAIt delivery.';
+}
+
+function renderReadiness() {
+  const items = readinessItems();
+  const complete = items.filter(([, ok]) => ok).length;
+  const total = items.length;
+  els.readinessScore.textContent = `${complete} / ${total}`;
+  els.readinessMeter.style.width = `${Math.round((complete / total) * 100)}%`;
+  els.readinessList.innerHTML = items.map(([label, ok]) => [
+    `<div class="readiness-item ${ok ? 'ready' : ''}">`,
+    `<span>${ok ? 'Ready' : 'Missing'}</span>`,
+    `<strong>${escapeHtml(label)}</strong>`,
+    '</div>'
+  ].join('')).join('');
+  els.readinessNote.textContent = complete === total
+    ? 'This delivery is ready to provide high-quality follow-up context.'
+    : 'Complete the missing items before sending this package to a leader.';
 }
 
 function render() {
   renderCounts();
   renderList();
+  renderTabs();
   renderSelected();
+  renderReadiness();
   els.deliveryContextPreview.textContent = JSON.stringify(buildContext(), null, 2);
 }
 
@@ -223,6 +411,36 @@ function downloadTextFile(name, content, type = 'text/plain;charset=utf-8') {
   URL.revokeObjectURL(url);
 }
 
+async function copyPackage(button = els.copySelectedBtn) {
+  await navigator.clipboard.writeText(packageText());
+  const old = button.textContent;
+  button.textContent = 'Copied';
+  window.setTimeout(() => { button.textContent = old; }, 1200);
+}
+
+function downloadPackage() {
+  const delivery = selectedDelivery();
+  if (!delivery) return;
+  const files = delivery.files || [];
+  if (!files.length) {
+    downloadTextFile(`${delivery.id || 'delivery'}-summary.md`, packageText(delivery));
+    return;
+  }
+  for (const file of files) downloadTextFile(file.name, file.content || '', file.type || 'text/plain;charset=utf-8');
+}
+
+function downloadJson() {
+  saveEditor();
+  downloadContextJson(buildContext(), 'delivery-context.json');
+}
+
+function sendFollowup() {
+  saveEditor();
+  void sendContextToCait(buildContext()).catch((error) => {
+    window.alert(`CAIt context handoff failed: ${error.message}`);
+  });
+}
+
 els.filterButtons.forEach((button) => {
   button.addEventListener('click', () => {
     saveEditor();
@@ -232,48 +450,58 @@ els.filterButtons.forEach((button) => {
   });
 });
 
+els.tabButtons.forEach((button) => {
+  button.addEventListener('click', () => {
+    activeTab = String(button.dataset.tab || 'overview');
+    render();
+  });
+});
+
+els.deliverySearchInput.addEventListener('input', () => {
+  searchText = els.deliverySearchInput.value;
+  render();
+});
+
 els.deliveryList.addEventListener('click', (event) => {
   const button = event.target.closest('[data-delivery]');
   if (!button) return;
   saveEditor();
   selectedId = String(button.dataset.delivery || selectedId);
+  selectedFileIndex = 0;
+  render();
+});
+
+els.fileTable.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-file-index]');
+  if (!target) return;
+  selectedFileIndex = Number(target.dataset.fileIndex || 0);
+  activeTab = 'overview';
   render();
 });
 
 [els.deliveryTitleInput, els.deliverySummaryInput].forEach((input) => {
   input.addEventListener('input', () => {
     saveEditor();
+    renderReadiness();
     els.deliveryContextPreview.textContent = JSON.stringify(buildContext(), null, 2);
+    els.summaryCount.textContent = `${String(els.deliverySummaryInput.value || '').length.toLocaleString('en-US')} / 1000`;
   });
 });
 
 els.refreshDeliveriesBtn.addEventListener('click', refreshDeliveries);
-els.sendDeliveryContextBtn.addEventListener('click', () => {
-  saveEditor();
-  void sendContextToCait(buildContext()).catch((error) => {
-    window.alert(`CAIt context handoff failed: ${error.message}`);
-  });
-});
-els.runFollowupBtn.addEventListener('click', () => {
-  saveEditor();
-  void sendContextToCait(buildContext()).catch((error) => {
-    window.alert(`CAIt context handoff failed: ${error.message}`);
-  });
-});
-els.downloadJsonBtn.addEventListener('click', () => {
-  saveEditor();
-  downloadContextJson(buildContext(), 'delivery-context.json');
-});
-els.downloadSelectedBtn.addEventListener('click', () => {
-  const delivery = selectedDelivery();
-  for (const file of delivery?.files || []) downloadTextFile(file.name, file.content || '', file.type || 'text/plain;charset=utf-8');
-});
-els.copySelectedBtn.addEventListener('click', async () => {
-  const delivery = selectedDelivery();
-  const text = [delivery?.title || '', delivery?.summary || '', ...(delivery?.files || []).map((file) => `\n# ${file.name}\n${file.content || ''}`)].join('\n\n').trim();
-  await navigator.clipboard.writeText(text);
-  els.copySelectedBtn.textContent = 'Copied';
-  window.setTimeout(() => { els.copySelectedBtn.textContent = 'Copy selected'; }, 1200);
+els.sendDeliveryContextBtn.addEventListener('click', sendFollowup);
+els.runFollowupBtn.addEventListener('click', sendFollowup);
+els.downloadJsonBtn.addEventListener('click', downloadJson);
+els.railJsonBtn.addEventListener('click', downloadJson);
+els.downloadSelectedBtn.addEventListener('click', downloadPackage);
+els.railDownloadBtn.addEventListener('click', downloadPackage);
+els.copySelectedBtn.addEventListener('click', () => copyPackage(els.copySelectedBtn));
+els.railCopyBtn.addEventListener('click', () => copyPackage(els.railCopyBtn));
+els.copyPreviewBtn.addEventListener('click', async () => {
+  await navigator.clipboard.writeText(els.outputPreview.textContent || '');
+  const old = els.copyPreviewBtn.textContent;
+  els.copyPreviewBtn.textContent = 'Copied';
+  window.setTimeout(() => { els.copyPreviewBtn.textContent = old; }, 1200);
 });
 
 async function bootstrap() {
