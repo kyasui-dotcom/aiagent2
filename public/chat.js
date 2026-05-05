@@ -2372,9 +2372,74 @@ function isStructuredOrderBriefText(value = '') {
   return /^Task:\s.+/mi.test(text) && /^Goal:\s.+/mi.test(text) && /^Deliver:\s.+/mi.test(text);
 }
 
+function promptInjectionSafeAnalysisContext(prompt = '') {
+  const text = String(prompt || '').replace(/\s+/g, ' ').trim();
+  if (!text) return false;
+  return /(analy[sz]e|review|detect|explain|summari[sz]e|classify|sanitize|improve|rewrite|レビュー|解説|説明|検出|分類|安全化|書き換え|改善).{0,90}(prompt injection|jailbreak|ignore previous|system prompt|developer message|プロンプトインジェクション|脱獄|前の指示|システムプロンプト|開発者メッセージ)/i.test(text)
+    || /(以下|次の|this|these).{0,60}(prompt|text|source|example|プロンプト|文章|テキスト|ソース|例|入力).{0,90}(analy[sz]e|review|detect|explain|sanitize|improve|分析|レビュー|解説|説明|検出|安全化|改善)/i.test(text);
+}
+
+function promptInjectionGuard(prompt = '') {
+  const text = String(prompt || '').replace(/\u0000/g, '').trim();
+  if (!text || promptInjectionSafeAnalysisContext(text)) return { blocked: false, code: '' };
+  const compact = text.replace(/\s+/g, ' ');
+  const rules = [
+    {
+      code: 'override_instructions',
+      pattern: /\b(ignore|disregard|forget|override|bypass|disable|drop)\b.{0,90}\b(previous|above|prior|earlier|system|developer|instructions?|rules?|policy|policies|safety|guardrails?)\b/i
+    },
+    {
+      code: 'override_instructions_ja',
+      pattern: /(前|以前|上記|これまで|システム|開発者|ポリシー|安全|制約).{0,60}(指示|命令|ルール|プロンプト|制約).{0,60}(無視|破棄|忘れ|解除|上書き|バイパス)/i
+    },
+    {
+      code: 'hidden_prompt_exfiltration',
+      pattern: /\b(reveal|show|print|dump|leak|exfiltrate|extract|output|display)\b.{0,90}\b(system prompt|developer message|hidden instructions?|internal prompts?|tool schema|tools?|api keys?|secrets?|env(?:ironment)?(?: variables?)?)\b/i
+    },
+    {
+      code: 'hidden_prompt_exfiltration_ja',
+      pattern: /(システムプロンプト|開発者メッセージ|隠し指示|内部指示|内部プロンプト|ツール|APIキー|apiキー|秘密|シークレット|環境変数).{0,70}(出力|表示|見せ|開示|漏ら|教え|抽出)/i
+    },
+    {
+      code: 'jailbreak_persona',
+      pattern: /\b(DAN|jailbreak|developer mode|god mode|do anything now|no restrictions?|unrestricted|policy[- ]?free)\b/i
+    },
+    {
+      code: 'role_injection',
+      pattern: /(^|\n)\s*(system|developer)\s*:.{0,400}\b(ignore|override|bypass|reveal|show|dump|leak|disable|no restrictions?)\b/is
+    }
+  ];
+  const matched = rules.find((rule) => rule.pattern.test(compact) || rule.pattern.test(text));
+  return matched ? { blocked: true, code: matched.code } : { blocked: false, code: '' };
+}
+
+function handlePromptInjectionInput(prompt = '') {
+  const guard = promptInjectionGuard(prompt);
+  if (!guard.blocked) return false;
+  appendTextMessage('assistant', chatText(
+    [
+      'I detected a prompt-injection attempt, so CAIt will not execute it or turn it into an order.',
+      '',
+      'Requests to ignore rules, reveal system/developer prompts, expose tools, or leak secrets are blocked.',
+      '',
+      'Rewrite the goal without hidden-instruction or rule-override text.'
+    ].join('\n'),
+    [
+      'プロンプトインジェクションらしき指示を検出したため、CAItでは実行・発注化しません。',
+      '',
+      'ルールの無視、system/developer prompt の開示、ツール情報や secret の漏えいを求める指示はブロックします。',
+      '',
+      '進める場合は、隠し指示やルール上書きの文を除いて目的だけを書き直してください。'
+    ].join('\n'),
+    prompt
+  ), { tone: 'error', label: 'Guard' });
+  return true;
+}
+
 async function resolveChatIntentWithLlm(prompt = '') {
   const text = String(prompt || '').trim();
   if (!text || isStructuredOrderBriefText(text)) return null;
+  if (promptInjectionGuard(text).blocked) return null;
   try {
     const result = await api('/api/open-chat/intent', {
       method: 'POST',
@@ -2419,6 +2484,10 @@ async function handleChatIntentWithLlm(prompt = '') {
   }
   if (action === 'prepare_order' || action === 'use_previous_brief') {
     const brief = String(result.order_brief || '').trim();
+    if (promptInjectionGuard(brief || prompt).blocked) {
+      handlePromptInjectionInput(brief || prompt);
+      return true;
+    }
     await prepareOrder(brief || prompt, { originalPrompt: prompt, intakeChecked: true });
     return true;
   }
@@ -2805,6 +2874,8 @@ els.composer.addEventListener('submit', async (event) => {
       openAppAgent(appCommandId, { source: 'chat_command' });
     } else if (/^(send|send order|発注|注文|実行)$/i.test(prompt) && state.draft) {
       await sendOrder();
+    } else if (handlePromptInjectionInput(prompt)) {
+      // blocked before intent classification, draft adjustment, or dispatch prep
     } else if (handleNonOrderConversation(prompt)) {
       // handled as chat, not a work order
     } else if (state.pendingIntake) {
