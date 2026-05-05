@@ -40,7 +40,8 @@ test.describe('CAIt Chat workspace', () => {
     await expect(page.locator('#activeLeaderStatus')).toContainText('CAIt routing');
     await expect(page.locator('#promptInput')).toBeVisible();
     await expect(page.locator('#sendMessageBtn')).toHaveText(/Send chat/i);
-    await expect(page.locator('#chatThread')).toContainText('Describe the outcome you want');
+    await expect(page.locator('#chatThread')).toContainText('何がしたいですか？');
+    await expect(page.locator('#chatThread')).not.toContainText('CAIt will route simple work');
 
     await page.locator('#promptInput').fill('どんなリーダーがいますか？');
     await page.locator('#sendMessageBtn').click();

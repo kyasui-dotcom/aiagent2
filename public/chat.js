@@ -26,6 +26,7 @@ const CHATUX_BACKFILL_INTERVAL_MS = 10000;
 const CHATUX_CATALOG_PAGE_SIZE = 10;
 const CHATUX_CATALOG_CACHE_TTL_MS = 60000;
 const CHATUX_PROGRESS_MAX_POLLS = 300;
+const CHATUX_WELCOME_TEXT = '何がしたいですか？';
 const X_CLIENT_OPS_URL = 'https://x.niche-s.com/';
 
 function leaderCatalogChatAnswer(prompt = '') {
@@ -221,7 +222,7 @@ const els = {
   utilityModalCloseBtn: $('utilityModalCloseBtn')
 };
 
-const DEFAULT_PROMPT_PLACEHOLDER = 'Example: Use the CMO leader to grow aiagent-marketplace.net signups. Research first, then prepare SEO, landing copy, and X post drafts.';
+const DEFAULT_PROMPT_PLACEHOLDER = '例: サイトの集客を増やしたい';
 const PENDING_ORDER_PLACEHOLDER = 'Add an adjustment, or type SEND ORDER to dispatch...';
 const INTAKE_PLACEHOLDER = 'Answer the questions above before CAIt prepares the order...';
 
@@ -2355,6 +2356,75 @@ function appendOrderConfirmation(options = {}) {
   setBusy(state.busy);
 }
 
+function chatIntentConversationContext() {
+  return [...els.chatThread.querySelectorAll('.message')]
+    .slice(-10)
+    .map((item) => {
+      const role = item.classList.contains('user') ? 'user' : 'assistant';
+      const content = String(item.querySelector('.message-body')?.textContent || '').replace(/\s+/g, ' ').trim();
+      return content ? { role, content: content.slice(0, 900) } : null;
+    })
+    .filter(Boolean);
+}
+
+function isStructuredOrderBriefText(value = '') {
+  const text = String(value || '').trim();
+  return /^Task:\s.+/mi.test(text) && /^Goal:\s.+/mi.test(text) && /^Deliver:\s.+/mi.test(text);
+}
+
+async function resolveChatIntentWithLlm(prompt = '') {
+  const text = String(prompt || '').trim();
+  if (!text || isStructuredOrderBriefText(text)) return null;
+  try {
+    const result = await api('/api/open-chat/intent', {
+      method: 'POST',
+      body: JSON.stringify({
+        prompt: text,
+        conversation_context: chatIntentConversationContext(),
+        desired_output: 'First decide whether this is normal chat or an order request. If it is normal chat, answer in chat. If it is executable work with enough context, return a CAIt order brief. If context is missing, ask one short question.',
+        user_language: looksJapanese(text) ? 'Japanese' : 'English',
+        input_counts: { url_count: 0, file_count: 0, file_chars: 0 }
+      })
+    });
+    return result?.ok ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleChatIntentWithLlm(prompt = '') {
+  const result = await resolveChatIntentWithLlm(prompt);
+  if (!result) return false;
+  const action = String(result.action || '').trim();
+  if (action === 'answer_in_chat') {
+    appendTextMessage('assistant', result.chat_answer || result.summary || chatText(
+      'I can answer that here. No order was created.',
+      'ここで回答します。新しいオーダーは作成していません。',
+      prompt
+    ), { tone: 'info', label: 'Chat' });
+    return true;
+  }
+  if (action === 'ask_clarifying_question') {
+    appendTextMessage('assistant', [
+      result.summary || '',
+      result.narrowing_question || chatText(
+        'What should the final output look like?',
+        '最終的にどんな形のアウトプットが欲しいですか？',
+        prompt
+      ),
+      '',
+      chatText('No order or billing happened yet.', 'まだ注文も課金も発生していません。', prompt)
+    ].filter(Boolean).join('\n'), { tone: 'info', label: 'Chat' });
+    return true;
+  }
+  if (action === 'prepare_order' || action === 'use_previous_brief') {
+    const brief = String(result.order_brief || '').trim();
+    await prepareOrder(brief || prompt, { originalPrompt: prompt, intakeChecked: true });
+    return true;
+  }
+  return false;
+}
+
 function addChatAdjustmentToDraft(prompt = '') {
   const text = String(prompt || '').trim();
   if (!state.draft || !text) return false;
@@ -2704,7 +2774,7 @@ function resetChat() {
   state.orderId = '';
   els.chatThread.innerHTML = '';
   renderActiveLeaderStatus();
-  appendTextMessage('assistant', 'New chat started. Describe the work you want done. CAIt will route simple work to the best specialist, or hand broad work to the right leader for intake, approvals, specialist coordination, app handoff, and delivery. Type /apps or /agents to reuse past tools.');
+  appendTextMessage('assistant', CHATUX_WELCOME_TEXT);
   updateComposerMode();
   setBusy(false);
   startDeliveryBackfillLoop({ maxRuns: 6, renderTerminalDeliveries: false });
@@ -2741,6 +2811,8 @@ els.composer.addEventListener('submit', async (event) => {
       await answerPendingIntake(prompt);
     } else if (state.draft) {
       addChatAdjustmentToDraft(prompt);
+    } else if (await handleChatIntentWithLlm(prompt)) {
+      // OpenAI classified this as chat, clarification, or an order-ready brief.
     } else {
       await prepareOrder(prompt);
     }
