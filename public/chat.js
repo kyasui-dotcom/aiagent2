@@ -17,8 +17,9 @@ import {
   consumeCaitAppContextForChat
 } from './cait-app-bridge.js?v=20260505b';
 import {
+  isLeaderCatalogQuestionIntentText,
   isNonOrderConversationIntentText
-} from './work-intent-resolver.js?v=20260430b';
+} from './work-intent-resolver.js?v=20260505c';
 
 const CHATUX_RETURN_PATH = '/chat';
 const CHATUX_BACKFILL_INTERVAL_MS = 10000;
@@ -26,6 +27,39 @@ const CHATUX_CATALOG_PAGE_SIZE = 10;
 const CHATUX_CATALOG_CACHE_TTL_MS = 60000;
 const CHATUX_PROGRESS_MAX_POLLS = 300;
 const X_CLIENT_OPS_URL = 'https://x.niche-s.com/';
+
+function leaderCatalogChatAnswer(prompt = '') {
+  const ja = looksJapanese(prompt);
+  return ja
+    ? [
+        '利用できる主なリーダーは以下です。これは案内回答なので、まだ注文も課金も発生していません。',
+        '',
+        '- CMO Leader: 集客、SEO、SNS、ローンチ、計測までを品質重視で組み立てる',
+        '- CTO Leader: 技術方針、実装計画、リポジトリ修正、デプロイやロールバックを整理する',
+        '- CPO Leader: プロダクト戦略、UX、優先順位、検証計画を整理する',
+        '- CFO Leader: 価格、収支、ユニットエコノミクス、資金繰りを整理する',
+        '- Legal Leader: 規約、プライバシー、コンプライアンス、リスクを確認する',
+        '- Research Team Leader: 複数ソースの調査、比較、意思決定メモをまとめる',
+        '- Build Team Leader: 実装タスクを分解し、専門エージェントやアプリへの引き継ぎをまとめる',
+        '- Secretary Leader: 日程、返信、会議準備、秘書業務の流れを整理する',
+        '',
+        '迷う場合は、やりたい成果をそのまま書けば CAIt がリーダーか専門エージェントかを判断します。実行する場合だけ Send order を押してください。'
+      ].join('\n')
+    : [
+        'Available leaders are below. This is a chat answer, so no order or billing happened.',
+        '',
+        '- CMO Leader: acquisition, SEO, social, launch, and measurement work',
+        '- CTO Leader: technical direction, implementation planning, repo changes, deploy and rollback planning',
+        '- CPO Leader: product strategy, UX, prioritization, and validation planning',
+        '- CFO Leader: pricing, unit economics, cash flow, and finance decisions',
+        '- Legal Leader: terms, privacy, compliance, and risk review',
+        '- Research Team Leader: multi-source research, comparisons, and decision memos',
+        '- Build Team Leader: implementation breakdowns and specialist/app handoffs',
+        '- Secretary Leader: scheduling, replies, meeting prep, and assistant workflows',
+        '',
+        'If you are unsure, describe the outcome you want and CAIt will choose a leader or specialist. Paid work only starts when you press Send order.'
+      ].join('\n');
+}
 
 const APP_AGENT_MANIFESTS = [
   {
@@ -2335,6 +2369,10 @@ function addChatAdjustmentToDraft(prompt = '') {
 function handleNonOrderConversation(prompt = '') {
   const text = String(prompt || '').trim();
   if (!text || !isNonOrderConversationIntentText(text)) return false;
+  if (isLeaderCatalogQuestionIntentText(text)) {
+    appendTextMessage('assistant', leaderCatalogChatAnswer(text), { tone: 'info', label: 'Chat' });
+    return true;
+  }
   const ja = looksJapanese(text);
   const hasDraft = Boolean(state.draft);
   const hasIntake = Boolean(state.pendingIntake);

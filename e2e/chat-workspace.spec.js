@@ -42,6 +42,12 @@ test.describe('CAIt Chat workspace', () => {
     await expect(page.locator('#sendMessageBtn')).toHaveText(/Send chat/i);
     await expect(page.locator('#chatThread')).toContainText('Describe the outcome you want');
 
+    await page.locator('#promptInput').fill('どんなリーダーがいますか？');
+    await page.locator('#sendMessageBtn').click();
+    await expect(page.locator('#chatThread')).toContainText('利用できる主なリーダー');
+    await expect(page.locator('#chatThread')).toContainText('まだ注文も課金も発生していません');
+    await expect(page.locator('#chatThread')).not.toContainText('Order check');
+
     await page.locator('#promptInput').fill('集客したいです');
     await page.locator('#sendMessageBtn').click();
     await expect(page.locator('#chatThread')).toContainText(/Answer what you can|回答/);

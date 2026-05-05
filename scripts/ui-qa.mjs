@@ -110,7 +110,7 @@ assert.ok(!html.includes('id="promptInput"'), 'Root should not render the chat c
 assert.ok(!html.includes('type="module" src="/chat.js'), 'Root should not load chat JS.');
 assert.ok(chatHtml.includes('<main class="chatux-shell" aria-label="CAIt chat">'), 'Chat page should render the chat-first CAIt UI.');
 assert.ok(chatHtml.includes('/chat.css?v=20260504b'), 'Chat page should load root chat CSS, not /chatux assets.');
-assert.ok(chatHtml.includes('type="module" src="/chat.js?v=20260505e"'), 'Chat page should load root chat JS, not /chatux assets.');
+assert.ok(chatHtml.includes('type="module" src="/chat.js?v=20260505f"'), 'Chat page should load root chat JS, not /chatux assets.');
 assert.ok(chatHtml.includes('id="chatThread"'));
 assert.ok(chatHtml.includes('id="promptInput"'));
 assert.ok(chatHtml.includes('class="chatux-nav"'), 'Chat should expose links to existing pages.');

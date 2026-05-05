@@ -11,11 +11,25 @@ export function isNonOrderConversationIntentText(prompt = '') {
     .replace(/[?？!！。.,、\s]+$/g, '')
     .trim();
   if (!text) return false;
+  if (isLeaderCatalogQuestionIntentText(text)) return true;
   if (/^(pause|hold|stop|later|not now|cancel|status|help|what now|where are we|continue chatting)$/i.test(text)) return true;
   if (/^(一旦保留|いったん保留|保留|あとで|後で|また後で|ストップ|止めて|中断|キャンセル|やめる|やっぱやめる|今はやめる|状況|現状|今どこ|何待ち|ヘルプ|相談だけ)$/i.test(text)) return true;
   if (/^(pause|hold|stop|later|not now|cancel)\s*(please|pls)?$/i.test(text)) return true;
   if (/^(いや|いえ|no|nope|nah)[、。,.!\s-]*(pause|hold|stop|later|not now|cancel|保留|あとで|後で|やめる|中断)$/i.test(text)) return true;
   return false;
+}
+
+export function isLeaderCatalogQuestionIntentText(prompt = '') {
+  const raw = String(prompt || '').replace(/\s+/g, ' ').trim();
+  const text = normalizeWorkIntentText(raw)
+    .replace(/[?？!！。.,、\s]+$/g, '')
+    .trim();
+  if (!text) return false;
+  const asksCatalog = /(?:what|which|who|list|show|tell|explain|available|kind|kinds|types|どんな|どの|何|なに|誰|だれ|一覧|種類|教えて|見せて|ありますか|いる|いますか|使える|選べる)/i.test(raw);
+  const leaderContext = /\b(?:leaders?|team leaders?|leader agents?|cmo|cto|cpo|cfo)\b/i.test(text)
+    || /(リーダー|チームリーダー|責任者|CMO|CTO|CPO|CFO|法務|秘書|調査チーム|開発チーム)/i.test(raw);
+  const executionAsk = /(作って|調べて|分析して|改善して|実装して|送信|投稿|発注|注文|実行|run|create|build|research|analy[sz]e|improve|send|post|order|dispatch)/i.test(raw);
+  return asksCatalog && leaderContext && !executionAsk;
 }
 
 export function isRepoBackedCodeIntentText(prompt = '', taskType = '') {

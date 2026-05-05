@@ -46,9 +46,10 @@ import {
 } from './delivery-action-contract.js';
 import {
   inferWorkIntentRoute,
+  isLeaderCatalogQuestionIntentText,
   isNonOrderConversationIntentText,
   isRepoBackedCodeIntentText
-} from './work-intent-resolver.js?v=20260430b';
+} from './work-intent-resolver.js?v=20260505c';
 import {
   chatEngineBuildIntakeCombinedPrompt,
   chatEngineBuildIntakeState,
@@ -12422,6 +12423,51 @@ function buildOpenChatMarketingAgentListAnswer(prompt = '') {
   };
 }
 
+function buildOpenChatLeaderCatalogAnswer(prompt = '') {
+  if (!isLeaderCatalogQuestionIntentText(prompt)) return null;
+  const ja = looksJapanese(prompt);
+  return {
+    kind: 'quick',
+    tone: 'info',
+    patternId: 'pattern_leader_catalog',
+    suppressTrio: true,
+    actions: [
+      { action: 'browse_agents', label: 'BROWSE AGENTS' },
+      { action: 'use_agent_team', label: 'USE AGENT TEAM' }
+    ],
+    body: ja
+      ? [
+          '利用できる主なリーダーは以下です。これは案内回答なので、まだ注文も課金も発生していません。',
+          '',
+          '- CMO Leader: 集客、SEO、SNS、ローンチ、計測までを品質重視で組み立てる',
+          '- CTO Leader: 技術方針、実装計画、リポジトリ修正、デプロイやロールバックを整理する',
+          '- CPO Leader: プロダクト戦略、UX、優先順位、検証計画を整理する',
+          '- CFO Leader: 価格、収支、ユニットエコノミクス、資金繰りを整理する',
+          '- Legal Leader: 規約、プライバシー、コンプライアンス、リスクを確認する',
+          '- Research Team Leader: 複数ソースの調査、比較、意思決定メモをまとめる',
+          '- Build Team Leader: 実装タスクを分解し、専門エージェントやアプリへの引き継ぎをまとめる',
+          '- Secretary Leader: 日程、返信、会議準備、秘書業務の流れを整理する',
+          '',
+          '迷う場合は、やりたい成果をそのまま書けば CAIt がリーダーか専門エージェントかを判断します。実行する場合だけ Send order を押してください。'
+        ].join('\n')
+      : [
+          'Available leaders are below. This is a chat answer, so no order or billing happened.',
+          '',
+          '- CMO Leader: acquisition, SEO, social, launch, and measurement work',
+          '- CTO Leader: technical direction, implementation planning, repo changes, deploy and rollback planning',
+          '- CPO Leader: product strategy, UX, prioritization, and validation planning',
+          '- CFO Leader: pricing, unit economics, cash flow, and finance decisions',
+          '- Legal Leader: terms, privacy, compliance, and risk review',
+          '- Research Team Leader: multi-source research, comparisons, and decision memos',
+          '- Build Team Leader: implementation breakdowns and specialist/app handoffs',
+          '- Secretary Leader: scheduling, replies, meeting prep, and assistant workflows',
+          '',
+          'If you are unsure, describe the outcome you want and CAIt will choose a leader or specialist. Paid work only starts when you press Send order.'
+        ].join('\n'),
+    status: 'Leader catalog answered in chat.\n\nNo order was created and no billing occurred.'
+  };
+}
+
 function openChatLooksRecurringWorkPrompt(prompt = '') {
   const raw = String(prompt || '').replace(/\s+/g, ' ').trim();
   const text = openChatIntentMatchText(raw);
@@ -12640,6 +12686,8 @@ function quickOrderChatAnswer(prompt = '', inputCounts = {}) {
   if (pendingChoiceReminder) return pendingChoiceReminder;
   const generalHelpAnswer = buildOpenChatGeneralHelpAnswer(compact);
   if (generalHelpAnswer) return generalHelpAnswer;
+  const leaderCatalogAnswer = buildOpenChatLeaderCatalogAnswer(compact);
+  if (leaderCatalogAnswer) return leaderCatalogAnswer;
   const marketingAgentListAnswer = buildOpenChatMarketingAgentListAnswer(compact);
   if (marketingAgentListAnswer) return marketingAgentListAnswer;
   const recurringWorkAnswer = buildOpenChatRecurringWorkAnswer(compact, inputCounts);
@@ -12790,6 +12838,8 @@ function buildOpenChatLocalPriorityAnswer(prompt = '', inputCounts = {}) {
   if (vagueChoiceFollowup) return vagueChoiceFollowup;
   const pendingChoiceReminder = buildOpenChatPendingChoiceReminder(compact);
   if (pendingChoiceReminder) return pendingChoiceReminder;
+  const leaderCatalogAnswer = buildOpenChatLeaderCatalogAnswer(compact);
+  if (leaderCatalogAnswer) return leaderCatalogAnswer;
   const runConfirmationAnswer = buildOpenChatRunConfirmationAnswer(compact);
   if (runConfirmationAnswer) return runConfirmationAnswer;
   const commandAnswer = buildOpenChatCommandAnswer(compact);
