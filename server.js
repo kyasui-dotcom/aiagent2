@@ -1486,7 +1486,7 @@ function leaderIntakeLlmConfig(source = process.env) {
       || openChatIntentEnvValue(source, 'LEADER_INTAKE_MODEL')
       || openChatIntentEnvValue(source, 'OPEN_CHAT_INTENT_MODEL')
       || 'gpt-4.1-mini',
-    timeoutMs: Math.max(1500, openChatIntentNumber(openChatIntentEnvValue(source, 'LEADER_INTAKE_TIMEOUT_MS'), 7000))
+    timeoutMs: Math.max(1500, openChatIntentNumber(openChatIntentEnvValue(source, 'LEADER_INTAKE_TIMEOUT_MS'), 12000))
   };
 }
 
