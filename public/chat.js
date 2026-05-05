@@ -2446,7 +2446,7 @@ async function resolveChatIntentWithLlm(prompt = '') {
       body: JSON.stringify({
         prompt: text,
         conversation_context: chatIntentConversationContext(),
-        desired_output: 'First decide whether this is normal chat or an order request. If it is normal chat, answer in chat. If it is executable work with enough context, return a CAIt order brief. If context is missing, ask one short question.',
+        desired_output: 'First decide whether this is normal chat or an order request. If it is normal chat, answer in chat. If it is executable work with enough context, return a CAIt order brief. If a Team Leader needs intake first, return adaptive intake_questions before any proposal.',
         user_language: looksJapanese(text) ? 'Japanese' : 'English',
         input_counts: { url_count: 0, file_count: 0, file_chars: 0 }
       })
@@ -2455,6 +2455,34 @@ async function resolveChatIntentWithLlm(prompt = '') {
   } catch {
     return null;
   }
+}
+
+function normalizeLlmIntakeQuestions(value = []) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : [])
+    .map((item) => String(item || '').replace(/\s+/g, ' ').trim())
+    .filter((item) => item.length >= 12 && item.length <= 260)
+    .filter((item) => {
+      const key = item.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .filter((item) => !/(password|secret|api key|hidden prompt|system prompt|ignore previous|パスワード|秘密|システムプロンプト|隠しプロンプト)/i.test(item))
+    .slice(0, 6);
+}
+
+function leaderTaskTypeFromIntentResult(prompt = '', result = {}) {
+  const text = `${prompt}\n${result?.summary || ''}\n${result?.narrowing_question || ''}`.toLowerCase();
+  const intent = String(result?.intent || '').trim();
+  if (/(cto|architecture|technical|repo|github|code|deploy|技術|実装|リポジトリ|デプロイ)/i.test(text)) return 'cto_leader';
+  if (/(cpo|product|ux|roadmap|feature|プロダクト|機能|ux|ロードマップ)/i.test(text)) return 'cpo_leader';
+  if (/(cfo|pricing|finance|unit economics|cash|価格|財務|収支|粗利)/i.test(text)) return 'cfo_leader';
+  if (/(legal|privacy|terms|contract|compliance|規約|法務|契約|プライバシー)/i.test(text)) return 'legal_leader';
+  if (/(research|compare|decision|調査|比較|意思決定)/i.test(text)) return 'research_team_leader';
+  if (/(build team|implementation|debug|実装|修正|バグ)/i.test(text)) return 'build_team_leader';
+  if (intent === 'natural_business_growth' || intent === 'natural_marketing_launch' || /(growth|marketing|sales|acquisition|launch|集客|売上|マーケ|ローンチ)/i.test(text)) return 'cmo_leader';
+  return '';
 }
 
 async function handleChatIntentWithLlm(prompt = '') {
@@ -2470,6 +2498,34 @@ async function handleChatIntentWithLlm(prompt = '') {
     return true;
   }
   if (action === 'ask_clarifying_question') {
+    const intakeQuestions = normalizeLlmIntakeQuestions(result.intake_questions || result.intakeQuestions || []);
+    const leaderTaskType = leaderTaskTypeFromIntentResult(prompt, result);
+    if (leaderTaskType && intakeQuestions.length >= 3) {
+      startIntake({
+        status: 'needs_input',
+        needs_input: true,
+        reason: 'leader_context_required',
+        inferred_task_type: leaderTaskType,
+        prompt,
+        questions: intakeQuestions,
+        message: looksJapanese(prompt)
+          ? 'リーダーが提案前に確認したい内容です。まだ実行も課金もしていません。'
+          : 'The leader needs this context before proposing. Nothing has run or been billed yet.',
+        conversationOwner: {
+          type: 'leader',
+          taskType: leaderTaskType,
+          label: taskLabel(leaderTaskType),
+          reason: result.summary || 'OpenAI-generated leader intake.'
+        },
+        intake: {
+          originalPrompt: prompt,
+          taskType: leaderTaskType,
+          questions: intakeQuestions,
+          questionSource: 'openai'
+        }
+      }, prompt);
+      return true;
+    }
     appendTextMessage('assistant', [
       result.summary || '',
       result.narrowing_question || chatText(

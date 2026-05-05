@@ -57,6 +57,9 @@ test.describe('CAIt Chat workspace', () => {
     await page.locator('#promptInput').fill('集客したいです');
     await page.locator('#sendMessageBtn').click();
     await expect(page.locator('#chatThread')).toContainText(/Answer what you can|回答/);
+    await expect(page.locator('#chatThread')).toContainText(/URL|商材|サービス/);
+    await expect(page.locator('#chatThread')).toContainText(/GA4|Search Console|サーチコンソール/);
+    await expect(page.locator('#chatThread')).toContainText(/資料|sales deck|material/i);
     await expect(page.locator('#chatThread')).toContainText('Nothing has been dispatched yet.');
 
     await page.locator('#promptInput').fill('pause?');

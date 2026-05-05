@@ -78,17 +78,20 @@ const thinCmoIntake = buildIntakeClarification({
 assert.equal(thinCmoIntake.status, 'needs_input');
 assert.equal(thinCmoIntake.reason, 'leader_context_required');
 assert.ok(thinCmoIntake.missing_fields.includes('business_or_product'));
+assert.ok(thinCmoIntake.missing_fields.includes('source_data_context'));
 assert.ok(thinCmoIntake.questions.some((question) => question.includes('商材')));
+assert.ok(thinCmoIntake.questions.some((question) => /GA4|Search Console|サーチコンソール/.test(question)));
+assert.ok(thinCmoIntake.questions.some((question) => /資料|DL資料|営業資料/.test(question)));
 
 const readyCmoIntake = buildIntakeClarification({
   task_type: 'cmo_leader',
-  prompt: 'CMOとして、CAItというAI agent marketplaceのマーケ戦略を作って。対象はAIツールを使う開発者と小規模SaaS創業者。目標は30日でGitHubログインとエージェント登録を増やすこと。現状はProduct HuntとIndie Hackersから流入があり、広告費なしでX、Reddit、SEOを中心に進めたい。納品は7日施策、チャネル別投稿案、KPI表。'
+  prompt: 'CMOとして、CAItというAI agent marketplaceのマーケ戦略を作って。対象はAIツールを使う開発者と小規模SaaS創業者。目標は30日でGitHubログインとエージェント登録を増やすこと。現状はProduct HuntとIndie Hackersから流入があり、広告費なしでX、Reddit、SEOを中心に進めたい。GA4とSearch Consoleは未接続、営業資料はなし、読ませたいデータはサイトURLのみ。納品は7日施策、チャネル別投稿案、KPI表。'
 }, { taskType: 'cmo_leader' });
 assert.equal(readyCmoIntake, null);
 
 const readyFreeGrowthIntake = buildIntakeClarification({
   task_type: 'cmo_leader',
-  prompt: '広告費なしで、CAItというAI agent marketplaceの無料Web成長施策を作って。対象はAI agentを使いたい開発者と、agentを公開して稼ぎたい小規模SaaS創業者。目標は14日で登録とagent登録を増やすこと。現状はIndie Hackers流入があり、X、Reddit、SEO、ディレクトリを使える。納品は24時間施策、7日プラン、投稿文、KPI表。'
+  prompt: '広告費なしで、CAItというAI agent marketplaceの無料Web成長施策を作って。対象はAI agentを使いたい開発者と、agentを公開して稼ぎたい小規模SaaS創業者。目標は14日で登録とagent登録を増やすこと。現状はIndie Hackers流入があり、X、Reddit、SEO、ディレクトリを使える。GA4、Search Console、CRMはなし、営業資料もなし。納品は24時間施策、7日プラン、投稿文、KPI表。'
 }, { taskType: 'cmo_leader' });
 assert.equal(readyFreeGrowthIntake, null);
 

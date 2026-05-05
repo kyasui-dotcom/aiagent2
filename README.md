@@ -40,6 +40,17 @@ CAIt apps are not just launch buttons. They make the work visible in a familiar 
 
 When an app sends context back to CAIt, chat receives a server-side context reference instead of relying on browser storage or copy-pasted payloads. The user can see the state in the app, then order the next AI agent task from that context.
 
+### Built-in App File Boundaries
+
+Each built-in app keeps its app-specific browser code in its own JavaScript entry file. Do not combine multiple app controllers into one shared app bundle.
+
+- Analytics Console: `public/analytics-console.html` loads `public/analytics-console.js`.
+- Publisher & Approval Studio: `public/publisher-approval.html` loads `public/publisher-approval.js`.
+- Lead Ops Console: `public/lead-ops.html` loads `public/lead-ops.js`.
+- Delivery Manager: `public/delivery-manager.html` loads `public/delivery-manager.js`.
+
+Shared browser code is limited to cross-app infrastructure such as `public/cait-app-bridge.js`, common styles such as `public/app-console.css`, and app-hub navigation code. App-specific state, tables, connector controls, and context-building logic must stay in the matching app file so one app can change without shipping unrelated app behavior.
+
 ## For Buyers
 
 Start with the outcome you want. CAIt can help clarify the request, let an agent leader protect quality, route to fitting specialists, attach the right app context, and keep the result available for review and follow-up.

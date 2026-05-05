@@ -110,7 +110,7 @@ assert.ok(!html.includes('id="promptInput"'), 'Root should not render the chat c
 assert.ok(!html.includes('type="module" src="/chat.js'), 'Root should not load chat JS.');
 assert.ok(chatHtml.includes('<main class="chatux-shell" aria-label="CAIt chat">'), 'Chat page should render the chat-first CAIt UI.');
 assert.ok(chatHtml.includes('/chat.css?v=20260504b'), 'Chat page should load root chat CSS, not /chatux assets.');
-assert.ok(chatHtml.includes('type="module" src="/chat.js?v=20260505h"'), 'Chat page should load root chat JS, not /chatux assets.');
+assert.ok(chatHtml.includes('type="module" src="/chat.js?v=20260505i"'), 'Chat page should load root chat JS, not /chatux assets.');
 assert.ok(chatHtml.includes('何がしたいですか？'), 'Chat should open with a short prompt instead of a long routing explanation.');
 assert.ok(!chatHtml.includes('CAIt will route simple work'), 'Chat should not lead with routing mechanics.');
 assert.ok(chatHtml.includes('id="chatThread"'));
@@ -169,6 +169,57 @@ assert.ok(deliveryManagerHtml.includes('Delivery Manager'), 'Delivery Manager sh
 assert.ok(deliveryManagerHtml.includes('href="/apps.html"'), 'Delivery Manager should link back to the apps hub.');
 assert.ok(deliveryManagerHtml.includes('id="downloadSelectedBtn"'), 'Delivery Manager should expose downloadable delivery files.');
 assert.ok(deliveryManagerHtml.includes('/delivery-manager.js?v=20260505b'), 'Delivery Manager should load the app-context receiving controller.');
+
+const builtInAppEntries = [
+  {
+    name: 'Analytics Console',
+    html: analyticsHtml,
+    ownScript: '/analytics-console.js',
+    forbiddenScripts: ['/publisher-approval.js', '/lead-ops.js', '/delivery-manager.js', '/client.js', '/chat.js']
+  },
+  {
+    name: 'Publisher and Approval Studio',
+    html: publisherHtml,
+    ownScript: '/publisher-approval.js',
+    forbiddenScripts: ['/analytics-console.js', '/lead-ops.js', '/delivery-manager.js', '/client.js', '/chat.js']
+  },
+  {
+    name: 'Lead Ops Console',
+    html: leadOpsHtml,
+    ownScript: '/lead-ops.js',
+    forbiddenScripts: ['/analytics-console.js', '/publisher-approval.js', '/delivery-manager.js', '/client.js', '/chat.js']
+  },
+  {
+    name: 'Delivery Manager',
+    html: deliveryManagerHtml,
+    ownScript: '/delivery-manager.js',
+    forbiddenScripts: ['/analytics-console.js', '/publisher-approval.js', '/lead-ops.js', '/client.js', '/chat.js']
+  }
+];
+
+for (const app of builtInAppEntries) {
+  assert.ok(app.html.includes(`type="module" src="${app.ownScript}`), `${app.name} should load its own dedicated app controller.`);
+  for (const forbiddenScript of app.forbiddenScripts) {
+    assert.ok(!app.html.includes(`src="${forbiddenScript}`), `${app.name} should not load ${forbiddenScript}; built-in app controllers must stay split by app.`);
+  }
+}
+
+assert.ok(analyticsJs.includes("source_app: 'analytics_console'"), 'Analytics app logic should stay in analytics-console.js.');
+assert.ok(!analyticsJs.includes("source_app: 'publisher_approval_studio'"), 'Analytics Console JS should not contain Publisher app logic.');
+assert.ok(!analyticsJs.includes("source_app: 'lead_ops_console'"), 'Analytics Console JS should not contain Lead Ops app logic.');
+assert.ok(!analyticsJs.includes("source_app: 'delivery_manager'"), 'Analytics Console JS should not contain Delivery Manager app logic.');
+assert.ok(publisherJs.includes("source_app: 'publisher_approval_studio'"), 'Publisher app logic should stay in publisher-approval.js.');
+assert.ok(!publisherJs.includes("source_app: 'analytics_console'"), 'Publisher JS should not contain Analytics app logic.');
+assert.ok(!publisherJs.includes("source_app: 'lead_ops_console'"), 'Publisher JS should not contain Lead Ops app logic.');
+assert.ok(!publisherJs.includes("source_app: 'delivery_manager'"), 'Publisher JS should not contain Delivery Manager app logic.');
+assert.ok(leadOpsJs.includes("source_app: 'lead_ops_console'"), 'Lead Ops app logic should stay in lead-ops.js.');
+assert.ok(!leadOpsJs.includes("source_app: 'analytics_console'"), 'Lead Ops JS should not contain Analytics app logic.');
+assert.ok(!leadOpsJs.includes("source_app: 'publisher_approval_studio'"), 'Lead Ops JS should not contain Publisher app logic.');
+assert.ok(!leadOpsJs.includes("source_app: 'delivery_manager'"), 'Lead Ops JS should not contain Delivery Manager app logic.');
+assert.ok(deliveryManagerJs.includes("source_app: 'delivery_manager'"), 'Delivery Manager app logic should stay in delivery-manager.js.');
+assert.ok(!deliveryManagerJs.includes("source_app: 'analytics_console'"), 'Delivery Manager JS should not contain Analytics app logic.');
+assert.ok(!deliveryManagerJs.includes("source_app: 'publisher_approval_studio'"), 'Delivery Manager JS should not contain Publisher app logic.');
+assert.ok(!deliveryManagerJs.includes("source_app: 'lead_ops_console'"), 'Delivery Manager JS should not contain Lead Ops app logic.');
 assert.ok(html.includes('href="/agents.html"'));
 assert.ok(html.includes('href="/publish-ai-agents.html"'));
 assert.ok(html.includes('href="/ai-agent-api.html"'));
@@ -233,7 +284,8 @@ assert.ok(analyticsJs.includes('applyInboundContext'), 'Analytics Console should
 assert.ok(analyticsJs.includes('/api/connectors/google/assets?include=gsc,ga4'), 'Analytics Console should fetch connected GA4 and Search Console assets.');
 assert.ok(analyticsJs.includes('/api/connectors/google/analytics-report'), 'Analytics Console should fetch GA4 and Search Console reports after source selection.');
 assert.ok(analyticsJs.includes("url.searchParams.set('action', 'link')"), 'Analytics Console Google connect should use link mode so analytics scopes are requested.');
-assert.ok(analyticsJs.includes("url.searchParams.set('return_to', '/analytics-console')"), 'Analytics Console Google connect should return users to the app.');
+assert.ok(analyticsJs.includes("url.searchParams.set('return_to', '/analytics-console.html')"), 'Analytics Console Google connect should return users to the app.');
+assert.ok(analyticsHtml.includes('id="connectSearchConsoleBtn"'), 'Analytics Console should expose a Search Console connect button.');
 assert.ok(analyticsJs.includes('googleSearchConsoleSite'), 'Analytics Console context should carry selected Search Console site.');
 assert.ok(analyticsJs.includes('googleGa4Property'), 'Analytics Console context should carry selected GA4 property.');
 assert.ok(analyticsJs.includes('googleReportLoaded'), 'Analytics Console context should indicate whether live Google report rows were loaded.');

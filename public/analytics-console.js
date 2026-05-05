@@ -41,6 +41,7 @@ const els = {
   measurementTable: document.getElementById('measurementTable'),
   contextPreview: document.getElementById('contextPreview'),
   connectGoogleBtn: document.getElementById('connectGoogleBtn'),
+  connectSearchConsoleBtn: document.getElementById('connectSearchConsoleBtn'),
   refreshGoogleSourcesBtn: document.getElementById('refreshGoogleSourcesBtn'),
   loadGoogleReportBtn: document.getElementById('loadGoogleReportBtn'),
   googleSourceStatus: document.getElementById('googleSourceStatus'),
@@ -87,11 +88,11 @@ function statusClass(value = '') {
   return 'pending';
 }
 
-function googleConnectHref() {
+function googleConnectHref(loginSource = 'analytics_console') {
   const url = new URL('/auth/google', window.location.origin);
   url.searchParams.set('action', 'link');
-  url.searchParams.set('return_to', '/analytics-console');
-  url.searchParams.set('login_source', 'analytics_console');
+  url.searchParams.set('return_to', '/analytics-console.html');
+  url.searchParams.set('login_source', loginSource);
   return url.toString();
 }
 
@@ -130,7 +131,7 @@ function renderGoogleSourceControls() {
   }
   els.googleSourceNote.textContent = connected
     ? `Loaded ${sites.length} Search Console site(s) and ${ga4.length} GA4 propert${ga4.length === 1 ? 'y' : 'ies'}. Select sources, then use Load report to fetch performance rows.`
-    : 'Use Connect Google to grant GA4 and Search Console read access, then refresh sources.';
+    : 'Use Connect GA4 or Connect Search Console to grant Google read access, then refresh sources.';
 }
 
 async function refreshGoogleSources(options = {}) {
@@ -523,7 +524,11 @@ els.targetSelect.addEventListener('change', () => {
 });
 
 els.connectGoogleBtn.addEventListener('click', () => {
-  window.location.href = googleConnectHref();
+  window.location.href = googleConnectHref('analytics_console_ga4');
+});
+
+els.connectSearchConsoleBtn.addEventListener('click', () => {
+  window.location.href = googleConnectHref('analytics_console_gsc');
 });
 
 els.refreshGoogleSourcesBtn.addEventListener('click', () => {

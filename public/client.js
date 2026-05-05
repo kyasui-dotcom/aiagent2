@@ -7994,6 +7994,7 @@ const OPEN_CHAT_LEADER_INTAKE_TASKS = new Set([
   'research_team_leader',
   'build_team_leader',
   'cmo_leader',
+  'secretary_leader',
   'cto_leader',
   'cpo_leader',
   'cfo_leader',
@@ -8004,6 +8005,7 @@ function openChatLeaderIntakeProfile(taskType = '') {
   const task = String(taskType || '').toLowerCase();
   if (task === 'research_team_leader') return 'research';
   if (task === 'build_team_leader' || task === 'cto_leader') return 'build';
+  if (task === 'secretary_leader') return 'operations';
   if (task === 'cpo_leader') return 'product';
   if (task === 'cfo_leader') return 'finance';
   if (task === 'legal_leader') return 'legal';
@@ -8041,6 +8043,7 @@ function openChatLeaderIntakeSignals(prompt = '', inputCounts = {}) {
     business: hasAttachment || /https?:\/\//i.test(raw) || /(商材|商品|サービス|プロダクト|事業|会社|ブランド|アプリ|サイト|SaaS|マーケットプレイス|プラットフォーム|ツール|顧客|課金|価格|product|service|business|company|brand|app|site|saas|marketplace|platform|tool|customer|pricing)/i.test(text),
     audience: /(誰向け|対象|顧客|ユーザー|ペルソナ|ICP|業界|開発者|創業者|法人|個人|audience|customer|user|persona|segment|icp|developer|founder|buyer|b2b|b2c)/i.test(text),
     currentState: /(現状|今|現在|月間|PV|登録|売上|CVR|流入|チャネル|使っている|課題|数字|baseline|current|traffic|signup|revenue|conversion|funnel|channel|metric|analytics)/i.test(text),
+    sourceData: hasAttachment || /(資料|営業資料|提案資料|DL資料|ダウンロード資料|ホワイトペーパー|事例|価格表|LP|ランディングページ|GA4|Google Analytics|アナリティクス|Search Console|サーチコンソール|GSC|CRM|商談|問い合わせ|ログ|レポート|データ|ファイル|読み込|読ませ|参照|添付|material|deck|sales deck|download|whitepaper|case study|pricing page|landing page|analytics|search console|crm|pipeline|lead data|sales data|report|source|file|attachment|reference|context data|no analytics|no source data|no files|no materials|資料なし|データなし|ファイルなし)/i.test(text),
     constraints: /(制約|予算|広告費|無料|なし|使わない|期間|地域|日本|英語|NG|避け|X|Twitter|Reddit|Indie Hackers|SEO|Product Hunt|budget|no ads|without ads|free|constraint|region|deadline|channel|avoid)/i.test(text),
     deliverable: /(納品|出力|形式|レポート|表|計画|プラン|施策|アクション|実行|投稿|媒体|コピー|KPI|チェックリスト|deliver|output|report|table|plan|copy|asset|checklist|brief|strategy|roadmap|action|execution|channel)/i.test(text),
     system: hasAttachment || /(リポジトリ|repo|GitHub|コード|システム|アプリ|API|DB|データベース|設計|実装|バグ|エラー|テスト|repository|codebase|system|api|database|architecture|bug|error|test|deploy)/i.test(text),
@@ -8062,36 +8065,47 @@ function openChatMissingLeaderIntakeFields(taskType = '', prompt = '', inputCoun
     require('objective', 'objective');
     require('business', 'business_or_product');
     if (!signals.audience) missing.push('target_customer');
+    if (!signals.sourceData) missing.push('source_data_context');
     if (!signals.currentState && !signals.constraints) missing.push('current_state_or_constraints');
     if (!signals.deliverable) missing.push('desired_delivery');
     if (!signals.longEnough) missing.push('business_context_detail');
   } else if (profile === 'research') {
     require('objective', 'decision_objective');
     require('business', 'research_target');
+    if (!signals.sourceData) missing.push('source_data_context');
     if (!signals.currentState && !signals.constraints) missing.push('scope_or_evidence_constraints');
     if (!signals.deliverable) missing.push('decision_memo_format');
   } else if (profile === 'build') {
     require('objective', 'technical_objective');
     require('system', 'system_or_repository_context');
+    if (!signals.sourceData) missing.push('source_data_context');
     if (!signals.constraints && !signals.currentState) missing.push('constraints_or_failure_context');
     if (!signals.deliverable) missing.push('validation_or_delivery_format');
   } else if (profile === 'product') {
     require('objective', 'product_objective');
     require('business', 'product_or_service');
     if (!signals.audience) missing.push('target_user');
+    if (!signals.sourceData) missing.push('source_data_context');
     if (!signals.currentState && !signals.constraints) missing.push('user_problem_or_constraints');
     if (!signals.deliverable) missing.push('product_output_format');
   } else if (profile === 'finance') {
     require('objective', 'financial_objective');
     require('business', 'business_model_or_product');
+    if (!signals.sourceData) missing.push('source_data_context');
     if (!signals.numbers && !signals.currentState) missing.push('current_numbers_or_assumptions');
     if (!signals.deliverable) missing.push('financial_output_format');
   } else if (profile === 'legal') {
     require('objective', 'legal_review_objective');
     require('business', 'business_or_service_context');
     require('legalScope', 'legal_scope');
+    if (!signals.sourceData) missing.push('source_data_context');
     if (!signals.constraints && !signals.currentState) missing.push('jurisdiction_or_operational_context');
     if (!signals.deliverable) missing.push('legal_output_format');
+  } else if (profile === 'operations') {
+    require('objective', 'operations_objective');
+    if (!signals.sourceData) missing.push('source_data_context');
+    if (!signals.currentState && !signals.constraints) missing.push('operational_context_or_constraints');
+    if (!signals.deliverable) missing.push('operations_output_format');
   }
   return missing;
 }
@@ -8109,6 +8123,7 @@ const OPEN_CHAT_CANONICAL_ORDER_TASKS = new Set([
   'research_team_leader',
   'build_team_leader',
   'cmo_leader',
+  'secretary_leader',
   'cto_leader',
   'cpo_leader',
   'media_planner',
@@ -8171,6 +8186,7 @@ function openChatCanonicalOrderTaskType(taskType = '', context = '') {
     'marketing_leader'
   ].includes(token)) return 'cmo_leader';
   if (token === 'agent_team_launch' || token === 'launch_team' || token === 'launch_team_leader') return 'cmo_leader';
+  if (['secretary_team', 'secretary', 'executive_secretary', 'executive_assistant', 'assistant_ops'].includes(token)) return 'secretary_leader';
   if (token === 'build_team' || token === 'coding_team' || token === 'engineering_team') return 'build_team_leader';
   if (token === 'research_team' || token === 'analysis_team') return 'research_team_leader';
   if (['list_creator', 'lead_sourcing', 'lead_qualification', 'company_list_builder', 'prospect_research', 'lead_list_building', 'prospect_list', 'lead_list'].includes(token)) return 'list_creator';
@@ -8222,46 +8238,68 @@ function openChatLeaderIntakeQuestionsForTask(taskType = '', prompt = '') {
   if (profile === 'growth') {
     return ja
       ? [
-        '商材・サービス内容を1〜3文で教えてください。URLがあれば添付してください。',
+        '売りたい商材・サービス内容とURLを教えてください。',
+        '依頼者として今回何を達成・判断したいですか？例: 認知、流入、登録、問い合わせ、購入、継続。',
         '誰向けに売りたいですか？ICP、顧客の課題、今一番取りたい行動を教えてください。',
-        '今回の目的は何ですか？例: 認知、流入、登録、問い合わせ、購入、継続、投稿作成、ローンチ。',
-        '現状の数字・使えるチャネル・制約はありますか？例: 広告費なし、X/Reddit/SEO中心、対象地域、期間。',
-        '納品は何がよいですか？例: 24時間施策、7日プラン、投稿文、LP改善、KPI表。'
+        '営業資料、提案資料、DL資料、LP、価格表、事例など読ませたい資料があればURLやファイルで入れてください。なければ「なし」で大丈夫です。',
+        'GA4、Search Console、CRM、売上、問い合わせ、広告、SNSなどの実データはありますか？使える範囲と見たい期間を教えてください。',
+        '他に読ませたい情報、制約、希望する納品形式を教えてください。回答後、リーダーが意図を要約して提案に入ります。'
       ]
       : [
-        'Describe the product or service in 1-3 sentences. Attach a URL if available.',
+        'What product or service do you want to sell? Include the URL.',
+        'As the order owner, what do you want to achieve or decide: awareness, traffic, signups, leads, purchases, retention, or launch?',
         'Who is the target customer? Include ICP, pain, and the user action you want most.',
-        'What is the objective: awareness, traffic, signups, leads, purchases, retention, launch, or content creation?',
-        'What current numbers, channels, and constraints should be used? Examples: no ads, X/Reddit/SEO, region, timeline.',
-        'What should the delivery include: 24-hour actions, 7-day plan, channel copy, landing-page fixes, or KPI table?'
+        'Add any sales deck, downloadable material, landing page, pricing page, case study, or product material the leader should read. If none, say none.',
+        'What real data is available: GA4, Search Console, CRM, sales, leads, ads, social, or campaign data? Include the usable range and period.',
+        'Add any other data to read, constraints, and desired delivery format. After this, the leader will summarize your intent before proposing.'
       ];
   }
   if (profile === 'research') {
     return ja
-      ? ['この調査で最終的に何を判断したいですか？', '対象の市場、商品、競合、候補、URLなどを教えてください。', '地域、期間、使ってよい情報源、除外条件はありますか？', '納品形式は何がよいですか？例: 判断メモ、比較表、リスク一覧、推奨案。']
-      : ['What decision should this research support?', 'What market, product, competitor, option, or URL should be researched?', 'What region, time range, allowed sources, or exclusions should apply?', 'What delivery format do you want: decision memo, comparison table, risk list, or recommendation?'];
+      ? ['この調査で最終的に何を判断したいですか？', '対象の市場、商品、競合、候補、URLなどを教えてください。', '既存資料、社内メモ、URL、比較したい候補、読ませたいデータがあれば入れてください。なければ「なし」で大丈夫です。', '地域、期間、使ってよい情報源、除外条件はありますか？', '納品形式は何がよいですか？例: 判断メモ、比較表、リスク一覧、推奨案。回答後、リーダーが意図を要約します。']
+      : ['What decision should this research support?', 'What market, product, competitor, option, or URL should be researched?', 'Add existing materials, internal notes, URLs, options to compare, or data the leader should read. If none, say none.', 'What region, time range, allowed sources, or exclusions should apply?', 'What delivery format do you want: decision memo, comparison table, risk list, or recommendation? The leader will summarize your intent first.'];
   }
   if (profile === 'build') {
     return ja
-      ? ['対象のシステム、リポジトリ、URL、ファイル、または技術構成を教えてください。', '何を実装・修正・判断したいですか？期待動作を教えてください。', '変更してよい範囲、壊してはいけない挙動、失敗時の戻し方はありますか？', '完了条件やテスト方法は何ですか？']
-      : ['What system, repository, URL, files, or technical stack should be used?', 'What should be implemented, fixed, or decided? Include expected behavior.', 'What can change, what must not break, and what rollback constraints exist?', 'What tests or acceptance criteria should define completion?'];
+      ? ['対象のシステム、リポジトリ、URL、ファイル、または技術構成を教えてください。', '何を実装・修正・判断したいですか？期待動作を教えてください。', '仕様書、ログ、エラー、画面、過去の納品、読ませたい資料やデータがあれば入れてください。なければ「なし」で大丈夫です。', '変更してよい範囲、壊してはいけない挙動、失敗時の戻し方はありますか？', '完了条件やテスト方法は何ですか？回答後、リーダーが意図を要約します。']
+      : ['What system, repository, URL, files, or technical stack should be used?', 'What should be implemented, fixed, or decided? Include expected behavior.', 'Add specs, logs, errors, screenshots, prior deliveries, or data the leader should read. If none, say none.', 'What can change, what must not break, and what rollback constraints exist?', 'What tests or acceptance criteria should define completion? The leader will summarize your intent first.'];
   }
   if (profile === 'product') {
     return ja
-      ? ['対象プロダクトや機能の内容を教えてください。', '誰のどの課題を解決したいですか？', '増やしたいユーザー行動や成功指標は何ですか？', '納品形式はロードマップ、UX改善、優先順位表、検証計画のどれがよいですか？']
-      : ['What product or feature should be reviewed?', 'Which user and problem should it solve?', 'What user behavior or success metric should increase?', 'Should the delivery be a roadmap, UX fixes, priority table, or validation plan?'];
+      ? ['対象プロダクトや機能の内容を教えてください。', '誰のどの課題を解決したいですか？', '増やしたいユーザー行動や成功指標は何ですか？', 'ユーザー調査、GA4、Search Console、問い合わせ、レビュー、利用ログ、競合URLなど読ませたいデータがあれば入れてください。', '納品形式はロードマップ、UX改善、優先順位表、検証計画のどれがよいですか？回答後、リーダーが意図を要約します。']
+      : ['What product or feature should be reviewed?', 'Which user and problem should it solve?', 'What user behavior or success metric should increase?', 'Add user research, GA4, Search Console, support tickets, reviews, usage logs, competitor URLs, or other data to read.', 'Should the delivery be a roadmap, UX fixes, priority table, or validation plan? The leader will summarize your intent first.'];
   }
   if (profile === 'finance') {
     return ja
-      ? ['商売モデル、商品、価格、課金形態を教えてください。', '今回見たい財務目的は何ですか？例: 価格、粗利、資金繰り、LTV/CAC、プラン設計。', '現状の数字や仮定はありますか？なければ空欄で構いません。', '納品形式は料金案、試算表、意思決定メモ、リスク一覧のどれがよいですか？']
-      : ['Describe the business model, product, price, and billing shape.', 'What financial objective should be reviewed: pricing, margin, cash flow, LTV/CAC, or packaging?', 'What current numbers or assumptions are available? If none, say so.', 'Should the delivery be pricing options, a model table, decision memo, or risk list?'];
+      ? ['商売モデル、商品、価格、課金形態を教えてください。', '今回見たい財務目的は何ですか？例: 価格、粗利、資金繰り、LTV/CAC、プラン設計。', '売上、費用、契約、CRM、会計、広告費、LTV/CACなど読ませたい数字や資料があれば入れてください。なければ「なし」で大丈夫です。', '現状の数字や仮定、対象期間、制約はありますか？', '納品形式は料金案、試算表、意思決定メモ、リスク一覧のどれがよいですか？回答後、リーダーが意図を要約します。']
+      : ['Describe the business model, product, price, and billing shape.', 'What financial objective should be reviewed: pricing, margin, cash flow, LTV/CAC, or packaging?', 'Add revenue, cost, contracts, CRM, accounting, ad spend, LTV/CAC, or source documents the leader should read. If none, say none.', 'What current numbers, assumptions, period, and constraints are available?', 'Should the delivery be pricing options, a model table, decision memo, or risk list? The leader will summarize your intent first.'];
   }
   if (profile === 'legal') {
     return ja
-      ? ['対象サービスやビジネス内容を教えてください。', '確認したい法務領域は何ですか？例: 規約、プライバシー、返金、課金、特商法、表示、契約。', '対象地域、利用者、運用上の前提を教えてください。', '納品形式は論点整理、リスク一覧、修正文案、弁護士への質問リストのどれがよいですか？']
-      : ['Describe the service or business context.', 'What legal area should be reviewed: terms, privacy, refunds, billing, commerce disclosures, policy, or contracts?', 'What jurisdiction, user type, and operational assumptions should apply?', 'Should the delivery be issue spotting, risk list, draft edits, or questions for counsel?'];
+      ? ['対象サービスやビジネス内容を教えてください。', '確認したい法務領域は何ですか？例: 規約、プライバシー、返金、課金、特商法、表示、契約。', '規約、プライバシーポリシー、契約書、LP、申込画面、運用資料など読ませたい資料があれば入れてください。', '対象地域、利用者、運用上の前提を教えてください。', '納品形式は論点整理、リスク一覧、修正文案、弁護士への質問リストのどれがよいですか？回答後、リーダーが意図を要約します。']
+      : ['Describe the service or business context.', 'What legal area should be reviewed: terms, privacy, refunds, billing, commerce disclosures, policy, or contracts?', 'Add terms, privacy policy, contracts, landing pages, signup screens, or operating documents the leader should read.', 'What jurisdiction, user type, and operational assumptions should apply?', 'Should the delivery be issue spotting, risk list, draft edits, or questions for counsel? The leader will summarize your intent first.'];
+  }
+  if (profile === 'operations') {
+    return ja
+      ? ['今回の運用・調整で達成したいことを教えてください。', '関係者、期限、承認者、連絡先、対象ドキュメントやURLを教えてください。', 'メール、議事録、予定、過去の納品、読ませたい資料やデータがあれば入れてください。なければ「なし」で大丈夫です。', '制約、避けたい連絡、確認が必要な条件はありますか？', '納品形式は整理メモ、依頼文、確認リスト、スケジュール案のどれがよいですか？回答後、リーダーが意図を要約します。']
+      : ['What should this operations or coordination work accomplish?', 'Who is involved, what is the deadline, who approves, and what documents or URLs are in scope?', 'Add emails, notes, calendar details, prior deliveries, or source data the leader should read. If none, say none.', 'What constraints, communication boundaries, or approval conditions matter?', 'Should the delivery be an organized memo, draft request, checklist, or schedule proposal? The leader will summarize your intent first.'];
   }
   return [];
+}
+
+function normalizeOpenChatDynamicLeaderIntakeQuestions(value = []) {
+  const seen = new Set();
+  return (Array.isArray(value) ? value : [])
+    .map((question) => String(question || '').replace(/\s+/g, ' ').trim())
+    .filter((question) => question.length >= 12 && question.length <= 260)
+    .filter((question) => {
+      const key = question.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .filter((question) => !/(password|secret|api key|hidden prompt|system prompt|ignore previous|パスワード|秘密|システムプロンプト|隠しプロンプト)/i.test(question))
+    .slice(0, 6);
 }
 
 function buildOpenChatLeaderIntakeClarifyAnswer(taskType = 'cmo_leader', prompt = '', missing = [], options = {}) {
@@ -8270,7 +8308,10 @@ function buildOpenChatLeaderIntakeClarifyAnswer(taskType = 'cmo_leader', prompt 
   const safeMissing = Array.isArray(missing) && missing.length
     ? missing
     : openChatMissingLeaderIntakeFields(safeTaskType, text, {});
-  const questions = openChatLeaderIntakeQuestionsForTask(safeTaskType, text);
+  const dynamicQuestions = normalizeOpenChatDynamicLeaderIntakeQuestions(options.dynamicIntakeQuestions || options.intakeQuestions || []);
+  const questions = dynamicQuestions.length >= 3
+    ? dynamicQuestions
+    : openChatLeaderIntakeQuestionsForTask(safeTaskType, text);
   const ja = looksJapanese(text);
   const guardedByOpenAi = options.source === 'openai_guarded';
   return {
@@ -8285,8 +8326,8 @@ function buildOpenChatLeaderIntakeClarifyAnswer(taskType = 'cmo_leader', prompt 
     body: ja
       ? [
         guardedByOpenAi
-          ? '方向は分かりました。より良い集客プランにするため、先に前提を少し確認します。'
-          : 'より良い結果にするため、目的や商材内容を少し確認します。',
+          ? '方向は分かりました。良いリーダー提案にするため、先に前提・資料・実データを確認します。'
+          : 'より良い結果にするため、目的、対象、読ませたい資料や実データを少し確認します。',
         'まだ実行も課金もしていません。',
         '',
         '分かる範囲で答えてください。空欄があっても大丈夫です:',
@@ -8296,8 +8337,8 @@ function buildOpenChatLeaderIntakeClarifyAnswer(taskType = 'cmo_leader', prompt 
       ].join('\n')
       : [
         guardedByOpenAi
-          ? 'I understand the direction. I need a little context first so the growth plan is useful.'
-          : 'I need a little objective and product context first so the result is useful.',
+          ? 'I understand the direction. I need context, source materials, and real-data status first so the leader proposal is useful.'
+          : 'I need the objective, target, source materials, and real-data status first so the result is useful.',
         'Nothing has run and nothing has been billed yet.',
         '',
         'Answer what you can. It is fine to leave unknown items blank:',
@@ -8376,25 +8417,38 @@ function combinedLeaderIntakePrompt(original = '', answer = '') {
 function leaderIntakeFollowupQuestions(taskType = '', missing = [], prompt = '') {
   const questions = openChatLeaderIntakeQuestionsForTask(taskType, prompt);
   const byMissing = {
-    objective: questions[2] || questions[0],
+    objective: questions[1] || questions[0],
     business_or_product: questions[0],
-    target_customer: questions[1],
-    current_state_or_constraints: questions[3],
-    desired_delivery: questions[4],
+    target_customer: questions[2] || questions[1],
+    source_data_context: questions[3] || questions[2],
+    current_state_or_constraints: questions[4] || questions[3],
+    desired_delivery: questions[5] || questions[4],
     business_context_detail: questions[0],
     decision_objective: questions[0],
     research_target: questions[1],
-    scope_or_evidence_constraints: questions[2],
-    decision_memo_format: questions[3],
+    scope_or_evidence_constraints: questions[3] || questions[2],
+    decision_memo_format: questions[4] || questions[3],
     technical_objective: questions[1],
     system_or_repository_context: questions[0],
-    constraints_or_failure_context: questions[2],
-    validation_or_delivery_format: questions[3],
+    constraints_or_failure_context: questions[3] || questions[2],
+    validation_or_delivery_format: questions[4] || questions[3],
     product_objective: questions[2],
     product_or_service: questions[0],
     target_user: questions[1],
     user_problem_or_constraints: questions[2],
-    product_output_format: questions[3]
+    product_output_format: questions[4] || questions[3],
+    financial_objective: questions[1],
+    business_model_or_product: questions[0],
+    current_numbers_or_assumptions: questions[3] || questions[2],
+    financial_output_format: questions[4] || questions[3],
+    legal_review_objective: questions[1],
+    business_or_service_context: questions[0],
+    legal_scope: questions[1],
+    jurisdiction_or_operational_context: questions[3] || questions[2],
+    legal_output_format: questions[4] || questions[3],
+    operations_objective: questions[0],
+    operational_context_or_constraints: questions[3] || questions[2],
+    operations_output_format: questions[4] || questions[3]
   };
   const picked = missing.map((key) => byMissing[key]).filter(Boolean);
   return [...new Set(picked.length ? picked : questions)].slice(0, 3);
@@ -8417,16 +8471,16 @@ function buildOpenChatLeaderOrderBrief(taskType = 'cmo_leader', original = '', a
     : 'leader summary, specialist task split, assumptions, execution plan, concrete deliverables, risks, and acceptance criteria';
   return [
     `Task: ${taskType}`,
-    `Goal: Turn the user intake into an executable Team Leader order for ${profile} work.`,
+    `Goal: Turn the user intake into an executable Team Leader order for ${profile} work after summarizing the order owner's intent.`,
     `Original request: ${compactChatText(original, 500)}`,
     'Intake answers:',
     compactChatText(answer, 1600),
     `Work split: ${split}`,
-    `Inputs: ${sourceLine}. Treat inline URLs as source targets to inspect if the selected agent can browse.`,
+    `Inputs: ${sourceLine}. Treat inline URLs, sales materials, analytics notes, files, and other user-provided data as source targets to inspect if available.`,
     'Constraints: Respect the user-provided constraints. If no paid ads is mentioned, prioritize organic/free acquisition routes.',
     `Deliver: ${deliver}.`,
     `Output language: ${ja ? 'Japanese' : 'English'}`,
-    'Acceptance: do not ask the same intake questions again; use the provided answers, state any remaining assumptions, separate facts from inference, and produce reusable execution assets.'
+    'Acceptance: first summarize the order owner intent and supplied source data; do not ask the same intake questions again; use the provided answers, state any remaining assumptions, separate facts from inference, and produce reusable execution assets.'
   ].join('\n');
 }
 
@@ -8472,9 +8526,9 @@ function openChatLooksNumberedLeaderIntakeAnswer(prompt = '') {
   const raw = String(prompt || '').trim();
   if (!raw || raw.length > 2400) return false;
   const lines = raw.split(/\n+/).map((line) => line.trim()).filter(Boolean);
-  const numbered = lines.filter((line) => /^(?:[1-5１-５][\).．、:：]|Q?[1-5１-５][:：]|A[1-5１-５][:：])\s*\S+/i.test(line)).length;
+  const numbered = lines.filter((line) => /^(?:[1-7１-７][\).．、:：]|Q?[1-7１-７][:：]|A[1-7１-７][:：])\s*\S+/i.test(line)).length;
   if (numbered < 2 && !/^(?:1|１)[\).．、:：]/.test(raw)) return false;
-  return /(https?:\/\/|商材|商品|サービス|プロダクト|対象|ユーザー|顧客|ICP|目的|登録|会員|広告費|予算|SEO|X|Twitter|Reddit|媒体|投稿|納品|プラン|アクション|product|service|customer|audience|objective|signup|budget|channel|deliverable|plan|action)/i.test(raw);
+  return /(https?:\/\/|商材|商品|サービス|プロダクト|対象|ユーザー|顧客|ICP|目的|登録|会員|資料|GA4|Search Console|サーチコンソール|CRM|データ|広告費|予算|SEO|X|Twitter|Reddit|媒体|投稿|納品|プラン|アクション|product|service|customer|audience|objective|signup|material|analytics|search console|crm|data|budget|channel|deliverable|plan|action)/i.test(raw);
 }
 
 function openChatLeaderHasMinimumRouteContext(taskType = '', prompt = '', inputCounts = {}) {
@@ -8500,11 +8554,11 @@ function buildOpenChatDispatchBriefFromPendingAnswer(original = '', answer = '',
       `- Original request: ${compactChatText(original, 500)}`,
       `- User clarification: ${compactChatText(answer, 1200)}`,
       'Work split: CMO leader intake/refinement -> competitor/channel research -> positioning -> SEO/content -> social/community posts -> measurement plan',
-      `Inputs: ${Number(inputCounts.urlCount || 0) || Number(inputCounts.fileCount || 0) ? `${Number(inputCounts.urlCount || 0)} URL(s), ${Number(inputCounts.fileCount || 0)} file(s), plus written chat context.` : 'Written chat context. If URLs or source materials are present in chat, treat them as targets to inspect.'}`,
-      'Constraints: If the user mentions no paid ads, prioritize organic/free acquisition. The Team Leader must ask or resolve any still-missing objective, KPI, channel, constraint, or delivery detail before assigning specialist agents.',
+      `Inputs: ${Number(inputCounts.urlCount || 0) || Number(inputCounts.fileCount || 0) ? `${Number(inputCounts.urlCount || 0)} URL(s), ${Number(inputCounts.fileCount || 0)} file(s), plus written chat context.` : 'Written chat context. If URLs, sales materials, GA4/Search Console notes, CRM data, or other source materials are present in chat, treat them as targets to inspect.'}`,
+      'Constraints: If the user mentions no paid ads, prioritize organic/free acquisition. The Team Leader must summarize the order owner intent and source-data status before assigning specialist agents.',
       'Deliver: clear growth diagnosis, priority channels/media, competitor-informed positioning, concrete no-paid-ads actions, ready-to-post copy, KPI table, and a 7-day execution checklist.',
       `Output language: ${ja ? 'Japanese' : 'English'}`,
-      'Acceptance: do not repeat facts the user already supplied; if more context is needed, ask only the missing detail first. Otherwise state assumptions, separate facts from inference, and make the delivery actionable.'
+      'Acceptance: do not repeat facts the user already supplied; if more context is needed, ask only the missing detail first. Otherwise summarize intent, list supplied and missing data, state assumptions, separate facts from inference, and make the delivery actionable.'
     ].join('\n');
   }
   return catCompactDispatchBrief([
@@ -13220,8 +13274,10 @@ function openChatLlmLeaderIntakeGuardAnswer(prompt = '', result = {}, fallbackAn
   if (!isOrderLike && !isLeaderIntent) return null;
   const missing = openChatMissingLeaderIntakeFields(taskType, userContext, orderInputCounts(orderInputFromComposer()));
   if (!missing.length) return null;
+  const dynamicQuestions = normalizeOpenChatDynamicLeaderIntakeQuestions(result?.intake_questions || result?.intakeQuestions || []);
   return buildOpenChatLeaderIntakeClarifyAnswer(taskType, prompt, missing, {
     source: 'openai_guarded',
+    dynamicIntakeQuestions: dynamicQuestions,
     suppressTrio: true
   });
 }

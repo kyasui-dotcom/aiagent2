@@ -323,7 +323,8 @@ const answeredCmoPrepare = await request('/api/work/prepare-order', {
       '1. autowifi-travel.com https://autowifi-travel.com/ is an eSIM ecommerce site.',
       '2. Target travelers to Japan.',
       '3. I want to sell Japan eSIMs and drive purchases.',
-      '4. No ads; use X and SEO for English-speaking travelers.'
+      '4. Sales materials: none beyond the site URL. GA4/Search Console/CRM data is not available for this QA.',
+      '5. No ads; use X and SEO for English-speaking travelers. Deliver a plan, copy, and KPI table.'
     ].join('\n'),
     task_type: 'cmo_leader',
     requestedStrategy: 'auto',
@@ -2413,6 +2414,11 @@ globalThis.fetch = async (input, init) => {
         summary: 'The user wants acquisition help.',
         chat_answer: '',
         narrowing_question: 'What product and audience should the growth work focus on?',
+        intake_questions: [
+          'What product or service URL should the CMO leader review?',
+          'What sales materials, GA4/Search Console, CRM, or other data should be read?',
+          'What outcome should the order owner prioritize?'
+        ],
         order_brief: '',
         options: [],
         confidence: 0.8

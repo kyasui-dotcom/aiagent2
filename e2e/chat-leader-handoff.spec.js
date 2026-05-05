@@ -37,6 +37,8 @@ test.describe('CAIt leader handoff chat', () => {
     await page.locator('#promptInput').fill('集客したいです');
     await page.locator('#sendMessageBtn').click();
     await expect(page.locator('#chatThread')).toContainText(/Answer what you can|回答/);
+    await expect(page.locator('#chatThread')).toContainText(/GA4|Search Console|サーチコンソール/);
+    await expect(page.locator('#chatThread')).toContainText(/資料|sales deck|material/i);
     await expect(page.locator('#chatThread')).toContainText('Nothing has been dispatched yet.');
 
     await page.locator('#promptInput').fill('pause?');
@@ -62,14 +64,17 @@ test.describe('CAIt leader handoff chat', () => {
     await expect(page.locator('#activeLeaderStatus')).toContainText('Lead: CMO Leader');
     await expect(page.locator('#chatThread')).toContainText('CMO Leader');
     await expect(page.locator('#chatThread')).toContainText(/Answer what you can|回答/);
+    await expect(page.locator('#chatThread')).toContainText(/GA4|Search Console|サーチコンソール/);
+    await expect(page.locator('#chatThread')).toContainText(/資料|sales deck|material/i);
     await expect(page.locator('#chatThread')).toContainText('Nothing has been dispatched yet.');
 
     await page.locator('#promptInput').fill([
       '1. autowifi-travel.com https://autowifi-travel.com/ is an eSIM ecommerce site.',
-      '2. English-speaking travelers visiting Japan.',
-      '3. Purchase Japan eSIMs.',
-      '4. No ads. Use SEO and X as research/distribution candidates, but do not externally publish without connector proof.',
-      '5. Give a plan and execute the allowed action layers. Return final delivery in chat.'
+      '2. Intent: increase qualified purchase demand and decide the first organic acquisition lane.',
+      '3. Target: English-speaking travelers visiting Japan who need Japan eSIMs.',
+      '4. Sales/DL materials: none beyond the site URL for this test.',
+      '5. Real data: no GA4/Search Console/CRM access in E2E. Use chat context only and label assumptions.',
+      '6. Constraints/delivery: no ads. Use SEO and X as research/distribution candidates, do not externally publish without connector proof, and return final delivery in chat.'
     ].join('\n'));
     await page.locator('#sendMessageBtn').click();
 
