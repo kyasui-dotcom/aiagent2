@@ -45,6 +45,13 @@ function statusClass(value = '') {
   return 'pending';
 }
 
+function statusLabel(value = '') {
+  const safe = String(value || '').trim().toLowerCase();
+  if (safe === 'blocked') return 'waiting';
+  if (safe === 'timed_out') return 'timed out';
+  return String(value || '').trim() || 'unknown';
+}
+
 function normalizeJobDelivery(job = {}) {
   const output = job.output && typeof job.output === 'object' ? job.output : {};
   const files = Array.isArray(output.files) ? output.files : [];
@@ -178,7 +185,7 @@ function renderList() {
     `<button class="item-row ${delivery.id === selectedId ? 'active' : ''}" type="button" data-delivery="${escapeHtml(delivery.id)}">`,
     `<strong>${escapeHtml(delivery.title)}</strong>`,
     `<span>${escapeHtml(delivery.id)} · ${(delivery.files || []).length} files</span>`,
-    `<span class="status-pill ${statusClass(delivery.status)}">${escapeHtml(delivery.status)}</span>`,
+    `<span class="status-pill ${statusClass(delivery.status)}">${escapeHtml(statusLabel(delivery.status))}</span>`,
     '</button>'
   ].join('')).join('') : '<div class="item-row"><strong>No server delivery loaded</strong><span>Refresh jobs or open this app from a CAIt context handoff.</span></div>';
 }
@@ -187,7 +194,7 @@ function renderSelected() {
   const delivery = selectedDelivery();
   els.deliveryTitleInput.value = delivery?.title || '';
   els.deliverySummaryInput.value = delivery?.summary || '';
-  els.deliveryStatusPill.textContent = delivery?.status || 'unknown';
+  els.deliveryStatusPill.textContent = statusLabel(delivery?.status || '');
   els.deliveryStatusPill.className = `status-pill ${statusClass(delivery?.status || '')}`;
   const files = delivery?.files || [];
   els.fileTable.innerHTML = files.length ? [

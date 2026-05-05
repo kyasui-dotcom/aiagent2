@@ -842,6 +842,9 @@ p { color: var(--muted); max-width: 64ch; }
 .order-bot.failed {
   animation-name: botFail;
 }
+.order-bot.waiting {
+  animation-name: botIdle;
+}
 .order-bot-head,
 .order-bot-body,
 .order-bot-arm,
@@ -930,6 +933,15 @@ p { color: var(--muted); max-width: 64ch; }
 .order-bot.failed .order-bot-eye {
   background: rgba(255,143,143,.96);
   box-shadow: 0 0 8px rgba(255,143,143,.44);
+}
+.order-bot.waiting .order-bot-head,
+.order-bot.waiting .order-bot-body {
+  border-color: rgba(255,213,105,.56);
+  box-shadow: 0 0 16px rgba(255,213,105,.18);
+}
+.order-bot.waiting .order-bot-eye {
+  background: rgba(255,213,105,.96);
+  box-shadow: 0 0 8px rgba(255,213,105,.42);
 }
 .order-bot-more {
   padding: 8px 10px;

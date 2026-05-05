@@ -904,6 +904,14 @@ function normalizeOrderProgressStatus(status = '') {
   return String(status || '').trim().toLowerCase() || 'created';
 }
 
+function orderProgressStatusLabel(status = '', options = {}) {
+  const normalized = normalizeOrderProgressStatus(status);
+  const ja = Boolean(options.ja);
+  if (normalized === 'blocked') return ja ? '承認・接続待ち' : 'waiting';
+  if (normalized === 'timed_out') return ja ? 'タイムアウト' : 'timed out';
+  return normalized;
+}
+
 function orderProgressTone(status = '') {
   const normalized = normalizeOrderProgressStatus(status);
   if (normalized === 'completed') return 'ok';
@@ -921,7 +929,7 @@ function orderProgressSteps(status = '', options = {}) {
     : ['Order accepted', 'Agent work', 'Delivery ready'];
   if (normalized === 'blocked') return ja
     ? ['注文受付', '実行工程', '承認待ち']
-    : ['Order accepted', 'Action phase', 'Approval needed'];
+    : ['Order accepted', 'Action phase', 'Waiting for approval'];
   if (normalized === 'failed' || normalized === 'timed_out') return ja
     ? ['注文受付', 'Agent接続', '停止']
     : ['Order accepted', 'Agent handoff', 'Stopped'];
@@ -1241,7 +1249,8 @@ function orderProgressMeta(subject = {}, options = {}) {
   pushState('completed', completed);
   pushState('running', running);
   pushState('queued', queued);
-  pushState('failed', failed + blocked);
+  pushState('failed', failed);
+  pushState('waiting', blocked);
   while (states.length < shown) states.push(status === 'completed' ? 'completed' : 'queued');
   const ratioBase = total || 1;
   const weighted = status === 'completed' || status === 'blocked'
@@ -1510,7 +1519,7 @@ function workflowProgressDetails(job = {}, options = {}) {
     const phase = workflowPhaseLabel(active[0]?.sequencePhase || '', { ja });
     lines.push(ja ? `Current phase: ${phase}` : `Current phase: ${phase}`);
     active.slice(0, 4).forEach((child) => {
-      const status = String(child.status || '').toUpperCase();
+      const status = String(orderProgressStatusLabel(child.status || 'unknown', { ja })).toUpperCase();
       const detail = child.summary
         || child.latestLog
         || workflowTaskWorkingNote(child.taskType, child.sequencePhase, child.status, { ja });
@@ -1520,7 +1529,7 @@ function workflowProgressDetails(job = {}, options = {}) {
     lines.push(ja ? 'Current phase: waiting for next workflow handoff' : 'Current phase: waiting for next workflow handoff');
     blocked.slice(0, 3).forEach((child) => {
       const detail = child.latestLog || workflowTaskWorkingNote(child.taskType, child.sequencePhase, child.status, { ja });
-      lines.push(`- ${workflowChildDisplayName(child, { ja })} (${String(child.status || '').toUpperCase()}): ${detail}`);
+      lines.push(`- ${workflowChildDisplayName(child, { ja })} (${String(orderProgressStatusLabel(child.status || 'unknown', { ja })).toUpperCase()}): ${detail}`);
     });
   }
   if (recentLogs.length) {
@@ -1540,7 +1549,7 @@ function orderProgressChildDeliveryLines(job = {}, options = {}) {
   const lines = ['', ja ? '各エージェントの納品:' : 'Specialist deliveries:'];
   childRuns.forEach((child, index) => {
     const title = `${index + 1}. ${workflowChildDisplayName(child, { ja })} - ${child.agentName || child.agentId || 'agent'}`;
-    const status = String(child.status || 'unknown').toUpperCase();
+    const status = String(orderProgressStatusLabel(child.status || 'unknown', { ja })).toUpperCase();
     const summary = compactChatText(child.summary || child.failureReason || '', 220);
     const bullets = Array.isArray(child.bullets) ? child.bullets.filter(Boolean).slice(0, 3) : [];
     const files = Array.isArray(child.files) ? child.files.filter(Boolean).slice(0, 4) : [];
@@ -1817,8 +1826,8 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
     : (isWorkflow ? 'Agent Team' : 'auto-routing');
   const childLine = isWorkflow && counts.total
     ? (ja
-      ? `進捗: ${counts.completed}/${counts.total} agent runs 完了${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} blocked` : ''}`
-      : `Progress: ${counts.completed}/${counts.total} agent runs completed${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} blocked` : ''}`)
+      ? `進捗: ${counts.completed}/${counts.total} agent runs 完了${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} waiting` : ''}`
+      : `Progress: ${counts.completed}/${counts.total} agent runs completed${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} waiting` : ''}`)
     : '';
   const routingLines = orderRoutingContextLines(created, { ja });
   const failure = String(created?.failure_reason || created?.error || '').trim();
@@ -1827,7 +1836,7 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
       ja ? 'オーダーはAgentに渡す前、またはdispatch中に止まりました。' : 'The order stopped before or during agent dispatch.',
       '',
       `Order ID: ${orderId}`,
-      ja ? `状態: ${status}` : `Status: ${status}`,
+      ja ? `状態: ${orderProgressStatusLabel(status, { ja })}` : `Status: ${orderProgressStatusLabel(status)}`,
       failure ? (ja ? `理由: ${failure}` : `Reason: ${failure}`) : '',
       ...routingLines,
       childLine,
@@ -1853,7 +1862,7 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
       ja ? 'アクション工程で承認待ちになりました。' : 'The order reached the action phase and is waiting for approval.',
       '',
       orderId ? `Order ID: ${orderId}` : '',
-      ja ? `状態: ${status}` : `Status: ${status}`,
+      ja ? `状態: ${orderProgressStatusLabel(status, { ja })}` : `Status: ${orderProgressStatusLabel(status)}`,
       failure ? (ja ? `理由: ${failure}` : `Reason: ${failure}`) : '',
       ja ? `接続先: ${agentLabel}` : `Route: ${agentLabel}`,
       ...routingLines,
@@ -1865,7 +1874,7 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
     ja ? '発注を受け付けました。CAItが接続と進捗確認を始めています。' : 'Order accepted. CAIt is starting dispatch and progress tracking.',
     '',
     orderId ? `Order ID: ${orderId}` : (ja ? 'Order ID: 発行待ち' : 'Order ID: pending'),
-    ja ? `状態: ${status}` : `Status: ${status}`,
+    ja ? `状態: ${orderProgressStatusLabel(status, { ja })}` : `Status: ${orderProgressStatusLabel(status)}`,
     ja ? `接続先: ${agentLabel}` : `Route: ${agentLabel}`,
     ...routingLines,
     childLine,
@@ -1880,8 +1889,8 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
   const isWorkflow = job?.jobKind === 'workflow' || Boolean(job?.workflow);
   const childLine = isWorkflow && counts.total
     ? (ja
-      ? `進捗: ${counts.completed}/${counts.total} agent runs 完了${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} blocked` : ''}${counts.running ? `, ${counts.running} running` : ''}${counts.queued ? `, ${counts.queued} queued` : ''}`
-      : `Progress: ${counts.completed}/${counts.total} agent runs completed${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} blocked` : ''}${counts.running ? `, ${counts.running} running` : ''}${counts.queued ? `, ${counts.queued} queued` : ''}`)
+      ? `進捗: ${counts.completed}/${counts.total} agent runs 完了${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} waiting` : ''}${counts.running ? `, ${counts.running} running` : ''}${counts.queued ? `, ${counts.queued} queued` : ''}`
+      : `Progress: ${counts.completed}/${counts.total} agent runs completed${counts.failed ? `, ${counts.failed} failed` : ''}${counts.blocked ? `, ${counts.blocked} waiting` : ''}${counts.running ? `, ${counts.running} running` : ''}${counts.queued ? `, ${counts.queued} queued` : ''}`)
     : '';
   const route = job?.assignedAgentId || (isWorkflow ? (job?.workflow?.teamName || 'Agent Team') : 'auto-routing');
   const summary = orderProgressSummaryFromJob(job);
@@ -1908,7 +1917,7 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
       ja ? 'アクション工程まで進みましたが、外部投稿・送信は承認またはコネクター接続待ちです。' : 'The workflow reached the action phase, but external posting/sending is waiting for approval or connector access.',
       '',
       `Order ID: ${job.id || 'unknown'}`,
-      ja ? `状態: blocked` : `Status: blocked`,
+      ja ? `状態: ${orderProgressStatusLabel(status, { ja })}` : `Status: ${orderProgressStatusLabel(status)}`,
       ja ? `接続先: ${route}` : `Route: ${route}`,
       job?.failureReason ? (ja ? `理由: ${job.failureReason}` : `Reason: ${job.failureReason}`) : '',
       childLine,
@@ -1925,7 +1934,7 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
       ja ? 'オーダーは停止しました。' : 'Order stopped.',
       '',
       `Order ID: ${job.id || 'unknown'}`,
-      ja ? `状態: ${status}` : `Status: ${status}`,
+      ja ? `状態: ${orderProgressStatusLabel(status, { ja })}` : `Status: ${orderProgressStatusLabel(status)}`,
       job?.failureReason ? (ja ? `理由: ${job.failureReason}` : `Reason: ${job.failureReason}`) : '',
       childLine,
       '',
@@ -1939,7 +1948,7 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
         : 'Order accepted. Execution has not started yet.',
       '',
       `Order ID: ${job.id || 'unknown'}`,
-      ja ? `状態: ${status}` : `Status: ${status}`,
+      ja ? `状態: ${orderProgressStatusLabel(status, { ja })}` : `Status: ${orderProgressStatusLabel(status)}`,
       ja ? `接続先: ${route}` : `Route: ${route}`,
       childLine,
       ...workflowDetails,
@@ -1952,7 +1961,7 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
     ja ? 'オーダーは進行中です。' : 'Order is in progress.',
     '',
     `Order ID: ${job.id || 'unknown'}`,
-    ja ? `状態: ${status}` : `Status: ${status}`,
+    ja ? `状態: ${orderProgressStatusLabel(status, { ja })}` : `Status: ${orderProgressStatusLabel(status)}`,
     ja ? `接続先: ${route}` : `Route: ${route}`,
     childLine,
     ...workflowDetails,
@@ -13652,7 +13661,7 @@ function renderOrderProgressVisual(meta = {}, options = {}) {
     : meta.failed
     ? `${meta.failed} failed`
     : (meta.blocked
-      ? `${meta.blocked} blocked`
+      ? `${meta.blocked} waiting`
       : (meta.running
       ? `${meta.running} running`
       : (meta.queued ? `${meta.queued} queued` : (ja ? 'dispatching' : 'dispatching'))));
@@ -17074,11 +17083,11 @@ function runNextAction(job) {
     if (authorityRequestRequiresClientApproval(authority)) {
       return {
         title: 'ACTION APPROVAL REQUIRED',
-        body: `${counts.completed || 0}/${counts.total || 0} internal work items finished, but external execution is blocked until approval/connector setup is complete. Required: ${describeAuthorityNeed(authority.missingConnectorCapabilities, authority.missingConnectors)}.`,
+        body: `${counts.completed || 0}/${counts.total || 0} internal work items finished, but external execution is waiting for approval/connector setup. Required: ${describeAuthorityNeed(authority.missingConnectorCapabilities, authority.missingConnectors)}.`,
         tone: 'warn'
       };
     }
-    if (job.status === 'blocked') return { title: 'AGENT TEAM BLOCKED', body: `${counts.completed || 0}/${counts.total || 0} agent runs completed. Resolve the blocked specialist or connector gate before treating this as final.`, tone: 'warn' };
+    if (job.status === 'blocked') return { title: 'AGENT TEAM WAITING', body: `${counts.completed || 0}/${counts.total || 0} agent runs completed. Resolve the waiting specialist or connector gate before treating this as final.`, tone: 'warn' };
     if (job.status === 'completed') return { title: 'AGENT TEAM COMPLETED', body: `${counts.completed || 0}/${counts.total || 0} internal work items completed. Review the combined integrated delivery.`, tone: 'ok' };
     if (job.status === 'failed') return { title: 'ACTION: INSPECT AGENT RUN FAILURES', body: `${counts.failed || 0} agent runs failed. Review run statuses and retry the failed path only.`, tone: 'error' };
     return { title: 'AGENT TEAM RUNNING', body: `${counts.completed || 0}/${counts.total || 0} agent runs completed. Wait for remaining agent runs or inspect the workflow detail.`, tone: 'info' };
@@ -17111,6 +17120,7 @@ function runActionKey(job) {
   if (action.title.includes('VERIFY AGENT')) return 'verify-agent';
   if (action.title.includes('INSPECT FAILURE')) return 'inspect';
   if (action.title.includes('ORDER IN FLIGHT') || action.title.includes('ORDER EXECUTING') || action.title.includes('ORDER QUEUED')) return 'watch';
+  if (action.title.includes('WAITING')) return 'watch';
   if (action.title.includes('ORDER COMPLETED')) return 'done';
   return 'inspect';
 }
@@ -17136,7 +17146,7 @@ function summarizeRun(job) {
   const lines = [
     `Run: ${job.id}`,
     `Kind: ${job.jobKind || 'job'}`,
-    `Status: ${job.status}`,
+    `Status: ${orderProgressStatusLabel(job.status)}`,
     `Task: ${job.taskType}`,
     `Agent: ${job.assignedAgentId || 'auto-routing'}`,
     `Created: ${new Date(job.createdAt).toLocaleString('ja-JP')} (${sinceLabel(job.createdAt)})`,
@@ -17766,7 +17776,7 @@ function renderAdminDashboard(dashboard = null, auth = state.snapshot?.auth || {
     cells: [
       `${escapeHtml(job.taskType || '-')}<div class="row-muted">${escapeHtml((job.prompt || '-').slice(0, 70))}</div>`,
       `${escapeHtml(job.requesterLogin || '-')}<div class="row-muted">${escapeHtml(job.assignedAgentId || job.parentAgentId || '-')}</div>`,
-      `<span class="status-pill ${job.status === 'completed' ? 'ok' : ['failed', 'timed_out'].includes(job.status) ? 'error' : 'info'}">${escapeHtml(String(job.status || '-').toUpperCase())}</span><div class="row-muted">${sinceLabel(job.createdAt)}</div>`,
+      `<span class="status-pill ${job.status === 'completed' ? 'ok' : ['failed', 'timed_out'].includes(job.status) ? 'error' : 'info'}">${escapeHtml(orderProgressStatusLabel(job.status).toUpperCase())}</span><div class="row-muted">${sinceLabel(job.createdAt)}</div>`,
       `${job.actualBilling ? yen(job.actualBilling.total || 0) : '-'}<div class="row-muted">platform ${job.actualBilling ? yen(job.actualBilling.platformRevenue || 0) : '-'}</div>`
     ]
   })), 'No orders yet.');
@@ -18213,11 +18223,11 @@ function marketingTimelineSnapshot(contextJob = null, options = {}) {
       kind: 'run',
       id: String(job.id || ''),
       focused: focusedIds.has(String(job.id || '')),
-      status: String(job.status || 'unknown').toLowerCase(),
+      status: orderProgressStatusLabel(job.status || 'unknown'),
       tone: safeCssToken(String(job.status || 'info').toLowerCase(), 'info'),
       taskType: String(job.taskType || ''),
       taskLabel,
-      title: compactChatText(deliverable.previewLabel || report?.headline || report?.title || `${taskLabel} ${String(job.status || 'run')}`, 90),
+      title: compactChatText(deliverable.previewLabel || report?.headline || report?.title || `${taskLabel} ${orderProgressStatusLabel(job.status || 'run')}`, 90),
       summary,
       previewText,
       previewLabel: deliverable.previewLabel || '',
@@ -21404,7 +21414,7 @@ function deliveryCardBodyLines(run = null, report = {}, options = {}) {
     lines.push(`Required: ${describeAuthorityNeed(authority?.missingConnectorCapabilities || [], authority?.missingConnectors || [])}.`);
   }
   lines.push('');
-  lines.push(`Status: ${String(status || 'unknown').toUpperCase()}`);
+  lines.push(`Status: ${String(orderProgressStatusLabel(status || 'unknown') || 'unknown').toUpperCase()}`);
   if (run?.id) lines.push(`Order ID: ${run.id}`);
   if (run?.jobKind === 'workflow' && workflowChildren.length) lines.push(`Supporting work items: ${workflowChildren.length}`);
   lines.push(`Delivery files: ${fileCount}`);
@@ -21505,7 +21515,7 @@ function renderWorkflowTeamSummary(workflowChildren = []) {
               <div>
                 <strong>${escapeHtml(`${index + 1}. ${workflowChildDisplayName(child)}`)}</strong>
                 ${child.sequencePhase ? `<div class="row-muted">${escapeHtml(`PHASE ${String(child.sequencePhase || '').toUpperCase()}`)}</div>` : ''}
-                <div class="row-muted">${escapeHtml(String(child.status || 'unknown').toUpperCase())}</div>
+                <div class="row-muted">${escapeHtml(String(orderProgressStatusLabel(child.status || 'unknown') || 'unknown').toUpperCase())}</div>
                 <div>${escapeHtml(summaryTextForChild(child))}</div>
               </div>
               <div class="helper-row">
@@ -23637,7 +23647,7 @@ function renderJobs(jobs = []) {
     return `
     <div class="table-row runs-grid ${state.selectedJobId === job.id ? 'selected-row' : ''}" data-job-id="${escapeHtml(job.id)}">
       <div>${escapeHtml(job.id.slice(0, 8))}<div class="row-muted">${escapeHtml(`${job.taskType} · ${runLabel}`)}</div><div class="row-muted">${escapeHtml(`by ${requesterLogin}`)}</div></div>
-      <div class="${safeStatus}">${escapeHtml(String(job.status || '').toUpperCase())}<div class="row-muted">${escapeHtml(fundingSummary || sinceLabel(job.createdAt))}</div></div>
+      <div class="${safeStatus}">${escapeHtml(orderProgressStatusLabel(job.status).toUpperCase())}<div class="row-muted">${escapeHtml(fundingSummary || sinceLabel(job.createdAt))}</div></div>
       <div><span class="status-pill ${safeNextTone}">${escapeHtml(nextAction.title.replace('ACTION: ', '').replace('ORDER ', ''))}</span><div class="row-muted">${escapeHtml(job.failureReason || nextAction.body)}</div></div>
     </div>`;
   }).join('')}`;
@@ -23680,7 +23690,7 @@ function renderBilling(jobs = []) {
   els.billingTable.innerHTML = `<div class="table-header billing-grid"><div>ORDER</div><div>STATUS</div><div>BASIS</div><div>PAYOUT</div><div>PLATFORM</div><div>TOTAL</div></div>${billed.map((job) => `
     <div class="table-row billing-grid" data-bill-id="${escapeHtml(job.id)}">
       <div>${escapeHtml(job.id.slice(0, 8))}</div>
-      <div class="${safeCssToken(job.status, 'info')}">${escapeHtml(String(job.status || '').toUpperCase())}</div>
+      <div class="${safeCssToken(job.status, 'info')}">${escapeHtml(orderProgressStatusLabel(job.status).toUpperCase())}</div>
       <div>${escapeHtml(yen(job.actualBilling.totalCostBasis ?? job.actualBilling.apiCost))}</div>
       <div>${escapeHtml(yen(job.actualBilling.agentPayout))}</div>
       <div>${escapeHtml(yen(job.actualBilling.platformRevenue))}</div>
@@ -25247,7 +25257,7 @@ async function createAndOptionallyRunJob() {
     validateOrderDraft(draft, { checkAccess: true, checkFunding: false });
   } catch (error) {
     clearOpenChatPendingDispatchMessage();
-    const blockedStatus = String(error?.message || 'Order blocked before dispatch.').slice(0, 240);
+    const blockedStatus = String(error?.message || 'Order is waiting before dispatch.').slice(0, 240);
     void trackChatTranscript(draft.prompt, {
       kind: 'error',
       body: blockedStatus,

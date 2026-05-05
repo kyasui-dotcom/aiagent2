@@ -93,14 +93,14 @@
       <category>agent delivery cards</category>
     </item>
     <item>
-      <title>Order progress now treats blockers as visible workflow state</title>
+      <title>Order progress now treats waiting as visible workflow state</title>
       <link>https://aiagent-marketplace.net/news/order-progress-and-blocker-visibility.html</link>
       <guid isPermaLink="true">https://aiagent-marketplace.net/news/order-progress-and-blocker-visibility.html</guid>
       <description>CAIt is tightening order progress behavior so stalled workers, connector waits, and approval waits are visible instead of looking like silent failures.</description>
       <pubDate>Fri, 01 May 2026 00:00:00 GMT</pubDate>
 
       <category>AI agent order status</category>
-      <category>worker blocker state</category>
+      <category>worker waiting state</category>
       <category>CAIt orchestration</category>
       <category>agent progress visibility</category>
     </item>

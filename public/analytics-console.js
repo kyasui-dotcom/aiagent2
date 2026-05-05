@@ -248,7 +248,7 @@ async function loadGoogleReport() {
   } catch (error) {
     state.googleReportLoaded = false;
     state.googleReportWarnings = [String(error?.message || error || 'Google report failed.')];
-    els.googleSourceStatus.textContent = 'Report blocked';
+    els.googleSourceStatus.textContent = 'Report waiting';
     els.googleSourceStatus.className = 'status-pill blocked';
     els.googleSourceNote.textContent = `Report could not load: ${state.googleReportWarnings[0]}`;
     render();

@@ -45,6 +45,12 @@ function statusClass(value = '') {
   return 'pending';
 }
 
+function statusLabel(value = '') {
+  const safe = String(value || '').toLowerCase();
+  if (safe === 'blocked') return 'waiting';
+  return String(value || 'needs review');
+}
+
 function artifactRows(context = {}, type = '') {
   const match = (Array.isArray(context.artifacts) ? context.artifacts : [])
     .find((artifact) => String(artifact?.type || '').toLowerCase() === String(type || '').toLowerCase());
@@ -123,13 +129,13 @@ function buildContext() {
     source_app: 'lead_ops_console',
     source_app_label: 'Lead Ops Console',
     title: `Lead Ops packet - ${lead.company}`,
-    summary: `Lead packet for ${lead.company}. Status is ${lead.status}. Email draft is prepared only as a draft; external sending still requires approval and connector proof.`,
+    summary: `Lead packet for ${lead.company}. Status is ${statusLabel(lead.status)}. Email draft is prepared only as a draft; external sending still requires approval and connector proof.`,
     facts: [
       importedContext ? `Imported context: ${importedContext.title || importedContext.id || 'CAIt app context'}` : '',
       `Selected lead: ${lead.company}`,
       `Segment: ${lead.segment}`,
       `Evidence URL: ${lead.evidenceUrl || 'missing'}`,
-      `Status: ${lead.status}`,
+      `Status: ${statusLabel(lead.status)}`,
       `Next action: ${lead.nextAction}`
     ].filter(Boolean),
     assumptions: [
@@ -146,7 +152,7 @@ function buildContext() {
     recommended_next_actions: [
       'Ask CMO Leader to choose whether this lead belongs in outreach, partner listing, or content collaboration.',
       'Route approved email drafts into Publisher & Approval Studio before external send.',
-      'Block any row without a public source URL or consent-safe contact path.'
+      'Keep any row without a public source URL or consent-safe contact path waiting for review.'
     ],
     handoff_targets: [target, 'list_creator', 'email_ops'],
     raw_context: importedContext ? { received_context: importedContext } : {}
@@ -170,7 +176,7 @@ function renderTable() {
   if (!rows.some((lead) => lead.id === selectedId) && rows[0]) selectedId = rows[0].id;
   els.leadTable.innerHTML = rows.length ? [
     '<thead><tr><th>Lead</th><th>Segment</th><th>Status</th><th>Next action</th></tr></thead><tbody>',
-    ...rows.map((lead) => `<tr data-lead="${escapeHtml(lead.id)}"><td><strong>${escapeHtml(lead.company)}</strong><br>${escapeHtml(lead.evidenceUrl || 'missing source')}</td><td>${escapeHtml(lead.segment)}</td><td><span class="status-pill ${statusClass(lead.status)}">${escapeHtml(lead.status)}</span></td><td>${escapeHtml(lead.nextAction)}</td></tr>`),
+    ...rows.map((lead) => `<tr data-lead="${escapeHtml(lead.id)}"><td><strong>${escapeHtml(lead.company)}</strong><br>${escapeHtml(lead.evidenceUrl || 'missing source')}</td><td>${escapeHtml(lead.segment)}</td><td><span class="status-pill ${statusClass(lead.status)}">${escapeHtml(statusLabel(lead.status))}</span></td><td>${escapeHtml(lead.nextAction)}</td></tr>`),
     '</tbody>'
   ].join('') : '<tbody><tr><td>No lead rows loaded.</td><td>-</td><td>-</td><td>Open this app from a CAIt context handoff.</td></tr></tbody>';
 }
@@ -181,7 +187,7 @@ function renderEditor() {
   els.leadSourceInput.value = lead?.evidenceUrl || '';
   els.emailSubjectInput.value = lead?.subject || '';
   els.emailBodyInput.value = lead?.body || '';
-  els.leadStatusPill.textContent = lead?.status || 'no rows';
+  els.leadStatusPill.textContent = statusLabel(lead?.status || 'no rows');
   els.leadStatusPill.className = `status-pill ${statusClass(lead?.status || '')}`;
 }
 

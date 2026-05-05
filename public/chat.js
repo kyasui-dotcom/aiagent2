@@ -689,16 +689,24 @@ function appendTextMessage(role, text, options = {}) {
 
 function statusLabel(job = {}) {
   const status = String(job.status || '').trim() || 'created';
+  const visibleStatus = statusDisplayLabel(status);
   if (job.jobKind === 'workflow' || job.workflow) {
     const counts = job.workflow?.statusCounts || {};
     const total = Number(counts.total || job.workflow?.plannedChildRunCount || 0) || 0;
     const completed = Number(counts.completed || 0) || 0;
     const blocked = Number(counts.blocked || 0) || 0;
     const failed = Number(counts.failed || 0) || 0;
-    const suffix = total ? `, ${completed}/${total} runs complete${blocked ? `, ${blocked} blocked` : ''}${failed ? `, ${failed} failed` : ''}` : '';
-    return `${status}${suffix}`;
+    const suffix = total ? `, ${completed}/${total} runs complete${blocked ? `, ${blocked} waiting` : ''}${failed ? `, ${failed} failed` : ''}` : '';
+    return `${visibleStatus}${suffix}`;
   }
-  return status;
+  return visibleStatus;
+}
+
+function statusDisplayLabel(status = '') {
+  const safe = String(status || '').trim().toLowerCase();
+  if (safe === 'blocked') return 'waiting';
+  if (safe === 'timed_out') return 'timed out';
+  return String(status || '').trim() || 'created';
 }
 
 function isTerminalStatus(status = '') {
@@ -2041,7 +2049,7 @@ function renderFileCards(files = []) {
 function renderDelivery(job = {}) {
   rememberAiAgentsFromJob(job);
   const files = deliveryFiles(job);
-  const text = deliveryText(job) || `Order ${job.id || ''} is ${job.status || 'updated'}.`;
+  const text = deliveryText(job) || `Order ${job.id || ''} is ${statusDisplayLabel(job.status || 'updated')}.`;
   const body = [
     renderAuthorityRequest(job),
     renderXPostTool(job),
@@ -2442,7 +2450,7 @@ async function sendOrder() {
     if (state.orderId) startPolling(state.orderId);
     else startDeliveryBackfillLoop({ maxRuns: 60 });
   } catch (error) {
-    appendTextMessage('assistant', orderErrorMessage(error), { tone: 'error', label: 'Blocked' });
+    appendTextMessage('assistant', orderErrorMessage(error), { tone: 'error', label: 'Waiting' });
   } finally {
     setBusy(false);
   }
