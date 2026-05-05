@@ -123,8 +123,8 @@ export const WORK_COMMAND_COPY = Object.freeze({
     status: 'Go to SETTINGS > PROVIDER.\n\nNo order was created and no billing occurred.'
   },
   open_agent_catalog: {
-    ja: '使えるエージェントは AGENTS タブで見てください。そこから Work Chat にピン留めできます。',
-    en: 'Browse available agents from the AGENTS tab. You can pin one into Work Chat there.',
+    ja: '使えるエージェントは AGENTS タブで見てください。そこから CAIt Chat にピン留めできます。',
+    en: 'Browse available agents from the AGENTS tab. You can pin one into CAIt Chat there.',
     status: 'Go to the AGENTS tab.\n\nNo order was created and no billing occurred.'
   },
   open_agent_listing: {
@@ -208,7 +208,7 @@ export const WORK_COMMAND_BUTTON_ACTIONS = Object.freeze({
   open_cli: [{ action: 'open_cli_tab', labelJa: 'CONNECT を開く', labelEn: 'OPEN CONNECT' }],
   open_account_settings: [{ action: 'open_settings', labelJa: 'SETTINGS を開く', labelEn: 'OPEN SETTINGS' }],
   open_feedback: [{ action: 'open_feedback_tab', labelJa: 'REPORTS を開く', labelEn: 'OPEN REPORTS' }],
-  open_delivery_history: [{ action: 'open_work_tab', labelJa: 'WORK を開く', labelEn: 'OPEN WORK' }],
+  open_delivery_history: [{ action: 'open_work_tab', labelJa: 'チャット履歴を開く', labelEn: 'OPEN CHAT' }],
   open_marketing_timeline: [{ action: 'open_marketing_timeline', labelJa: 'TIMELINE を開く', labelEn: 'OPEN TIMELINE' }],
   open_order_settings: [{ action: 'open_order_settings', labelJa: 'ORDER SETTINGS', labelEn: 'ORDER SETTINGS' }]
 });

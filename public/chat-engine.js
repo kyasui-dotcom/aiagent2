@@ -142,7 +142,7 @@ export function chatEngineDraftBrief(prompt = '', prepared = {}, options = {}) {
     'Constraints: keep the user-facing flow chat-first; do not claim external writes without connector proof',
     `Deliver: ${deliver}`,
     `Output language: ${ja ? 'Japanese' : 'English'}`,
-    'Acceptance: concrete delivery, visible blockers, source/connector status, and next action are all posted back into this chat'
+    'Acceptance: concrete delivery, visible waiting states, source/connector status, and next action are all posted back into this chat'
   ].filter(Boolean).join('\n');
 }
 

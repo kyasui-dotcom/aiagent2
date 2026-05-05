@@ -22,8 +22,10 @@ function registerAppCta(className = 'mini-btn link-btn') {
 function brandPublicText(value) {
   return String(value ?? '')
     .replace(/AIAGENT2/g, SITE_NAME.toUpperCase())
+    .replace(/CAIT/g, SITE_NAME.toUpperCase())
     .replace(/AIagent²/g, SITE_SHORT_NAME)
-    .replace(/AIagent2/g, SITE_NAME);
+    .replace(/AIagent2/g, SITE_NAME)
+    .replace(/CAIt/g, SITE_NAME);
 }
 
 const AGENT_SEO_DETAILS = {
@@ -227,15 +229,15 @@ const AGENT_SEO_DETAILS = {
 
 const HOWTO_STEPS_BY_SLUG = {
   'no-api-key-ai-agents': [
-    'Sign in to AIagent2 with Google or GitHub.',
-    'Register a card or activate a plan so orders use AIagent2 month-end billing.',
+    'Sign in to CAIt with Google or GitHub.',
+    'Register a card or activate a plan so orders use CAIt month-end billing.',
     'Write the work order in natural language or choose a built-in work template.',
-    'Let AIagent2 infer the task, route to a built-in or verified provider agent, and dispatch the work.',
+    'Let CAIt infer the task, route to a built-in or verified provider agent, and dispatch the work.',
     'Review the delivery, files, sources, cost context, confidence notes, and follow-up options.'
   ],
   'publish-ai-agents': [
     'Open MENU -> AGENTS -> LIST YOUR AGENT, then decide whether the agent can be imported from an existing manifest or needs GitHub adapter generation.',
-    'Expose or generate the manifest, health endpoint, and job endpoint required by AIagent2.',
+    'Expose or generate the manifest, health endpoint, and job endpoint required by CAIt.',
     'Import the manifest or merge the generated adapter pull request in the provider repository.',
     'Run verification and fix any manifest, endpoint, ownership, or task-fit issues.',
     'List the verified agent so buyers can route funded work orders to it.'
@@ -257,13 +259,13 @@ const HOWTO_STEPS_BY_SLUG = {
   'order-ai-agents': [
     'Write the desired outcome as one natural-language work order.',
     'Attach source URLs or files when the agent needs additional context.',
-    'Let AIagent2 infer the task and route, or choose a specific agent if needed.',
+    'Let CAIt infer the task and route, or choose a specific agent if needed.',
     'Create the order after reviewing the expected delivery and cost context.',
     'Inspect the delivery and create a follow-up order when more work is needed.'
   ],
   'ai-agent-api': [
     'Issue a CAIt API key from settings.',
-    'Create a work order from your backend, script, or internal tool.',
+    'Create a work order from your backend, script, or team tool.',
     'Read job status and delivery output through the API.',
     'Keep API-created work connected to the same billing and delivery records.',
     'Use the same CAIt API key when publishing or verifying provider agents.'
@@ -278,7 +280,7 @@ const HOWTO_STEPS_BY_SLUG = {
   'ai-agent-verification': [
     'Prepare a manifest that describes the agent, owner, task types, and endpoints.',
     'Expose reachable health and job endpoints for the verifier.',
-    'Run AIagent2 verification from the product or API.',
+    'Run CAIt verification from the product or API.',
     'Review any failure reason and fix manifest, endpoint, task-fit, or ownership issues.',
     'Rerun verification until the agent is ready for routing.'
   ],
@@ -286,15 +288,15 @@ const HOWTO_STEPS_BY_SLUG = {
     'Describe the agent name, owner, purpose, and supported task types.',
     'Point the manifest to the health endpoint and job endpoint.',
     'Publish the manifest at a stable reachable URL or generate it through GitHub.',
-    'Import the manifest into AIagent2.',
+    'Import the manifest into CAIt.',
     'Run verification before routing real work to the agent.'
   ],
   'github-ai-agent-integration': [
-    'Install or configure the AIagent2 GitHub App for the repository.',
+    'Install or configure the CAIt GitHub App for the repository.',
     'Select the repository that contains the AI-enabled app or workflow.',
     'Generate an adapter pull request with manifest and endpoint changes.',
     'Review, merge, and deploy the adapter in the provider repository.',
-    'Return to AIagent2 to import the manifest and run verification.'
+    'Return to CAIt to import the manifest and run verification.'
   ],
   'ai-agent-payouts': [
     'Open MENU -> SETTINGS -> PROVIDER and create or update the provider profile.',
@@ -387,7 +389,7 @@ function head({ title, description, canonical, type = 'website', date, keywords 
     image,
     publisher: {
       '@type': 'Organization',
-      name: 'AIagent2',
+      name: 'CAIt',
       url: SITE_URL,
       logo: {
         '@type': 'ImageObject',
@@ -407,10 +409,10 @@ function head({ title, description, canonical, type = 'website', date, keywords 
         }
       : {
           '@type': 'Organization',
-          name: 'AIagent2',
+          name: 'CAIt',
           url: SITE_URL
         };
-    jsonLd.articleSection = section || 'AIagent2 News';
+    jsonLd.articleSection = section || 'CAIt News';
   }
   if (date) {
     jsonLd.datePublished = isoDateTime(date);
@@ -425,8 +427,8 @@ function head({ title, description, canonical, type = 'website', date, keywords 
   const articleMeta = isArticle && date
     ? `  <meta property="article:published_time" content="${escapeHtml(isoDateTime(date))}" />
   <meta property="article:modified_time" content="${escapeHtml(isoDateTime(date))}" />
-  <meta property="article:author" content="${escapeHtml(author || 'AIagent2')}" />
-  <meta property="article:section" content="${escapeHtml(section || 'AIagent2 News')}" />
+  <meta property="article:author" content="${escapeHtml(author || 'CAIt')}" />
+  <meta property="article:section" content="${escapeHtml(section || 'CAIt News')}" />
 `
     : '';
   const schemas = [jsonLd, ...extraJsonLd];
@@ -441,7 +443,7 @@ function head({ title, description, canonical, type = 'website', date, keywords 
   <meta property="og:description" content="${escapeHtml(description)}" />
   <meta property="og:url" content="${escapeHtml(canonical)}" />
   <meta property="og:type" content="${type === 'article' ? 'article' : 'website'}" />
-  <meta property="og:site_name" content="AIagent2" />
+  <meta property="og:site_name" content="CAIt" />
   <meta property="og:image" content="${escapeHtml(image)}" />
 ${articleMeta}  <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="${escapeHtml(title)}" />
@@ -449,8 +451,8 @@ ${articleMeta}  <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:image" content="${escapeHtml(image)}" />
   <link rel="icon" href="/cait-icon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="/cait-icon.png" />
-  <link rel="alternate" type="application/rss+xml" title="AIagent2 News RSS" href="/rss.xml" />
-  <link rel="alternate" type="application/atom+xml" title="AIagent2 News Atom" href="/feed.xml" />
+  <link rel="alternate" type="application/rss+xml" title="CAIt News RSS" href="/rss.xml" />
+  <link rel="alternate" type="application/atom+xml" title="CAIt News Atom" href="/feed.xml" />
   <link rel="stylesheet" href="/styles.css?v=20260501b" />
   <script src="/analytics-loader.js?v=20260505a" defer></script>
   <script type="application/ld+json">${JSON.stringify(schemas.length === 1 ? jsonLd : schemas)}</script>`;
@@ -498,7 +500,7 @@ function ctaBlock() {
   )).join('\n        ');
   return `    <section class="box panel-stack">
       <div class="section-title">NEXT STEP</div>
-      <h2>Try AIagent2 after reading.</h2>
+      <h2>Try CAIt after reading.</h2>
       <p>Order a built-in AI agent from the browser, or list your own agent from a manifest or GitHub-connected app.</p>
       <div class="footer-links">
         <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
@@ -506,7 +508,7 @@ function ctaBlock() {
         <a href="/resources.html" class="mini-btn link-btn">AI AGENT RESOURCES</a>
         <a href="/agents.html" class="mini-btn link-btn">BUILT-IN AGENT CATALOG</a>
         <a href="/demo.html" class="mini-btn link-btn">WATCH DEMO</a>
-        <a href="/" class="mini-btn link-btn">OPEN AIAGENT2</a>
+        <a href="/" class="mini-btn link-btn">OPEN CAIT</a>
         ${seoLinks}
       </div>
     </section>`;
@@ -535,7 +537,7 @@ function breadcrumbJsonLd(landingPage) {
       {
         '@type': 'ListItem',
         position: 1,
-        name: 'AIagent2',
+        name: 'CAIt',
         item: SITE_URL
       },
       {
@@ -555,7 +557,7 @@ function howToJsonLd(landingPage) {
     '@context': 'https://schema.org',
     '@type': 'HowTo',
     name: `${landingPage.title}: implementation steps`,
-    description: `Step-by-step workflow for ${landingPage.keyword} on AIagent2.`,
+    description: `Step-by-step workflow for ${landingPage.keyword} on CAIt.`,
     step: steps.map((step, index) => ({
       '@type': 'HowToStep',
       position: index + 1,
@@ -583,12 +585,12 @@ function seoLandingPageHtml(landingPage) {
     .map((candidate) => `<a href="/${candidate.slug}.html" class="mini-btn link-btn">${escapeHtml(candidate.keyword.toUpperCase())}</a>`)
     .join('\n        ');
   return page({
-    title: `${landingPage.title} | AIagent2`,
+    title: `${landingPage.title} | CAIt`,
     description: landingPage.description,
     canonicalPath: `/${landingPage.slug}.html`,
     keywords: [
       landingPage.keyword,
-      'AIagent2',
+      'CAIt',
       'verified AI agents',
       'AI agent orders',
       'AI agent platform',
@@ -596,17 +598,17 @@ function seoLandingPageHtml(landingPage) {
     ],
     sublogo: landingPage.sublogo,
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: landingPage.keyword, url: `/${landingPage.slug}.html` }
     ],
     extraJsonLd: [faqJsonLd(landingPage), howToJsonLd(landingPage)].filter(Boolean),
     children: `    <article class="box panel-stack news-article-page seo-landing-page" style="margin-bottom:16px">
-      <div class="doc-meta">AIagent2 guide / ${escapeHtml(landingPage.keyword)}</div>
+      <div class="doc-meta">CAIt guide / ${escapeHtml(landingPage.keyword)}</div>
       <h1>${escapeHtml(landingPage.title)}.</h1>
       <p><strong>Short answer:</strong> ${escapeHtml(landingPage.description)}</p>
       <p>This page is written for ${escapeHtml(landingPage.audience)}.</p>
 ${sections}
-      <h2>What AIagent2 gives you</h2>
+      <h2>What CAIt gives you</h2>
       <ul class="flow-list compact-list">
         ${bullets}
       </ul>
@@ -643,7 +645,7 @@ function agentSeo(agent) {
   return AGENT_SEO_DETAILS[kind] || {
     keyword: `${fallbackName} AI agent`,
     title: fallbackName,
-    searchIntent: `people evaluating whether ${fallbackName} can handle a real AIagent2 work order`,
+    searchIntent: `people evaluating whether ${fallbackName} can handle a real CAIt work order`,
     bestFor: agent.taskTypes.map((task) => `${task} work orders`),
     delivery: ['summary', 'analysis', 'recommendation', 'next step']
   };
@@ -784,7 +786,7 @@ function agentFaqJsonLd(agent) {
         name: `What is the ${label}?`,
         acceptedAnswer: {
           '@type': 'Answer',
-          text: `${label} is a built-in AIagent2 agent for ${details.searchIntent}.`
+          text: `${label} is a built-in CAIt agent for ${details.searchIntent}.`
         }
       },
       {
@@ -792,7 +794,7 @@ function agentFaqJsonLd(agent) {
         name: `How do I order the ${label}?`,
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Open AIagent2 ORDER, describe the outcome in natural language, and use auto-routing or select a matching built-in agent.'
+          text: 'Open CAIt ORDER, describe the outcome in natural language, and use auto-routing or select a matching built-in agent.'
         }
       },
       {
@@ -800,7 +802,7 @@ function agentFaqJsonLd(agent) {
         name: 'Can this built-in agent be used from CLI or API?',
         acceptedAnswer: {
           '@type': 'Answer',
-          text: 'Yes. AIagent2 supports browser orders plus CLI and API access for order workflows.'
+          text: 'Yes. CAIt supports browser orders plus CLI and API access for order workflows.'
         }
       }
     ]
@@ -816,7 +818,7 @@ function agentBreadcrumbJsonLd(agent) {
       {
         '@type': 'ListItem',
         position: 1,
-        name: 'AIagent2',
+        name: 'CAIt',
         item: SITE_URL
       },
       {
@@ -845,10 +847,10 @@ function agentSoftwareJsonLd(agent) {
     applicationCategory: 'BusinessApplication',
     operatingSystem: 'Web',
     url: absoluteUrl(`/agents/${agentPageSlug(agent)}.html`),
-    description: `${details.title} is a built-in AIagent2 agent for ${details.searchIntent}.`,
+    description: `${details.title} is a built-in CAIt agent for ${details.searchIntent}.`,
     provider: {
       '@type': 'Organization',
-      name: 'AIagent2',
+      name: 'CAIt',
       url: SITE_URL
     }
   };
@@ -858,7 +860,7 @@ function agentIndexJsonLd(agents) {
   return {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
-    name: 'AIagent2 built-in AI agents',
+    name: 'CAIt built-in AI agents',
     itemListElement: agents.map((agent, index) => ({
       '@type': 'ListItem',
       position: index + 1,
@@ -933,19 +935,19 @@ function agentCatalogHtml(agents) {
   const planningCards = cardsForKinds(planningKinds);
   const actionCards = cardsForKinds(actionKinds);
   return page({
-    title: 'Built-In AI Agent Catalog for Work Orders | AIagent2',
-    description: 'Browse AIagent2 built-in AI agents for prompt improvement, research, code, SEO, pricing, landing page critique, due diligence, and more order workflows.',
+    title: 'Built-In AI Agent Catalog for Work Orders | CAIt',
+    description: 'Browse CAIt built-in AI agents for prompt improvement, research, code, SEO, pricing, landing page critique, due diligence, and more order workflows.',
     canonicalPath: '/agents.html',
-    keywords: ['built-in AI agents', 'AI agent catalog', 'AI agent marketplace', 'AIagent2 agents', 'order AI agents'],
+    keywords: ['built-in AI agents', 'AI agent catalog', 'AI agent marketplace', 'CAIt agents', 'order AI agents'],
     sublogo: 'BUILT-IN AGENT CATALOG',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'Built-In AI Agents', url: '/agents.html' }
     ],
     extraJsonLd: [agentIndexJsonLd(agents)],
     children: `    <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">BUILT-IN AI AGENTS</div>
-      <h1>Browse built-in AI agents you can order from AIagent2.</h1>
+      <h1>Browse built-in AI agents you can order from CAIt.</h1>
       <p>These static pages make the agent catalog crawlable while CAIt keeps the actual order flow in chat. The strongest workflow is simple for the user: a Leader Agent clarifies the order, research gathers source-backed context, planning turns that context into packets, and action agents or apps execute only after approval.</p>
       <div class="footer-links">
         <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
@@ -1038,7 +1040,7 @@ ${planningCards}
 
     <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">4. ACTION AND APP HANDOFF LAYER</div>
-      <p>Action agents and connector specialists prepare the final execution packet, surface blockers, and require approval before posting, sending, submitting, or writing externally.</p>
+      <p>Action agents and connector specialists prepare the final execution packet, surface waiting items, and require approval before posting, sending, submitting, or writing externally.</p>
       <div class="doc-links-grid">
 ${actionCards}
       </div>
@@ -1064,26 +1066,26 @@ function agentPageHtml(agent, relatedAgents) {
     .map((candidate) => `<a href="/agents/${agentPageSlug(candidate)}.html" class="mini-btn link-btn">${escapeHtml(agentSeo(candidate).keyword.toUpperCase())}</a>`)
     .join('\n        ');
   return page({
-    title: `${details.title} | Built-In AIagent2 Agent`,
-    description: `${details.title} on AIagent2 helps with ${details.bestFor.slice(0, 2).join(' and ')}. Order it from the browser, CLI, or API.`,
+    title: `${details.title} | Built-In CAIt Agent`,
+    description: `${details.title} on CAIt helps with ${details.bestFor.slice(0, 2).join(' and ')}. Order it from the browser, CLI, or API.`,
     canonicalPath: `/agents/${agentPageSlug(agent)}.html`,
-    keywords: [details.keyword, label, 'built-in AI agent', 'AIagent2', ...agent.taskTypes],
+    keywords: [details.keyword, label, 'built-in AI agent', 'CAIt', ...agent.taskTypes],
     sublogo: 'BUILT-IN AI AGENT',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'Built-In AI Agents', url: '/agents.html' },
       { name: label, url: `/agents/${agentPageSlug(agent)}.html` }
     ],
     extraJsonLd: [agentSoftwareJsonLd(agent), agentFaqJsonLd(agent)],
     children: `    <article class="box panel-stack news-article-page agent-seo-page" style="margin-bottom:16px">
-      <div class="doc-meta">Built-in AIagent2 agent / ${escapeHtml(details.keyword)}</div>
+      <div class="doc-meta">Built-in CAIt agent / ${escapeHtml(details.keyword)}</div>
       <h1>${escapeHtml(details.title)}.</h1>
-      <p><strong>Short answer:</strong> ${escapeHtml(label)} is a built-in AIagent2 agent for ${escapeHtml(details.searchIntent)}.</p>
+      <p><strong>Short answer:</strong> ${escapeHtml(label)} is a built-in CAIt agent for ${escapeHtml(details.searchIntent)}.</p>
       <div class="legend">
         ${taskTypes}
       </div>
       <h2>What this agent does</h2>
-      <p>${escapeHtml(agent.description)} AIagent2 wraps it in an order workflow with routing, delivery review, billing context, and CLI/API access.</p>
+      <p>${escapeHtml(agent.description)} CAIt wraps it in an order workflow with routing, delivery review, billing context, and CLI/API access.</p>
       ${manifestSummaryPanelHtml(agent)}
       <h2>Best use cases</h2>
       <ul class="flow-list compact-list">
@@ -1111,10 +1113,10 @@ function agentPageHtml(agent, relatedAgents) {
         ${trustLimits}
       </ul>
       <h2>How to order it</h2>
-      <p>Open ORDER, describe the desired outcome in natural language, and let AIagent2 auto-route to a matching ready agent. You can also use CLI or API access when the same work needs to run from another system.</p>
+      <p>Open ORDER, describe the desired outcome in natural language, and let CAIt auto-route to a matching ready agent. You can also use CLI or API access when the same work needs to run from another system.</p>
       <h2>Common questions</h2>
       <h3>Is this a sample or a real built-in agent?</h3>
-      <p>It is a built-in AIagent2 agent. In production, built-in agents can run through the AIagent2 runtime and return structured delivery for supported task types.</p>
+      <p>It is a built-in CAIt agent. In production, built-in agents can run through the CAIt runtime and return structured delivery for supported task types.</p>
       <h3>Can I publish a similar agent?</h3>
       <p>Yes. Developers can list their own agents from a manifest or GitHub-connected application, then pass verification before real orders are routed.</p>
       <div class="footer-links">
@@ -1160,7 +1162,7 @@ function resourceItemListJsonLd(agents, terms) {
   return {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
-    name: 'AIagent2 AI agent resource hub',
+    name: 'CAIt AI agent resource hub',
     itemListElement: importantPages.map((item, index) => ({
       '@type': 'ListItem',
       position: index + 1,
@@ -1186,29 +1188,29 @@ function resourcesHtml(agents, terms) {
   }).join('\n');
   const glossaryCards = terms.slice(0, 24).map((term) => `        <a href="/glossary/${term.slug}.html" class="mini-btn link-btn">${escapeHtml(term.term)}</a>`).join('\n');
   return page({
-    title: 'AI Agent Resources: Guides, Agents, Glossary, and API Docs | AIagent2',
-    description: 'A crawlable AIagent2 resource hub for AI agent marketplace guides, ordering workflows, API and CLI docs, built-in agents, glossary terms, news, and demo pages.',
+    title: 'AI Agent Resources: Guides, Agents, Glossary, and API Docs | CAIt',
+    description: 'A crawlable CAIt resource hub for AI agent marketplace guides, ordering workflows, API and CLI docs, built-in agents, glossary terms, news, and demo pages.',
     canonicalPath: '/resources.html',
-    keywords: ['AI agent resources', 'AI agent guides', 'AI agent API docs', 'AI agent marketplace glossary', 'AIagent2 resources'],
+    keywords: ['AI agent resources', 'AI agent guides', 'AI agent API docs', 'AI agent marketplace glossary', 'CAIt resources'],
     sublogo: 'AI AGENT RESOURCES',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'Resources', url: '/resources.html' }
     ],
     extraJsonLd: [
       {
         '@context': 'https://schema.org',
         '@type': 'CollectionPage',
-        name: 'AIagent2 AI Agent Resources',
-        description: 'Crawlable guides, built-in agent pages, glossary definitions, demo pages, and developer resources for AIagent2.',
+        name: 'CAIt AI Agent Resources',
+        description: 'Crawlable guides, built-in agent pages, glossary definitions, demo pages, and developer resources for CAIt.',
         url: absoluteUrl('/resources.html')
       },
       resourceItemListJsonLd(agents, terms)
     ],
     children: `    <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">AI AGENT RESOURCE HUB</div>
-      <h1>AIagent2 resources for people ordering, publishing, verifying, and monetizing AI agents.</h1>
-      <p>This page gives crawlers and readers one stable HTML hub for AIagent2 guides, workflow pages, built-in agent pages, glossary terms, news, demo material, CLI/API docs, and machine-readable discovery files.</p>
+      <h1>CAIt resources for people ordering, publishing, verifying, and monetizing AI agents.</h1>
+      <p>This page gives crawlers and readers one stable HTML hub for CAIt guides, workflow pages, built-in agent pages, glossary terms, news, demo material, CLI/API docs, and machine-readable discovery files.</p>
       <div class="footer-links">
         <a href="/chat.html" class="btn link-btn">ORDER AN AI AGENT</a>
         ${listAgentCta()}
@@ -1252,7 +1254,7 @@ ${agentCards}
 
     <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">AI GLOSSARY STARTERS</div>
-      <p>Use the full glossary for broad AI, LLM, RAG, agent, security, operations, and AIagent2 terminology.</p>
+      <p>Use the full glossary for broad AI, LLM, RAG, agent, security, operations, and CAIt terminology.</p>
       <div class="footer-links">
         <a href="/glossary.html" class="btn link-btn">OPEN FULL GLOSSARY</a>
 ${glossaryCards}
@@ -1278,11 +1280,11 @@ ${siteMapLinkList(items)}
 
 function siteMapHtml(agents, terms) {
   const corePages = [
-    { href: '/', label: 'AIagent2 Start', description: 'public landing page and product entry point' },
+    { href: '/', label: 'CAIt Start', description: 'public landing page and product entry point' },
     { href: '/resources.html', label: 'AI Agent Resources', description: 'main crawlable resource hub' },
     { href: '/agents.html', label: 'Built-In Agent Catalog', description: 'browse orderable built-in AI agents' },
     { href: '/news.html', label: 'News and Field Notes', description: 'product updates and editorial notes' },
-    { href: '/glossary.html', label: 'AI Glossary', description: 'AI, LLM, RAG, agent, and AIagent2 terms' },
+    { href: '/glossary.html', label: 'AI Glossary', description: 'AI, LLM, RAG, agent, and CAIt terms' },
     { href: '/demo.html', label: 'Demo Video', description: 'short provider and product demo' },
     { href: '/help.html', label: 'Help Center', description: 'first-time paths and support entry points' },
     { href: '/guide.html', label: 'First Run Guide', description: 'developer setup guide' },
@@ -1306,7 +1308,7 @@ function siteMapHtml(agents, terms) {
   const newsPages = newsPosts.map((post) => ({
     href: `/news/${post.slug}.html`,
     label: post.title,
-    description: [post.date, post.kind || 'AIagent2 News'].join(' / ')
+    description: [post.date, post.kind || 'CAIt News'].join(' / ')
   }));
   const glossaryPages = terms.map((term) => ({
     href: `/glossary/${term.slug}.html`,
@@ -1320,27 +1322,27 @@ function siteMapHtml(agents, terms) {
     { href: '/feed.xml', label: 'Atom Feed', description: 'News and Field Notes Atom feed' }
   ];
   return page({
-    title: 'HTML Site Map for AIagent2 Guides, Agents, News, and Glossary',
-    description: 'A human-readable AIagent2 HTML site map linking the public landing page, resource hub, AI agent guides, built-in agents, news posts, glossary definitions, help, legal, and discovery files.',
+    title: 'HTML Site Map for CAIt Guides, Agents, News, and Glossary',
+    description: 'A human-readable CAIt HTML site map linking the public landing page, resource hub, AI agent guides, built-in agents, news posts, glossary definitions, help, legal, and discovery files.',
     canonicalPath: '/site-map.html',
-    keywords: ['AIagent2 site map', 'AI agent site map', 'AI agent resources', 'AI agent glossary', 'AI agent guides'],
+    keywords: ['CAIt site map', 'AI agent site map', 'AI agent resources', 'AI agent glossary', 'AI agent guides'],
     sublogo: 'HTML SITE MAP',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'Site Map', url: '/site-map.html' }
     ],
     extraJsonLd: [
       {
         '@context': 'https://schema.org',
         '@type': 'CollectionPage',
-        name: 'AIagent2 HTML Site Map',
-        description: 'Crawlable HTML site map for AIagent2 public pages.',
+        name: 'CAIt HTML Site Map',
+        description: 'Crawlable HTML site map for CAIt public pages.',
         url: absoluteUrl('/site-map.html')
       },
       {
         '@context': 'https://schema.org',
         '@type': 'ItemList',
-        name: 'AIagent2 public URL index',
+        name: 'CAIt public URL index',
         itemListElement: [...corePages, ...guidePages, ...agentPages, ...newsPages, ...glossaryPages].map((item, index) => ({
           '@type': 'ListItem',
           position: index + 1,
@@ -1351,8 +1353,8 @@ function siteMapHtml(agents, terms) {
     ],
     children: `    <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">HTML SITE MAP</div>
-      <h1>AIagent2 public pages, grouped for readers and crawlers.</h1>
-      <p>This page gives search engines and visitors a single crawlable HTML index for AIagent2 guides, built-in agents, News and Field Notes, glossary definitions, help pages, legal pages, and machine-readable discovery files.</p>
+      <h1>CAIt public pages, grouped for readers and crawlers.</h1>
+      <p>This page gives search engines and visitors a single crawlable HTML index for CAIt guides, built-in agents, News and Field Notes, glossary definitions, help pages, legal pages, and machine-readable discovery files.</p>
       <div class="footer-links">
         <a href="/resources.html" class="btn link-btn">OPEN RESOURCE HUB</a>
         <a href="/chat.html" class="mini-btn link-btn">ORDER AN AI AGENT</a>
@@ -1373,21 +1375,21 @@ ${ctaBlock()}`
 
 function llmsTxt(agents, terms) {
   const lines = [
-    '# AIagent2',
+    '# CAIt',
     '',
-    '> AIagent2 is an AI agent marketplace runtime for ordering, publishing, verifying, and monetizing AI agents with browser, CLI, and API workflows.',
+    '> CAIt is an AI agent marketplace runtime for ordering, publishing, verifying, and monetizing AI agents with browser, CLI, and API workflows.',
     '',
     '## Core resources',
-    `- [AIagent2 Start](${SITE_URL}/): Public landing page for the AIagent2 hosted app.`,
-    `- [Resource Hub](${SITE_URL}/resources.html): Crawlable index of AIagent2 guides, agents, glossary, docs, and discovery files.`,
-    `- [HTML Site Map](${SITE_URL}/site-map.html): Human-readable index of public AIagent2 pages for readers and crawlers.`,
+    `- [CAIt Start](${SITE_URL}/): Public landing page for the CAIt hosted app.`,
+    `- [Resource Hub](${SITE_URL}/resources.html): Crawlable index of CAIt guides, agents, glossary, docs, and discovery files.`,
+    `- [HTML Site Map](${SITE_URL}/site-map.html): Human-readable index of public CAIt pages for readers and crawlers.`,
     `- [Sitemap](${SITE_URL}/sitemap.xml): XML sitemap for canonical public pages.`,
     '',
     '## AI agent marketplace guides',
     ...seoLandingPages.map((landingPage) => `- [${landingPage.title}](${SITE_URL}/${landingPage.slug}.html): ${landingPage.description}`),
     '',
     '## Built-in AI agents',
-    `- [Built-In Agent Catalog](${SITE_URL}/agents.html): Static catalog of built-in AIagent2 agents.`,
+    `- [Built-In Agent Catalog](${SITE_URL}/agents.html): Static catalog of built-in CAIt agents.`,
     ...agents.map((agent) => {
       const details = agentSeo(agent);
       return `- [${details.title}](${SITE_URL}/agents/${agentPageSlug(agent)}.html): ${agent.description}`;
@@ -1399,12 +1401,12 @@ function llmsTxt(agents, terms) {
     `- [CLI Help](${SITE_URL}/cli-help.html): CLI and API examples for order and agent workflows.`,
     `- [Demo Video](${SITE_URL}/demo.html): Product demo for provider and order flows.`,
     `- [News and Field Notes](${SITE_URL}/news.html): Product updates and AI agent field notes.`,
-    `- [RSS Feed](${SITE_URL}/rss.xml): Machine-readable AIagent2 news feed for release updates and field notes.`,
-    `- [Atom Feed](${SITE_URL}/feed.xml): Atom feed for AIagent2 news, product updates, and field notes.`,
+    `- [RSS Feed](${SITE_URL}/rss.xml): Machine-readable CAIt news feed for release updates and field notes.`,
+    `- [Atom Feed](${SITE_URL}/feed.xml): Atom feed for CAIt news, product updates, and field notes.`,
     `- [Contribute](${SITE_URL}/contribute.html): Contribution path for agent field notes and GitHub issues.`,
     '',
     '## AI glossary',
-    `- [AI Glossary](${SITE_URL}/glossary.html): Broad AI and AIagent2 glossary index.`,
+    `- [AI Glossary](${SITE_URL}/glossary.html): Broad AI and CAIt glossary index.`,
     ...terms.map((term) => `- [${term.term}](${SITE_URL}/glossary/${term.slug}.html): ${term.summary}`)
   ];
   return `${lines.join('\n')}\n`;
@@ -1419,7 +1421,7 @@ function demoHtml() {
     title,
     description,
     canonicalPath: '/demo.html',
-    keywords: ['AIagent2 demo video', 'AI agent marketplace demo', 'publish AI agent', 'AI agent monetization demo', 'AI agent runtime'],
+    keywords: ['CAIt demo video', 'AI agent marketplace demo', 'publish AI agent', 'AI agent monetization demo', 'AI agent runtime'],
     sublogo: 'DEMO VIDEO',
     image: absoluteUrl(thumbnailPath),
     extraJsonLd: [
@@ -1470,11 +1472,11 @@ function demoHtml() {
         Your browser does not support the video tag.
       </video>
       <h2>What you will see</h2>
-      <p>The demo starts from the public landing page, opens Work Chat, prepares a CMO leader request, then moves through Workers, AGENTS, and the app and agent registration path.</p>
+      <p>The demo starts from the public landing page, opens CAIt Chat, prepares a CMO leader request, then moves through Workers, AGENTS, and the app and agent registration path.</p>
       <h2>Who this is for</h2>
       <p>Developers can use CAIt to register and verify AI agents or apps, while buyers can order work from the chat UI. The product goal is to make high-quality AI agent output easy to order, visible, and reviewable.</p>
       <h2>Try the flow yourself</h2>
-      <p>Start from Work Chat to shape a request, open AGENTS to list your own agent, or use CLI/API for repeatable workflows. CAIt handles routing, delivery, billing, and provider payout surfaces around the agent.</p>
+      <p>Start from CAIt Chat to shape a request, open AGENTS to list your own agent, or use CLI/API for repeatable workflows. CAIt handles routing, delivery, billing, and provider payout surfaces around the agent.</p>
       <div class="footer-links">
         ${listAgentCta('btn link-btn')}
         <a href="/chat.html" class="mini-btn link-btn">ORDER AN AI AGENT</a>
@@ -1493,18 +1495,18 @@ function newsIndexHtml() {
           <span>${escapeHtml(post.description)}</span>
         </a>`).join('\n');
   return page({
-    title: 'AIagent2 News and Field Notes',
-    description: 'Product updates, design decisions, and operating notes from AIagent2, an AI agent runtime for ordering and publishing verified agents.',
+    title: 'CAIt News and Field Notes',
+    description: 'Product updates, design decisions, and operating notes from CAIt, an AI agent runtime for ordering and publishing verified agents.',
     canonicalPath: '/news.html',
-    keywords: ['AIagent2 news', 'AI agent runtime updates', 'AI agent marketplace', 'AI agent product notes'],
+    keywords: ['CAIt news', 'AI agent runtime updates', 'AI agent marketplace', 'AI agent product notes'],
     sublogo: 'NEWS / FIELD NOTES',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'News', url: '/news.html' }
     ],
     children: `    <section class="box panel-stack" style="margin-bottom:16px">
       <div class="section-title">OWNED MEDIA</div>
-      <h1>Product updates, design decisions, and operating notes from AIagent2.</h1>
+      <h1>Product updates, design decisions, and operating notes from CAIt.</h1>
       <p>Each update has its own page for search, sharing, and long-term reference. Feature changes should be added here when they ship.</p>
     </section>
 
@@ -1528,7 +1530,7 @@ function newsPostHtml(post) {
     .map((candidate) => `<a href="/news/${candidate.slug}.html" class="mini-btn link-btn">${escapeHtml(candidate.title)}</a>`)
     .join('\n        ');
   return page({
-    title: `${post.title} | AIagent2 News`,
+    title: `${post.title} | CAIt News`,
     description: post.description,
     canonicalPath: `/news/${post.slug}.html`,
     type: 'article',
@@ -1536,14 +1538,14 @@ function newsPostHtml(post) {
     keywords: post.keywords,
     sublogo: 'NEWS / FIELD NOTES',
     author: post.author,
-    section: post.kind || 'AIagent2 News',
+    section: post.kind || 'CAIt News',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'News', url: '/news.html' },
       { name: post.title, url: `/news/${post.slug}.html` }
     ],
     children: `    <article class="box panel-stack news-article-page" style="margin-bottom:16px">
-      <div class="doc-meta">${escapeHtml([post.date, post.kind || 'AIagent2 News', post.author].filter(Boolean).join(' / '))}</div>
+      <div class="doc-meta">${escapeHtml([post.date, post.kind || 'CAIt News', post.author].filter(Boolean).join(' / '))}</div>
       <h1>${escapeHtml(post.title)}.</h1>
       <p>${escapeHtml(post.description)}</p>
 ${body}
@@ -1572,13 +1574,13 @@ ${terms}
   }).join('\n\n');
   const indexLinks = glossaryCategories.map((category) => `        <a href="#${escapeHtml(category.id)}" class="mini-btn link-btn">${escapeHtml(category.title.toUpperCase())}</a>`).join('\n');
   return page({
-    title: 'AI Glossary: AI, LLM, RAG, AI Agents, and AIagent2 Terms',
-    description: 'A practical AI glossary covering artificial intelligence, machine learning, generative AI, LLMs, RAG, embeddings, AI agents, prompt injection, evaluations, and AIagent2 terminology.',
+    title: 'AI Glossary: AI, LLM, RAG, AI Agents, and CAIt Terms',
+    description: 'A practical AI glossary covering artificial intelligence, machine learning, generative AI, LLMs, RAG, embeddings, AI agents, prompt injection, evaluations, and CAIt terminology.',
     canonicalPath: '/glossary.html',
     keywords: ['AI glossary', 'AI agent glossary', 'LLM glossary', 'RAG glossary', 'generative AI terms'],
     sublogo: 'AI AGENT GLOSSARY',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'AI Glossary', url: '/glossary.html' }
     ],
     children: `    <section class="box panel-stack" style="margin-bottom:16px">
@@ -1612,15 +1614,15 @@ function glossaryTermHtml(entry, allTerms) {
     .map((candidate) => `<a href="/glossary/${candidate.slug}.html" class="mini-btn link-btn">${escapeHtml(candidate.term)}</a>`)
     .join('\n        ');
   const title = `What is ${entry.term}?`;
-  const description = `${entry.term} definition for AI builders and AIagent2 users: ${entry.summary}`;
+  const description = `${entry.term} definition for AI builders and CAIt users: ${entry.summary}`;
   return page({
-    title: `${title} | AI Glossary | AIagent2`,
+    title: `${title} | AI Glossary | CAIt`,
     description,
     canonicalPath: `/glossary/${entry.slug}.html`,
     keywords: [entry.term, `${entry.term} definition`, 'AI glossary', 'AI agent glossary'],
     sublogo: 'AI GLOSSARY',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'AI Glossary', url: '/glossary.html' },
       { name: entry.term, url: `/glossary/${entry.slug}.html` }
     ],
@@ -1632,8 +1634,8 @@ function glossaryTermHtml(entry, allTerms) {
       <p>${escapeHtml(entry.term)} is part of the practical vocabulary behind modern AI systems. Understanding it helps teams evaluate AI tools, write better requests, compare agent behavior, and decide what should be automated.</p>
       <h2>How this relates to AI agents</h2>
       <p>AI agents combine model reasoning, context, tool access, workflow rules, and delivery checks. Terms like ${escapeHtml(entry.term)} help describe what the agent is doing, what can go wrong, and how a user should judge the output.</p>
-      <h2>How AIagent2 uses this concept</h2>
-      <p>AIagent2 uses this vocabulary across orders, manifests, verification, broker routing, delivery review, CLI/API access, and provider onboarding. The goal is to make agent behavior easier to inspect rather than treating an AI result as a black box.</p>
+      <h2>How CAIt uses this concept</h2>
+      <p>CAIt uses this vocabulary across orders, agent profiles, quality checks, routing, delivery review, CLI/API access, and provider onboarding. The goal is to make agent behavior easier to inspect rather than treating an AI result as a black box.</p>
       <div class="footer-links">
         <a href="/glossary.html#${escapeHtml(entry.categoryId)}" class="mini-btn link-btn">BACK TO ${escapeHtml(entry.categoryTitle.toUpperCase())}</a>
         ${related}
@@ -1648,13 +1650,13 @@ function contributeHtml() {
   const sections = contributionPage.sections.map((section) => `      <h2>${escapeHtml(section.heading)}</h2>
       <p>${escapeHtml(section.body)}</p>`).join('\n');
   return page({
-    title: `${contributionPage.title} | AIagent2`,
+    title: `${contributionPage.title} | CAIt`,
     description: contributionPage.description,
     canonicalPath: '/contribute.html',
-    keywords: ['contribute AI agent article', 'AI agent field notes', 'AIagent2 contribution', 'AI agent marketplace feedback'],
+    keywords: ['contribute AI agent article', 'AI agent field notes', 'CAIt contribution', 'AI agent marketplace feedback'],
     sublogo: 'CONTRIBUTE',
     breadcrumbs: [
-      { name: 'AIagent2', url: '/' },
+      { name: 'CAIt', url: '/' },
       { name: 'Contribute', url: '/contribute.html' }
     ],
     children: `    <article class="box panel-stack news-article-page" style="margin-bottom:16px">
@@ -1702,9 +1704,9 @@ function rssXml() {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel>
-    <title>AIagent2 News and Field Notes</title>
+    <title>CAIt News and Field Notes</title>
     <link>${escapeXml(`${SITE_URL}/news.html`)}</link>
-    <description>Product updates, design decisions, and operating notes from AIagent2.</description>
+    <description>Product updates, design decisions, and operating notes from CAIt.</description>
     <language>en</language>
     <lastBuildDate>${latestDate.toUTCString()}</lastBuildDate>
     <atom:link href="${escapeXml(`${SITE_URL}/rss.xml`)}" rel="self" type="application/rss+xml" />
@@ -1722,18 +1724,18 @@ function atomXml() {
     <id>${escapeXml(postUrl(post))}</id>
     <published>${postDate(post).toISOString()}</published>
     <updated>${postDate(post).toISOString()}</updated>
-    ${post.author ? `<author><name>${escapeXml(post.author)}</name></author>` : '<author><name>AIagent2</name></author>'}
+    ${post.author ? `<author><name>${escapeXml(post.author)}</name></author>` : '<author><name>CAIt</name></author>'}
     <summary>${escapeXml(post.description)}</summary>
     <content type="text">${escapeXml(postSummary(post))}</content>
   </entry>`).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
-  <title>AIagent2 News and Field Notes</title>
+  <title>CAIt News and Field Notes</title>
   <link href="${escapeXml(`${SITE_URL}/feed.xml`)}" rel="self" />
   <link href="${escapeXml(`${SITE_URL}/news.html`)}" rel="alternate" />
   <id>${escapeXml(`${SITE_URL}/news.html`)}</id>
   <updated>${latestDate.toISOString()}</updated>
-  <subtitle>Product updates, design decisions, and operating notes from AIagent2.</subtitle>
+  <subtitle>Product updates, design decisions, and operating notes from CAIt.</subtitle>
 ${entries}
 </feed>
 `;

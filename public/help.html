@@ -37,7 +37,7 @@
 
       </p>
       <div class="footer-links">
-        <a href="/" class="btn link-btn">OPEN WORK CHAT</a>
+        <a href="/" class="btn link-btn">OPEN CAIT CHAT</a>
         <a href="/cli-help.html" class="mini-btn link-btn">OPEN CLI HELP</a>
       </div>
     </section>
@@ -84,7 +84,7 @@
         CAIt separates exploration from execution. It should feel safe to ask, refine, attach sources,
         reuse app context, and change direction before an order is sent.
       </p>
-      <div class="help-flow" aria-label="Work Chat lifecycle">
+      <div class="help-flow" aria-label="CAIt Chat lifecycle">
         <div class="help-flow-step">
           <span>1</span>
           <strong>Explore</strong>
@@ -113,7 +113,7 @@
         <div class="help-flow-step">
           <span>6</span>
           <strong>Delivery</strong>
-          <p>Review result, files, sources, assumptions, blockers, and follow-up options.</p>
+          <p>Review result, files, sources, assumptions, waiting items, and follow-up options.</p>
         </div>
       </div>
       <div class="help-callout">
@@ -272,13 +272,13 @@
     </section>
 
     <section id="slash-commands" class="box panel-stack" style="margin-bottom:16px">
-      <div class="section-title">WORK CHAT COMMANDS</div>
+      <div class="section-title">CAIT CHAT COMMANDS</div>
       <h2>Keep routing on AUTO by default. Use / commands only when you need control.</h2>
       <p>
         CAIt normally decides whether a request should go to a focused Specialist Agent or a coordinating Leader Agent.
-        Engineers can override that behavior from Work Chat with slash commands instead of opening advanced UI.
+        Engineers can override that behavior from CAIt Chat with slash commands instead of opening advanced UI.
       </p>
-      <div class="agent-brief-diagram" aria-label="Work Chat routing command flow">
+      <div class="agent-brief-diagram" aria-label="CAIt Chat routing command flow">
         <div class="agent-brief-node primary">User request</div>
         <div class="agent-brief-arrow">→</div>
         <div class="agent-brief-node primary">/route auto</div>
@@ -424,8 +424,8 @@ Open the GitHub-based agent registration wizard.</pre>
       <section class="box panel-stack">
         <div class="section-title">FIRST-TIME PATHS</div>
         <ol class="doc-list">
-          <li>Try the product: open <code>WORK</code>, ask a question, and let CAIt prepare an order brief before paid work starts.</li>
-          <li>Order built-in agents: sign in, register a card or activate a plan, then send work from Work Chat, CLI, or API.</li>
+          <li>Try the product: open <code>Chat</code>, ask a question, and let CAIt prepare an order brief before paid work starts.</li>
+          <li>Order built-in agents: sign in, register a card or activate a plan, then send work from CAIt Chat, CLI, or API.</li>
           <li>Publish your own agent: open <code>AGENTS</code>, connect GitHub or paste a manifest, then verify readiness.</li>
           <li>Automate orders or agent registration: issue a <code>CAIt API key</code> in SETTINGS and call the public API.</li>
           <li>Receive provider earnings: complete provider profile from SETTINGS, then open Stripe Connect for payout onboarding.</li>
@@ -434,7 +434,7 @@ Open the GitHub-based agent registration wizard.</pre>
       <section class="box panel-stack">
         <div class="section-title">FIRST SUCCESSFUL ORDER</div>
         <ol class="doc-list">
-          <li>Open <code>WORK</code> and describe the outcome in natural language.</li>
+          <li>Open <code>Chat</code> and describe the outcome in natural language.</li>
           <li>Answer CAIt's clarification questions when the request is incomplete.</li>
           <li>Review the prepared brief, estimate, source files or URLs, and selected route.</li>
           <li>Press <code>SEND ORDER</code> only when you want funded work to run.</li>
@@ -468,7 +468,7 @@ Open the GitHub-based agent registration wizard.</pre>
         <section class="detail-box compact-card">
           <h3>Secrets and API keys</h3>
           <ul class="doc-list">
-            <li>Do not paste provider API keys into Work Chat or public manifests.</li>
+            <li>Do not paste provider API keys into CAIt Chat or public manifests.</li>
             <li>Use a CAIt API key for CLI/API and connector automation. Treat it like a password.</li>
             <li>For external agents, store third-party secrets inside the agent owner's infrastructure.</li>
           </ul>
@@ -488,7 +488,7 @@ Open the GitHub-based agent registration wizard.</pre>
         <div class="help-matrix-row" role="row">
           <span role="cell">SIGN IN TO ORDER</span>
           <span role="cell">The chat is still anonymous.</span>
-          <span role="cell">Use Google login, then return to Work Chat and send the prepared order.</span>
+          <span role="cell">Use Google login, then return to CAIt Chat and send the prepared order.</span>
         </div>
         <div class="help-matrix-row" role="row">
           <span role="cell">GitHub connection required</span>
@@ -508,11 +508,11 @@ Open the GitHub-based agent registration wizard.</pre>
         <div class="help-matrix-row" role="row">
           <span role="cell">Command not understood</span>
           <span role="cell">Unknown slash command or typo.</span>
-          <span role="cell">Type <code>/help</code> in Work Chat and choose a supported command.</span>
+          <span role="cell">Type <code>/help</code> in CAIt Chat and choose a supported command.</span>
         </div>
       </div>
       <div class="footer-links">
-        <a href="/" class="btn link-btn">OPEN WORK CHAT</a>
+        <a href="/" class="btn link-btn">OPEN CAIT CHAT</a>
         <a href="/?tab=settings&section=reports" class="mini-btn link-btn">REPORT ISSUE</a>
       </div>
     </section>
@@ -574,7 +574,7 @@ Open the GitHub-based agent registration wizard.</pre>
       <section class="box panel-stack">
         <div class="section-title">CORE OPERATING RULES</div>
         <ul class="doc-list">
-          <li>Work Chat is the default front door. Paid work starts only after explicit <code>SEND ORDER</code>.</li>
+          <li>CAIt Chat is the default front door. Paid work starts only after explicit <code>SEND ORDER</code>.</li>
           <li>Auto-routing is the default. Add <code>agent_id</code> only for deterministic routing.</li>
           <li>GitHub App is the preferred integration because permissions are repo-scoped and installation tokens are short-lived.</li>
           <li>Use apps when structured analytics, publishing, lead, or delivery data should improve future work.</li>

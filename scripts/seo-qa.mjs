@@ -143,7 +143,7 @@ assert.ok(news.includes('Buyers can order built-in AI agents without API key set
 assert.ok(news.includes('/news/demo-video-provider-flow.html'));
 assert.ok(news.includes(`Watch the ${SITE_NAME} chat-first marketplace demo video`));
 assert.ok(news.includes('/news/landing-page-focuses-on-agent-earnings.html'));
-assert.ok(news.includes('START now leads with Work Chat and keeps provider earning one step away'));
+assert.ok(news.includes('START now leads with CAIt Chat and keeps provider earning one step away'));
 assert.ok(news.includes('/news/codex-field-note-why-aiagent2-matters.html'));
 assert.ok(news.includes(`A Codex field note on why ${SITE_NAME} matters`));
 assert.ok(news.includes('/news/why-ai-agents-need-a-runtime.html'));

@@ -1713,7 +1713,7 @@ function deliveryDownloadChatBody(job = {}, options = {}) {
       authorityBlocked && authority?.reason ? `承認待ち理由: ${authority.reason}` : '',
       names.length ? `ZIP内容: ${names.join(', ')}` : '',
       '下の DOWNLOAD ZIP から、このオーダーの納品物をまとめて取得できます。',
-      authorityBlocked ? '再発注や追加コンテキストはWork Chatで続けてください。' : ''
+      authorityBlocked ? '再発注や追加コンテキストはCAIt Chatで続けてください。' : ''
     ].filter(Boolean).join('\n');
   }
   return [
@@ -1725,7 +1725,7 @@ function deliveryDownloadChatBody(job = {}, options = {}) {
     authorityBlocked && authority?.reason ? `Approval wait: ${authority.reason}` : '',
     names.length ? `ZIP contents: ${names.join(', ')}` : '',
     'Use DOWNLOAD ZIP below to get the delivery bundle for this order.',
-    authorityBlocked ? 'Use Work Chat for re-ordering or adding more context.' : ''
+    authorityBlocked ? 'Use CAIt Chat for re-ordering or adding more context.' : ''
   ].filter(Boolean).join('\n');
 }
 
@@ -1854,7 +1854,7 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
       ja ? `接続先: ${agentLabel}` : `Route: ${agentLabel}`,
       ...routingLines,
       childLine,
-      ja ? '納品はWORKの詳細/Deliveryに表示されます。' : 'The delivery is available in WORK details / Delivery.'
+      ja ? '納品はチャットの納品履歴/Deliveryに表示されます。' : 'The delivery is available in Chat delivery history / Delivery.'
     ].filter(Boolean).join('\n');
   }
   if (status === 'blocked') {
@@ -1867,7 +1867,7 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
       ja ? `接続先: ${agentLabel}` : `Route: ${agentLabel}`,
       ...routingLines,
       childLine,
-      ja ? '納品ファイルは生成済みの場合、チャットとWORKのDeliveryからダウンロードできます。' : 'If delivery files were generated, they are downloadable from chat and WORK Delivery.'
+      ja ? '納品ファイルは生成済みの場合、チャットとWORKのDeliveryからダウンロードできます。' : 'If delivery files were generated, they are downloadable from chat and Chat Delivery.'
     ].filter(Boolean).join('\n');
   }
   return [
@@ -1878,7 +1878,7 @@ function orderProgressMessageFromCreated(created = {}, prompt = '') {
     ja ? `接続先: ${agentLabel}` : `Route: ${agentLabel}`,
     ...routingLines,
     childLine,
-    ja ? '完了したら納品がWORKの詳細/Deliveryに出ます。' : 'When it finishes, the delivery appears in WORK details / Delivery.'
+    ja ? '完了したら納品がチャットの納品履歴/Deliveryに出ます。' : 'When it finishes, the delivery appears in Chat delivery history / Delivery.'
   ].filter(Boolean).join('\n');
 }
 
@@ -1909,7 +1909,7 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
       '',
       isWorkflow
         ? (ja ? '続いて、各子エージェントがそれぞれの担当領域のサマリーと納品物をこのチャットに出します。' : 'Next, each specialist will post the summary and delivery for its own area in this chat.')
-        : (ja ? 'WORKの詳細/Deliveryでファイル、ソース、コストを確認できます。' : 'Open WORK details / Delivery to review files, sources, and cost.')
+        : (ja ? 'チャットの納品履歴/Deliveryでファイル、ソース、コストを確認できます。' : 'Open Chat details / Delivery to review files, sources, and cost.')
     ].filter(Boolean).join('\n');
   }
   if (status === 'blocked') {
@@ -1925,8 +1925,8 @@ function orderProgressMessageFromJob(job = {}, options = {}) {
       ...jobDeliveryFileLines(job, { ja }),
       '',
       ja
-        ? '次の対応: 必要なコネクターを接続・承認してください。再発注や追加コンテキストはWork Chatで続けてください。'
-        : 'Next: connect/approve the required connector. Use Work Chat for re-ordering or adding more context.'
+        ? '次の対応: 必要なコネクターを接続・承認してください。再発注や追加コンテキストはCAIt Chatで続けてください。'
+        : 'Next: connect/approve the required connector. Use CAIt Chat for re-ordering or adding more context.'
     ].filter(Boolean).join('\n');
   }
   if (status === 'failed' || status === 'timed_out') {
@@ -2357,7 +2357,7 @@ async function pollOpenChatOrderProgress(orderId = '', options = {}) {
           : '',
         options.ja
           ? 'WORK を再読込してください。直らなければログインし直して再確認してください。'
-          : 'Reload WORK. If it still fails, sign in again and recheck the order.'
+          : 'Reload Chat. If it still fails, sign in again and recheck the order.'
       ].filter(Boolean).join('\n');
       upsertOpenChatOrderProgressMessage(safeOrderId, stalledBody, {
         status: 'attention',
@@ -5361,7 +5361,7 @@ function renderAgentSetupFlow(auth = state.snapshot?.auth || {}) {
   } else if (!setupStarted) {
     statusTitle = hasAgents ? 'Agent catalog is ready.' : 'Start agent registration.';
     statusBody = hasAgents
-      ? 'Pick USE IN WORK CHAT on a built-in agent to prefill WORK, or click LIST YOUR AGENT to publish your own.'
+      ? 'Pick USE IN CAIt Chat on a built-in agent to prefill Chat, or click LIST YOUR AGENT to publish your own.'
       : 'Click LIST YOUR AGENT. Then choose GitHub repo or direct manifest import.';
   } else if (!setupMode) {
     statusTitle = 'Choose registration method.';
@@ -5569,26 +5569,26 @@ function renderStartGuide(snapshot = state.snapshot || {}) {
   const readyAgents = agents.filter((agent) => agentHealth(agent).ready);
   const lastJob = jobs[0] || null;
   let tone = 'info';
-  let title = 'Start with Work Chat.';
-  let body = 'Ask a product question or describe rough work. Work Chat can prepare the order brief first; billing starts only after you confirm SEND ORDER.';
+  let title = 'Start with CAIt Chat.';
+  let body = 'Ask a product question or describe rough work. CAIt Chat can prepare the order brief first; billing starts only after you confirm SEND ORDER.';
 
   if (!auth?.loggedIn) {
     tone = 'ok';
   } else if (auth?.loggedIn && !agents.length) {
-    title = 'Work Chat is ready.';
-    body = 'Use WORK to prepare or send an order. Use AGENTS when you want to publish your own agent from GitHub or a manifest.';
+    title = 'CAIt Chat is ready.';
+    body = 'Use Chat to prepare or send an order. Use AGENTS when you want to publish your own agent from GitHub or a manifest.';
   } else if (auth?.loggedIn && agents.length && !readyAgents.length) {
-    title = 'Work Chat can still prepare work.';
-    body = 'Your agent list needs verification before routing to your agents. Built-in and verified agents can still be used from WORK.';
+    title = 'CAIt Chat can still prepare work.';
+    body = 'Your agent list needs verification before routing to your agents. Built-in and verified agents can still be used from Chat.';
     tone = 'warn';
   } else if (readyAgents.length) {
-    title = `Work Chat can route to ${readyAgents.length} ready agent${readyAgents.length === 1 ? '' : 's'}.`;
-    body = `Start in WORK, let ${PRODUCT_SHORT_NAME} prepare the brief, then SEND ORDER only when the task and cost are clear.`;
+    title = `CAIt Chat can route to ${readyAgents.length} ready agent${readyAgents.length === 1 ? '' : 's'}.`;
+    body = `Start in Chat, let ${PRODUCT_SHORT_NAME} prepare the brief, then SEND ORDER only when the task and cost are clear.`;
     tone = 'ok';
   }
   if (auth?.loggedIn && lastJob && ['failed', 'timed_out'].includes(lastJob.status)) {
     title = 'Inspect the last failed run.';
-    body = 'Open WORK, inspect the selected run, then retry only after the cause is clear.';
+    body = 'Open Chat, inspect the selected run, then retry only after the cause is clear.';
     tone = 'warn';
   }
   els.startGuideCard.textContent = `${title}\n\n${body}`;
@@ -5656,7 +5656,7 @@ function renderReleaseAccess(auth) {
   setElementVisible(els.retryDispatchBtn, canDev);
   setElementVisible(els.seedBtn, showDemoTools);
   setTabVisible('ops', canUseOps);
-  if (els.topOpenChatBtn) els.topOpenChatBtn.textContent = loggedIn ? 'WORK CHAT' : 'SIGN IN';
+  if (els.topOpenChatBtn) els.topOpenChatBtn.textContent = loggedIn ? 'CHAT' : 'SIGN IN';
   if (!canUseOps && state.currentTab === 'ops') {
     switchTab(loggedIn ? defaultLoggedInTab(state.snapshot) : 'start');
   }
@@ -5686,16 +5686,17 @@ function rememberTab(tab) {
 function loginReturnPathForTab(tab = 'work') {
   const safeTab = normalizeTab(tab);
   if (!safeTab || safeTab === 'start') return '/';
+  if (safeTab === 'work') return '/chat';
   if (safeTab === 'settings' && state.settingsSection) {
     return `/?tab=settings&section=${encodeURIComponent(state.settingsSection)}`;
   }
-  return safeTab === 'work' ? '/?tab=work' : `/?tab=${encodeURIComponent(safeTab)}`;
+  return `/?tab=${encodeURIComponent(safeTab)}`;
 }
 
 function buildLoginPageUrl({ source = 'direct', nextTab = 'work', nextPath = '' } = {}) {
   const url = new URL('/login.html', window.location.origin);
   const safeSource = safeAnalyticsString(source, 40).toLowerCase() || 'direct';
-  const targetPath = String(nextPath || loginReturnPathForTab(nextTab)).trim() || '/?tab=work';
+  const targetPath = String(nextPath || loginReturnPathForTab(nextTab)).trim() || '/chat';
   url.searchParams.set('source', safeSource);
   url.searchParams.set('next', targetPath);
   url.searchParams.set('visitor_id', visitorId());
@@ -5829,7 +5830,7 @@ function openStartFromLogo(event) {
   if (state.snapshot?.auth?.loggedIn) {
     const nextTab = defaultLoggedInTab(state.snapshot);
     switchTab(nextTab);
-    history.pushState({}, '', nextTab === 'work' ? '/?tab=work' : `/?tab=${encodeURIComponent(nextTab)}`);
+    history.pushState({}, '', nextTab === 'work' ? '/chat' : `/?tab=${encodeURIComponent(nextTab)}`);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return;
   }
@@ -11640,7 +11641,7 @@ function buildOpenChatReusableToolsAnswer(prompt = '') {
           showAgents ? 'AI Agents:' : '',
           ...(showAgents ? (agentLines.length ? agentLines : ['- まだ利用履歴がありません。注文または納品取得後にここへ出ます。']) : []),
           '',
-          '使い方: /apps, /agents, /history。新チャットではカードから直接 Open / Use again できます。旧Work Chatでは下のボタンからWORK履歴またはAGENTSへ移動してください。'
+          '使い方: /apps, /agents, /history。チャットではカードから直接 Open / Use again できます。下のボタンからチャット履歴またはAGENTSへ移動できます。'
         ].filter(Boolean).join('\n')
       : [
           'Reusable app / AI agent candidates from this chat.',
@@ -11651,10 +11652,10 @@ function buildOpenChatReusableToolsAnswer(prompt = '') {
           showAgents ? 'AI Agents:' : '',
           ...(showAgents ? (agentLines.length ? agentLines : ['- No usage history yet. It appears after orders or delivery sync.']) : []),
           '',
-          'Use /apps, /agents, or /history. The new Chat UX shows direct Open / Use again cards; this Work Chat links you to WORK history or AGENTS.'
+          'Use /apps, /agents, or /history. CAIt Chat shows direct Open / Use again cards; this panel links you to chat history or AGENTS.'
         ].filter(Boolean).join('\n'),
     actions: [
-      { action: 'open_work_tab', label: ja ? 'WORK履歴を開く' : 'OPEN WORK' },
+      { action: 'open_work_tab', label: ja ? 'チャット履歴を開く' : 'OPEN CHAT' },
       { action: 'browse_agents', label: ja ? 'AGENTSを開く' : 'OPEN AGENTS' },
       { action: 'connect_x', label: ja ? 'X連携' : 'CONNECT X' }
     ],
@@ -12456,7 +12457,7 @@ function buildOpenChatRecurringWorkAnswer(prompt = '', inputCounts = {}) {
       ? [
           '定期実行の依頼として受け取りました。',
           '',
-          'まず発注ブリーフに整理しました。下書きを確認して、左側の SCHEDULED WORK で頻度を選び、SCHEDULE DRAFT を押してください。',
+          'まず発注ブリーフに整理しました。下書きを確認して、左側の SCHEDULED ORDERS で頻度を選び、SCHEDULE DRAFT を押してください。',
           '',
           '重要: スケジュール作成時には課金しません。各実行タイミングで通常の注文として請求確認、ルーティング、予約を行います。',
           '',
@@ -12465,13 +12466,13 @@ function buildOpenChatRecurringWorkAnswer(prompt = '', inputCounts = {}) {
       : [
           'I read this as recurring work.',
           '',
-          'I prepared a work-order brief. Review it, choose the cadence in SCHEDULED WORK beside Chat History, then press SCHEDULE DRAFT.',
+          'I prepared a work-order brief. Review it, choose the cadence in SCHEDULED ORDERS beside Chat History, then press SCHEDULE DRAFT.',
           '',
           'Important: scheduling itself is not billed. Each run becomes a normal order at run time, so billing readiness, routing, and reservation still apply.',
           '',
           brief
         ].join('\n'),
-    status: 'Recurring work draft prepared.\n\nNo order was created and no billing occurred. Use SCHEDULED WORK to save the schedule.'
+    status: 'Recurring work draft prepared.\n\nNo order was created and no billing occurred. Use SCHEDULED ORDERS to save the schedule.'
   };
 }
 
@@ -13511,7 +13512,7 @@ function renderChatSteps(steps = []) {
     .slice(0, 4);
   if (!safeSteps.length) return '';
   return `
-    <div class="chat-steps" aria-label="Work Chat status">
+    <div class="chat-steps" aria-label="CAIt Chat status">
       ${safeSteps.map((step, index) => `
         <div class="chat-step ${escapeHtml(step.tone)} ${index === safeSteps.length - 1 ? 'active' : ''}">
           <span class="chat-step-dot" aria-hidden="true"></span>
@@ -14009,8 +14010,8 @@ async function handleOpenChatChoiceCommand(command = '') {
       patternId: 'pattern_timeline_opened',
       clearClarifyOptions: true,
       body: ja
-        ? 'WORK TIMELINE ポップアップを開きました。保存済みの run、draft、今後の scheduled action をここで確認できます。'
-        : 'Opened the WORK TIMELINE popup. You can inspect stored runs, drafts, and upcoming scheduled actions here.',
+        ? 'CHAT TIMELINE ポップアップを開きました。保存済みの run、draft、今後の scheduled action をここで確認できます。'
+        : 'Opened the CHAT TIMELINE popup. You can inspect stored runs, drafts, and upcoming scheduled actions here.',
       status: 'Work timeline opened.\n\nNo order was created and no billing occurred.'
     });
     return;
@@ -14231,7 +14232,7 @@ async function postCurrentComposerToX() {
 
 function openOrderTab() {
   if (!state.snapshot?.auth?.loggedIn) {
-    requireStartLoginGate('work', 'Sign in from START first to use Work Chat.');
+    requireStartLoginGate('work', 'Sign in from START first to use CAIt Chat.');
     return;
   }
   if (els.mainNavMenu) els.mainNavMenu.open = false;
@@ -15249,7 +15250,7 @@ function handleOrderFundingPrompt(error, draft = {}, options = {}) {
         'The correct next step is REGISTER CARD for month-end billing.',
         info.missingUsd > 0 ? `Order estimate: ${usdFormatter.format(info.missingUsd)}` : '',
         '',
-        'Register a card in SETTINGS > PAYMENTS, then return to Work Chat and press SEND ORDER again.'
+        'Register a card in SETTINGS > PAYMENTS, then return to CAIt Chat and press SEND ORDER again.'
       ].filter(Boolean).join('\n'),
       actions: [
         { action: 'register_card', label: 'REGISTER CARD' },
@@ -15330,10 +15331,10 @@ function handleOrderPreflightPrompt(error, draft = {}, options = {}) {
         '',
         'No order was created and no billing occurred.',
         '',
-        'If this is intentional, press CONFIRM AND SEND. Otherwise edit the request or choose another agent.'
+        'If this is intentional, press Send order. Otherwise edit the request or choose another agent.'
       ].join('\n'),
       actions: [
-        { action: 'confirm_order', label: 'CONFIRM AND SEND', agentId: preflight.agent?.id || draft.agent_id || '' }
+        { action: 'confirm_order', label: 'Send order', agentId: preflight.agent?.id || draft.agent_id || '' }
       ],
       status: 'Confirmation required before dispatch.\n\nNo order was created and no billing occurred.'
     }, { tone: 'warn', nextPrompt: prompt });
@@ -18330,7 +18331,7 @@ function loadScheduledWorkIntoComposer(recurringOrderId = '') {
   state.orderInputFiles = [];
   state.orderInputFileWarnings = [];
   if (els.jobFiles) els.jobFiles.value = '';
-  flash('Scheduled brief loaded into Work Chat. Review and re-save if you want to change future runs.', 'info');
+  flash('Scheduled brief loaded into CAIt Chat. Review and re-save if you want to change future runs.', 'info');
 }
 
 function loadOrderDraftIntoComposer(order = {}) {
@@ -18382,13 +18383,13 @@ function renderMarketingTimelineModal(contextJob = null, options = {}) {
     const buttons = [];
     if (item.kind === 'run') {
       buttons.push(`<button class="mini-btn" type="button" data-marketing-open-run="${escapeHtml(item.id)}">OPEN DELIVERY</button>`);
-      if (item.status === 'completed') buttons.push(`<button class="mini-btn" type="button" data-marketing-revise-run="${escapeHtml(item.id)}">REVISE IN WORK CHAT</button>`);
+      if (item.status === 'completed') buttons.push(`<button class="mini-btn" type="button" data-marketing-revise-run="${escapeHtml(item.id)}">REVISE IN CAIT CHAT</button>`);
       if (item.previewText) buttons.push(`<button class="mini-btn" type="button" data-marketing-copy-index="${index}">COPY DRAFT</button>`);
       if (item.genericDeliverable) buttons.push(`<button class="mini-btn" type="button" data-marketing-prepare-generic="${index}">PREPARE ORDER</button>`);
       if (item.article) buttons.push(`<button class="mini-btn" type="button" data-marketing-prepare-publish="${index}">PREPARE PUBLISH</button>`);
     } else {
       buttons.push(`<button class="mini-btn" type="button" data-marketing-open-schedule="${escapeHtml(item.id)}">OPEN SCHEDULE</button>`);
-      buttons.push(`<button class="mini-btn" type="button" data-marketing-load-schedule="${escapeHtml(item.id)}">LOAD BRIEF TO WORK</button>`);
+      buttons.push(`<button class="mini-btn" type="button" data-marketing-load-schedule="${escapeHtml(item.id)}">LOAD BRIEF TO CHAT</button>`);
       if (item.previewText) buttons.push(`<button class="mini-btn" type="button" data-marketing-copy-index="${index}">COPY BRIEF</button>`);
       if (item.lastRunId) buttons.push(`<button class="mini-btn" type="button" data-marketing-open-run="${escapeHtml(item.lastRunId)}">OPEN LAST RUN</button>`);
     }
@@ -21347,7 +21348,7 @@ function renderGenericDeliverableActionRow(context = {}) {
   return [
     approvalPreview,
     `<div class="helper-row"><button class="mini-btn" data-copy-generic-deliverable="${escapeHtml(context.run?.id)}">${escapeHtml(context.meta?.copyLabel || 'COPY')}</button><button class="mini-btn" data-prepare-generic-deliverable="${escapeHtml(context.run?.id)}">${escapeHtml(context.meta?.prepareLabel || 'DRAFT NEXT ORDER')}</button>${primaryActionButtons}${auxiliaryButtons}</div>`,
-    '<div class="row-muted">Draft buttons only load the next order into Work Chat. Execution starts only after SEND ORDER.</div>'
+    '<div class="row-muted">Draft buttons only load the next order into CAIt Chat. Execution starts only after Send order.</div>'
   ].join('');
 }
 
@@ -21418,7 +21419,7 @@ function deliveryCardBodyLines(run = null, report = {}, options = {}) {
   if (run?.id) lines.push(`Order ID: ${run.id}`);
   if (run?.jobKind === 'workflow' && workflowChildren.length) lines.push(`Supporting work items: ${workflowChildren.length}`);
   lines.push(`Delivery files: ${fileCount}`);
-  lines.push('Re-ordering or adding context: continue in Work Chat.');
+  lines.push('Re-ordering or adding context: continue in CAIt Chat.');
   return [
     ...lines
   ];
@@ -21694,7 +21695,7 @@ function directFollowupDraftFromDelivery() {
   if (job.status !== 'completed') throw new Error('Follow-up orders can be sent after a delivery is completed.');
   const agentId = String(job.assignedAgentId || '').trim();
   if (!agentId) {
-    throw new Error('This delivery has no direct assigned agent. Open it in Work Chat and route the follow-up manually.');
+    throw new Error('This delivery has no direct assigned agent. Open it in CAIt Chat and route the follow-up manually.');
   }
   const answer = String(els.followupAnswer?.value || '').trim();
   const prompt = [
@@ -21842,7 +21843,7 @@ function prepareFollowupOrderFromDelivery() {
   switchTab('work');
   renderOrderComposer();
   window.requestAnimationFrame(() => els.jobPrompt?.focus());
-  flash('Follow-up opened in Work Chat. Review it, then SEND ORDER when ready.', 'info');
+  flash('Follow-up opened in CAIt Chat. Review it, then SEND ORDER when ready.', 'info');
 }
 
 function renderRunDelivery(value) {
@@ -22237,7 +22238,7 @@ function pauseWorkChatOnTabLeave() {
   state.openChatPendingQuestionPattern = '';
   state.openChatPausedByTabLeave = true;
   if (els.intakeAnswer) els.intakeAnswer.value = '';
-  state.openChatLastStatus = 'Work chat paused after leaving WORK.\n\nType "continue" to resume this draft, or send a new request.';
+  state.openChatLastStatus = 'CAIt Chat paused after leaving the chat view.\n\nType "continue" to resume this draft, or send a new request.';
   state.openChatLastStatusTone = 'info';
   persistCurrentOpenChatSession();
 }
@@ -22919,7 +22920,7 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
   } else if (quickAnswer) {
     const quickKind = chatAnswerKind(quickAnswer);
     if (quickKind === 'command') {
-      title = 'Work Chat control.';
+      title = 'CAIt Chat control.';
       body = `${uiLabels.sendChat} will run this chat command without creating an order or billing. Use it to reset chat, restore a prepared brief, or jump to the right setup area.`;
       tone = quickAnswer.tone || 'info';
       buttonText = uiLabels.sendChat;
@@ -22975,7 +22976,7 @@ function renderRunCreateStatus(snapshot = state.snapshot || {}) {
     buttonText = uiLabels.prepareOrder;
   } else if (!canOrderFromBrowser(auth)) {
     title = 'Login required to send order.';
-    body = `The Work Chat brief is ready. First-time sign-in grants 500 points, which can be used toward this order. Sign in when you want to dispatch paid work, then press ${uiLabels.sendOrder}.`;
+    body = `The CAIt Chat brief is ready. First-time sign-in grants 500 points, which can be used toward this order. Sign in when you want to dispatch paid work, then press ${uiLabels.sendOrder}.`;
     tone = 'warn';
     buttonText = uiLabels.sendOrder;
   } else if (state.pendingIntake && state.intakeConfirmed) {
@@ -23483,7 +23484,7 @@ function renderAgents(agents = []) {
     const safeNextTone = safeCssToken(nextAction.tone, 'info');
     const rowActions = [
       health.ready
-        ? `<button class="mini-btn try-agent-row-btn" data-try-agent="${escapeHtml(agent.id)}" style="margin-top:6px">USE IN WORK CHAT</button>`
+        ? `<button class="mini-btn try-agent-row-btn" data-try-agent="${escapeHtml(agent.id)}" style="margin-top:6px">USE IN CAIT CHAT</button>`
         : '',
       agent.verificationStatus === 'verified' || agent?.metadata?.builtIn
         ? ''
@@ -23575,7 +23576,7 @@ function renderAgents(agents = []) {
       applyAgentToRunForm(agent, {
         switchToRuns: true,
         announce: true,
-        message: `Work Chat is pinned to ${agent.name}. Ask what to do or prepare the request before sending a funded order.`
+        message: `CAIt Chat is pinned to ${agent.name}. Ask what to do or prepare the request before sending a funded order.`
       });
     };
   });
@@ -24965,7 +24966,7 @@ function applyAgentToRunForm(agent, options = {}) {
     state.workFlowShowList = false;
     switchTab('work');
   }
-  if (options.announce) flash(options.message || `Work Chat pinned to ${agent.name}.`, 'ok');
+  if (options.announce) flash(options.message || `CAIt Chat pinned to ${agent.name}.`, 'ok');
 }
 
 async function runOpenChatHubCommand(command = '') {
@@ -25010,11 +25011,11 @@ async function createAndOptionallyRunJob() {
   state.orderComposerDirtySinceSend = false;
   const resumePrompt = String(els.jobPrompt?.value || '').trim();
   if (state.openChatPausedByTabLeave && !resumePrompt) {
-    const pausedBody = 'Work chat is paused after tab leave.\n\nType "continue" to resume this draft, or send a new request.';
+    const pausedBody = 'CAIt Chat is paused after leaving the chat view.\n\nType "continue" to resume this draft, or send a new request.';
     state.openChatLastStatus = pausedBody;
     state.openChatLastStatusTone = 'info';
-    updateWorkChatStatusCard('Work chat paused.', 'Type "continue" to resume this draft, or send a new request.', 'info');
-    flash('Work chat is paused. Type "continue" or send a new request.', 'info');
+    updateWorkChatStatusCard('CAIt Chat paused.', 'Type "continue" to resume this draft, or send a new request.', 'info');
+    flash('CAIt Chat is paused. Type "continue" or send a new request.', 'info');
     persistCurrentOpenChatSession();
     syncCreateJobButtonForCurrentPrompt();
     return;
@@ -25113,7 +25114,7 @@ async function createAndOptionallyRunJob() {
         const resolvedKind = chatAnswerKind(resolvedCommandAnswer);
         flash(
           resolvedKind === 'command'
-            ? 'Work Chat command ran. No order was created.'
+            ? 'CAIt Chat command ran. No order was created.'
             : 'Answered in chat. No order was created.',
           resolvedKind === 'command' ? 'ok' : 'info'
         );
@@ -25213,7 +25214,7 @@ async function createAndOptionallyRunJob() {
     flash(
       quickKind === 'assist'
         ? 'Order draft ready. Review it, then press SEND ORDER.'
-        : (quickKind === 'command' ? 'Work Chat command ran. No order was created.' : (quickKind === 'clarify' ? 'Need one more detail before SEND ORDER.' : 'Answered in chat. No order was created.')),
+        : (quickKind === 'command' ? 'CAIt Chat command ran. No order was created.' : (quickKind === 'clarify' ? 'Need one more detail before SEND ORDER.' : 'Answered in chat. No order was created.')),
       quickKind === 'assist' || quickKind === 'command' ? 'ok' : (quickKind === 'clarify' ? 'warn' : 'info')
     );
     void trackConversionEvent('chat_answered', { ...analyticsDraft, status: quickKind });
@@ -25386,7 +25387,7 @@ async function createAndOptionallyRunJob() {
   if (!created) {
     stopAcceptanceProgress();
     clearOpenChatPendingDispatchMessage();
-    throw new Error('Order request ended without an Order ID. Reload WORK and check order history before retrying.');
+    throw new Error('Order request ended without an Order ID. Reload Chat and check order history before retrying.');
   }
   stopAcceptanceProgress();
   clearOpenChatPendingDispatchMessage();
@@ -25670,7 +25671,7 @@ async function exportChatTrainingData() {
   safeText(els.chatTrainingExportResult, [
     `Exported ${examples.length} reviewed training examples.`,
     `Schema: ${result.schema || 'cait-chat-training-export/v1'}`,
-    `Policy: ${result.policy?.source || 'Reviewed Work Chat transcripts only.'}`,
+    `Policy: ${result.policy?.source || 'Reviewed CAIt Chat transcripts only.'}`,
     'Download started as JSON.'
   ].join('\n'));
   flash(`Exported ${examples.length} reviewed chat examples.`, 'ok');
@@ -26527,7 +26528,7 @@ if (els.recheckAgentBtn) els.recheckAgentBtn.onclick = () => runAction(els.reche
 if (els.useAgentForRunBtn) els.useAgentForRunBtn.onclick = () => {
   const agent = selectedAgent();
   if (!agent) return flash('Select an agent first.', 'error');
-  applyAgentToRunForm(agent, { announce: true, message: `Work Chat pinned to ${agent.name}. Open WORK to shape the request before sending an order.` });
+  applyAgentToRunForm(agent, { announce: true, message: `CAIt Chat pinned to ${agent.name}. Open Chat to shape the request before sending an order.` });
 };
 if (els.copyAgentLinkBtn) els.copyAgentLinkBtn.onclick = () => {
   const agent = selectedAgent();

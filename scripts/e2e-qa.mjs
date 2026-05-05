@@ -32,8 +32,8 @@ assert.ok(specSource.includes('/api/agents'), 'E2E must cover agent supply');
 assert.ok(specSource.includes('/api/jobs'), 'E2E must cover order creation/readback');
 assert.ok(specSource.includes('#chatThread'), 'E2E must cover Chat rendering');
 assert.ok(specSource.includes('#promptInput'), 'E2E must cover Chat input');
-assert.ok(specSource.includes('SEND ORDER'), 'E2E must assert the chat-to-order phase boundary');
-assert.ok(specSource.includes('/auth/email/verify'), 'Work Chat E2E must authenticate instead of relying on guest-only UI');
+assert.ok(/Send order|SEND ORDER/.test(specSource), 'E2E must assert the chat-to-order phase boundary');
+assert.ok(specSource.includes('/auth/email/verify'), 'Chat E2E must authenticate instead of relying on guest-only UI');
 assert.ok(specSource.includes('E2E_EMAIL_AUTH_SECRET'), 'external authenticated UI E2E must require an explicit auth secret');
 
 console.log('E2E QA passed');

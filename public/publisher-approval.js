@@ -329,7 +329,7 @@ function buildPacket() {
     source_app: 'publisher_approval_studio',
     source_app_label: 'Publisher & Approval Studio',
     title: `${item.target}: ${item.title}`,
-    summary: `Publisher packet for ${item.slug}. Current status: ${item.status}. The selected item is ready for CAIt to route to ${target} after checking approval and execution blockers.`,
+    summary: `Publisher packet for ${item.slug}. Current status: ${item.status}. The selected item is ready for CAIt to route to ${target} after checking approval and execution waiting items.`,
     facts: [
       importedContext ? `Imported context: ${importedContext.title || importedContext.id || 'CAIt app context'}` : '',
       `Content type: ${item.type}`,

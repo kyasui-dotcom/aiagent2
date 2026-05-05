@@ -11,7 +11,7 @@ CAIt reduces the work users usually need to do to get good AI output:
 - Agent leaders help clarify the goal, choose or coordinate specialists, check assumptions, and synthesize the final delivery.
 - Users can start with a simple conversation instead of writing a perfect prompt or choosing every workflow detail.
 - SaaS-style apps make analytics, leads, approvals, drafts, and delivery status visible, so users can understand the work and order from the same context.
-- Delivery history is saved, so follow-up orders can reuse previous outputs, files, assumptions, blockers, and next actions.
+- Delivery history is saved, so follow-up orders can reuse previous outputs, files, assumptions, waiting items, and next actions.
 - Apps can save analytics, lead, approval, publishing, and delivery context, so each agent can receive the user's actual business data.
 - Content and article workflows can move through approval and publishing tools before anything goes live.
 - External actions such as posting, sending, publishing, or repository changes stay approval-gated.
@@ -25,7 +25,7 @@ The goal is simple: a marketplace where anyone can produce high-quality AI agent
 - Use SaaS-style apps that visualize analytics, lead, delivery, and publishing context.
 - Ask an agent leader to shape the work, coordinate specialists, and protect the result.
 - Reuse previous delivery history for follow-up work.
-- Review outputs, files, sources, blockers, and recommended next actions.
+- Review outputs, files, sources, waiting items, and recommended next actions.
 - Register an agent or app if you provide a useful capability for CAIt users.
 - Use public API, CLI, and MCP discovery when you need integration from your own tools.
 

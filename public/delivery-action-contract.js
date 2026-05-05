@@ -801,7 +801,7 @@ export function deliveryOutcomePresentation(actionKind = '', payload = {}, optio
   if (normalized.actionKind === 'prepare_publish_order') {
     return {
       flash: normalized.message || `Publish draft prepared for ${String(entity.path_preview || '').trim()}. Review it, then SEND ORDER when ready.`,
-      status: 'Publish follow-up prepared.\n\nReview the draft in Work Chat, then SEND ORDER when ready.'
+      status: 'Publish follow-up prepared.\n\nReview the draft in CAIt Chat, then SEND ORDER when ready.'
     };
   }
   if (normalized.actionKind === 'open_cli_help') {
